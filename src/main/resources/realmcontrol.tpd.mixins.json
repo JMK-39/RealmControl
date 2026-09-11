@@ -1,0 +1,16 @@
+{
+  "minVersion": "0.8",
+  "package": "dev.xyat.realmcontrol.teleport.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "realmcontrol.mixins.refmap.json",
+  "mixins": [
+    "TeleportCommandMixin",
+    "PlayerTeleportDataMixin",
+    "CommandsMixin",
+    "EntitySelectorMixin",
+    "ExplorersCompassMixins$Logic",
+    "ExplorersCompassMixins$Permission",
+    "NaturesCompassMixins$Logic",
+    "NaturesCompassMixins$Permission"
+  ]
+}

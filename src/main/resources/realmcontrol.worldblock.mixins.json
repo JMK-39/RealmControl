@@ -1,0 +1,9 @@
+{
+  "minVersion": "0.8",
+  "package": "dev.xyat.realmcontrol.worldblock.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "realmcontrol.mixins.refmap.json",
+  "mixins": [
+    "WorldBlockMixins$LevelChunkSectionMixin"
+  ]
+}
