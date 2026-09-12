@@ -37,7 +37,7 @@
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_source": "§a主方块：%s 可选来源：%s §b过滤：%s",
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_target": "§e请选择最终要替换成的目标方块，可选数量：%s",
   "gui.realmcontrol.worldblock.banitem.block.merge.save": "§a保存并应用",
-  "gui.realmcontrol.worldblock.banitem.block.merge.save_success": "§a矿物/方块生成合并配置已保存，立即用于之后新生成的方块；已生成区块不变",
+  "gui.realmcontrol.worldblock.banitem.block.merge.save_success": "§a矿物/方块生成合并配置已保存；新区块规则立即更新，已加载区块开关需完整重启游戏后生效。",
   "gui.realmcontrol.worldblock.banitem.block.merge.search": "搜索方块",
   "gui.realmcontrol.worldblock.banitem.block.merge.title": "§b矿物/方块合并",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.add_source": "§a左键把这个方块加入来源列表，之后会被替换成主方块。",
@@ -134,7 +134,7 @@
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.selected.tooltip": "§e当前权重：%s §a实际概率：%s%%",
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.remove.tooltip": "§c右键从当前随机目标中移除。",
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip": "§a左键加入随机目标，默认权重 100。",
-  "gui.realmcontrol.worldblock.banitem.block.weighted.save_success": "§a加权随机方块替换配置已保存并应用。",
+  "gui.realmcontrol.worldblock.banitem.block.weighted.save_success": "§a加权方块替换配置已保存；新区块规则立即更新，已加载区块开关需完整重启游戏后生效。",
   "gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus": "§e-10",
   "gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus": "§a+10",
   "gui.realmcontrol.worldblock.banitem.block.weighted.too_many_targets": "§c单条随机替换规则最多只能选择 1024 个目标方块。",
@@ -371,5 +371,14 @@
   "gui.realmcontrol.teleport.module.tooltip": "修改玩家传送相关规则，包括传送授权、绕过规则以及提示文本。",
   "gui.realmcontrol.module.name": "世界控制",
   "gui.realmcontrol.module.function": "世界与服务器规则",
-  "gui.realmcontrol.module.tooltip": "世界方块、世界生成、信标区域与传送权限。"
+  "gui.realmcontrol.module.tooltip": "世界方块、世界生成、信标区域与传送权限。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off": "§6已加载区块：关闭",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on": "§a已加载区块：开启",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title": "§6已加载区块模式（重启生效）",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off": "§a关闭并重启后：不会注册区块扫描事件、Tick 处理器、处理队列或区块状态记录，运行开销近似没有此功能。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on": "§e开启并重启后：已生成区块在加载时会按当前替换规则进入一次性处理队列。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle": "§e启用时性能影响：处理中等至较高；每 Tick 最多处理 1 个区块，避免集中扫描造成瞬时卡顿。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale": "§c已加载旧区块越多、世界高度越大，处理时间越长；完成并标记后不会重复扫描同类规则。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.save": "§a保存当前方块合并规则。已加载区块开关仅保存下一次启动状态，完整重启游戏后才生效。",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart": "§c修改此开关后必须完整重启游戏；运行中保存只决定下一次启动状态，不会立即启用或停用。"
 }

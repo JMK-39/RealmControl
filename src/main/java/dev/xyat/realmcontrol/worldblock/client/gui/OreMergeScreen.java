@@ -41,6 +41,7 @@ public class OreMergeScreen extends KineticScreen {
     private static final int RIGHT_SCROLL_THUMB_COLOR = 0xFFFF9800;
     private static final int RIGHT_SCROLL_THUMB_HOVER_COLOR = 0xFFFFD700;
     private static final int RIGHT_SCROLLBAR_INSET = 8;
+    private static final int RIGHT_FOOTER_HEIGHT = 24;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
 
@@ -59,6 +60,7 @@ public class OreMergeScreen extends KineticScreen {
     private Button doneBtn;
     private Button saveBtn;
     private Button closeBtn;
+    private Button loadedChunksToggleBtn;
     private EditBox replacementChanceBox;
 
     private List<ItemSearchIndex.CachedItem> rightDisplayList = new ArrayList<>();
@@ -66,6 +68,7 @@ public class OreMergeScreen extends KineticScreen {
     private boolean isCreatingRule;
     private boolean selectingNewTarget;
     private boolean groupFilterEnabled;
+    private boolean applyToLoadedChunksOnce;
     private final LinkedHashSet<String> pendingSources = new LinkedHashSet<>();
     private final GridScrollController leftScroll = new GridScrollController();
     private final GridScrollController rightScroll = new GridScrollController();
@@ -92,7 +95,8 @@ public class OreMergeScreen extends KineticScreen {
             boolean creatingRule,
             boolean selectingNewTarget,
             boolean groupFilterEnabled,
-            List<String> pendingSources
+            List<String> pendingSources,
+            boolean applyToLoadedChunksOnce
     ) {
     }
 
@@ -109,7 +113,8 @@ public class OreMergeScreen extends KineticScreen {
                 isCreatingRule,
                 selectingNewTarget,
                 groupFilterEnabled,
-                new ArrayList<>(pendingSources)
+                new ArrayList<>(pendingSources),
+                applyToLoadedChunksOnce
         );
     }
 
@@ -129,6 +134,8 @@ public class OreMergeScreen extends KineticScreen {
         groupFilterEnabled = snapshot.groupFilterEnabled();
         pendingSources.clear();
         pendingSources.addAll(snapshot.pendingSources());
+        applyToLoadedChunksOnce = snapshot.applyToLoadedChunksOnce();
+        if (loadedChunksToggleBtn != null) loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
         if (selectedTarget != null && !tempRules.containsKey(selectedTarget) && !isCreatingRule) {
             selectedTarget = null;
         }
@@ -143,6 +150,7 @@ public class OreMergeScreen extends KineticScreen {
         if (WorldBlockConfig.data != null && WorldBlockConfig.data.blockReplacementChances != null) {
             replacementChances.putAll(WorldBlockConfig.data.blockReplacementChances);
         }
+        this.applyToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyBlockReplacementToLoadedChunksOnce;
         useFluidCanvas(
                 640f,
                 360f,
@@ -181,6 +189,7 @@ public class OreMergeScreen extends KineticScreen {
             );
         }
 
+        loadedChunksToggleBtn = createLoadedChunksToggleButton();
         replacementChanceBox = createReplacementChanceBox();
         updateLeftEntries();
         updateRightPanel();
@@ -397,7 +406,8 @@ public class OreMergeScreen extends KineticScreen {
 
         int minimumRightHeight =
                 SLOT_PITCH * 3
-                        + getRightHeaderHeight();
+                        + getRightHeaderHeight()
+                        + RIGHT_FOOTER_HEIGHT;
 
         int reservedForRight =
                 20
@@ -524,6 +534,29 @@ public class OreMergeScreen extends KineticScreen {
 
         addRenderableWidget(box);
         return box;
+    }
+
+    private Button createLoadedChunksToggleButton() {
+        int footerY = getRightFooterY() + 2;
+        int width = Math.min(148, Math.max(118, rightW / 3));
+        int x = rightX + rightW - width - 6;
+        Button button = Button.builder(
+                getLoadedChunksToggleText(),
+                ignored -> {
+                    applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
+                    loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
+                }
+        ).bounds(x, footerY, width, 20).build();
+        addRenderableWidget(button);
+        return button;
+    }
+
+    private Component getLoadedChunksToggleText() {
+        return Component.translatable(
+                applyToLoadedChunksOnce
+                        ? "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on"
+                        : "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off"
+        );
     }
 
     private EditBox createReplacementChanceBox() {
@@ -864,6 +897,8 @@ public class OreMergeScreen extends KineticScreen {
         ds.weightedBlockReplacements.putAll(WorldBlockConfig.copyWeightedBlockReplacements());
         ds.blockReplacementChances.putAll(replacementChances);
         ds.weightedBlockReplacementChances.putAll(WorldBlockConfig.data.weightedBlockReplacementChances);
+        ds.applyBlockReplacementToLoadedChunksOnce = applyToLoadedChunksOnce;
+        ds.applyWeightedBlockReplacementToLoadedChunksOnce = WorldBlockConfig.data.applyWeightedBlockReplacementToLoadedChunksOnce;
         dev.xyat.realmcontrol.worldblock.client.WorldBlockClientProxy.beginServerSave("gui.realmcontrol.worldblock.banitem.block.merge.save_success");
         WorldBlockNetwork.CHANNEL.sendToServer(new WorldBlockNetwork.SaveWorldBlockConfigPacket(WorldBlockConfig.GSON.toJson(ds)));
         commitDraft();
@@ -993,10 +1028,10 @@ public class OreMergeScreen extends KineticScreen {
     }
 
     private void fitRightPanelToWholeRows() {
-        int availableGridHeight = Math.max(SLOT_PITCH, rightH - getRightHeaderHeight());
+        int availableGridHeight = Math.max(SLOT_PITCH, rightH - getRightHeaderHeight() - RIGHT_FOOTER_HEIGHT);
         int fullRows = Math.max(1, availableGridHeight / SLOT_PITCH);
         gridAreaH = fullRows * SLOT_PITCH;
-        rightH = getRightHeaderHeight() + gridAreaH;
+        rightH = getRightHeaderHeight() + gridAreaH + RIGHT_FOOTER_HEIGHT;
     }
 
     private int getRightHeaderHeight() {
@@ -1005,6 +1040,10 @@ public class OreMergeScreen extends KineticScreen {
 
     private int getRightGridY() {
         return rightY + getRightHeaderHeight();
+    }
+
+    private int getRightFooterY() {
+        return getRightGridY() + gridAreaH;
     }
 
     private void renderRightStatus(GuiGraphics g) {
@@ -1124,6 +1163,17 @@ public class OreMergeScreen extends KineticScreen {
         }
         if (isHoveringButton(filterBtn, smx, smy)) {
             GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"), mx, tooltipY);
+            return;
+        }
+        if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
+            GuiOverlay.requestTooltip(List.of(
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
+            ), mx, tooltipY);
             return;
         }
         if (isHoveringButton(saveBtn, smx, smy)) {

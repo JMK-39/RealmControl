@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import dev.xyat.kineticcore.config.server.KTServerConfigApi;
 import dev.xyat.realmcontrol.worldblock.command.WorldBlockCommandExtension;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfigGui;
+import dev.xyat.realmcontrol.worldblock.event.LoadedChunkRewriteBootstrap;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -19,6 +20,7 @@ public final class WorldBlockModule {
         KTServerConfigApi.registerActionPage(WorldBlockConfigGui.PAGE_ID);
         WorldBlockNetwork.register();
         WorldBlockCommandExtension.install();
+        LoadedChunkRewriteBootstrap.initialize();
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> WorldBlockConfigGui.load());
     }
 }

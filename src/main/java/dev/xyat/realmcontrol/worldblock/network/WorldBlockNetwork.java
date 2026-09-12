@@ -207,7 +207,7 @@ public final class WorldBlockNetwork {
                 boolean success = player.hasPermissions(2)
                         && WorldBlockConfig.applyJson(jsonData, "server packet from " + player.getGameProfile().getName(), true);
                 if (success) {
-                    syncServerConfigToAllPlayers();
+                                syncServerConfigToAllPlayers();
                 } else {
                     sendServerConfigToPlayer(player, false);
                 }

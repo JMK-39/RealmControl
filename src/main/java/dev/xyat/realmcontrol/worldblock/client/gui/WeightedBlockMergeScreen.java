@@ -67,6 +67,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     private Button plusButton;
     private Button saveButton;
     private Button backButton;
+    private Button loadedChunksToggleBtn;
     private int leftX;
     private int leftY;
     private int leftW;
@@ -87,6 +88,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     private int totalLeftHeight;
     private int totalRightHeight;
     private boolean weightInputValid = true;
+    private boolean applyWeightedToLoadedChunksOnce;
 
     private record WeightedSnapshot(
             Map<String, List<WorldBlockConfig.WeightedBlockTarget>> rules,
@@ -95,7 +97,8 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
             Mode mode,
             String selectedSource,
             String activeTarget,
-            boolean weightInputValid
+            boolean weightInputValid,
+            boolean applyWeightedToLoadedChunksOnce
     ) {
     }
 
@@ -115,7 +118,8 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
                 mode,
                 selectedSource,
                 activeTarget,
-                weightInputValid
+                weightInputValid,
+                applyWeightedToLoadedChunksOnce
         );
     }
 
@@ -137,6 +141,8 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         selectedSource = snapshot.selectedSource();
         activeTarget = snapshot.activeTarget();
         weightInputValid = snapshot.weightInputValid();
+        applyWeightedToLoadedChunksOnce = snapshot.applyWeightedToLoadedChunksOnce();
+        if (loadedChunksToggleBtn != null) loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
     }
 
     public WeightedBlockMergeScreen(Screen parent) {
@@ -146,6 +152,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         if (WorldBlockConfig.data != null && WorldBlockConfig.data.weightedBlockReplacementChances != null) {
             replacementChances.putAll(WorldBlockConfig.data.weightedBlockReplacementChances);
         }
+        this.applyWeightedToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyWeightedBlockReplacementToLoadedChunksOnce;
         this.allItems = ItemSearchCache.getAllItems();
         useCanvas(640f, 360f, 6);
         configureStandaloneDraft(this::captureWeightedSnapshot, this::restoreWeightedSnapshot);
@@ -228,9 +235,28 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         chanceBox.setResponder(this::updateReplacementChance);
         addRenderableWidget(chanceBox);
 
+        int loadedToggleWidth = 132;
+        int loadedToggleX = chanceBoxX - loadedToggleWidth - 6;
+        loadedChunksToggleBtn = Button.builder(
+                getLoadedChunksToggleText(),
+                ignored -> {
+                    applyWeightedToLoadedChunksOnce = !applyWeightedToLoadedChunksOnce;
+                    loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
+                }
+        ).bounds(loadedToggleX, 31, loadedToggleWidth, 20).build();
+        addRenderableWidget(loadedChunksToggleBtn);
+
         refreshLeft();
         refreshRight();
         updateControls();
+    }
+
+    private Component getLoadedChunksToggleText() {
+        return Component.translatable(
+                applyWeightedToLoadedChunksOnce
+                        ? "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on"
+                        : "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off"
+        );
     }
 
     private void startNewRule() {
@@ -494,6 +520,9 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         if (saveButton != null) {
             saveButton.active = mode == Mode.BROWSE;
         }
+        if (loadedChunksToggleBtn != null) {
+            loadedChunksToggleBtn.active = mode == Mode.BROWSE;
+        }
         boolean editWeight = mode == Mode.SELECT_TARGETS && activeTarget != null;
         boolean editChance = mode == Mode.SELECT_TARGETS && selectedSource != null;
         if (chanceBox != null) {
@@ -556,6 +585,8 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         }
         data.blockReplacementChances.putAll(WorldBlockConfig.data.blockReplacementChances);
         data.weightedBlockReplacementChances.putAll(replacementChances);
+        data.applyBlockReplacementToLoadedChunksOnce = WorldBlockConfig.data.applyBlockReplacementToLoadedChunksOnce;
+        data.applyWeightedBlockReplacementToLoadedChunksOnce = applyWeightedToLoadedChunksOnce;
         dev.xyat.realmcontrol.worldblock.client.WorldBlockClientProxy.beginServerSave("gui.realmcontrol.worldblock.banitem.block.weighted.save_success");
         WorldBlockNetwork.CHANNEL.sendToServer(new WorldBlockNetwork.SaveWorldBlockConfigPacket(WorldBlockConfig.GSON.toJson(data)));
         commitDraft();
@@ -788,6 +819,17 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         }
         if (isHoveringButton(doneButton, smx, smy)) {
             GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done.tooltip"), mx, my);
+            return;
+        }
+        if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
+            GuiOverlay.requestTooltip(List.of(
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
+            ), mx, my);
             return;
         }
         if (mode == Mode.SELECT_TARGETS && activeTarget != null) {

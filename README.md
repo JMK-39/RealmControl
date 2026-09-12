@@ -66,9 +66,9 @@ config/kineticcore/worldblock.json
 
 #### Scope
 
-The standard edition affects newly generated world content only. It does not rewrite existing chunks, player-placed blocks, or inventory items.
+By default, World Block Rules affects newly generated world content only. The fixed-merge and weighted-replacement editors also provide an optional **Loaded Chunks** mode for one-time conversion of existing chunks. This mode is latched at game startup: changing the switch in the editor only changes the next-launch state and requires a full game restart. When the mode is disabled at startup, its chunk events, tick handler, processing queue, and chunk-state tracking are not registered, keeping its runtime overhead effectively equivalent to a build without the feature.
 
-For one-time rewriting of existing maps or loaded chunks, use **existing-chunk rewrite tooling** instead.
+When this switch is disabled, no loaded-chunk block scan or rewrite queue runs. When enabled, currently loaded existing chunks and existing chunks loaded later are processed gradually, at most one chunk per server tick. Processing cost depends on the number of loaded old chunks and world height, so large pregenerated worlds should be converted in batches.
 
 ### Feature Reference
 #### Config Details
@@ -323,16 +323,6 @@ Primary configuration/data paths:
 
 - `config/kineticcore/teleport.toml`
 
-### Building from Source
-
-- Minecraft: `1.20.1`
-- Java: `17`
-- ForgeGradle: `6.0.24`
-- Gradle: the project is pinned to the `8.1.1` Wrapper; do not import it with Gradle 9 directly.
-- Local development JARs are controlled by `local_libs_dir` and can be overridden in `gradle.properties` or with a project property.
-- Typical build command: `gradlew.bat build` on Windows or `./gradlew build` on Linux/macOS.
-- Development and release artifacts use `realmcontrol` as the current project identifier.
-
 ## 简体中文
 
 ### 模组定位
@@ -416,7 +406,11 @@ config/kineticcore/worldblock.json
 
 #### 适用范围
 
-World Block Rules 主要影响 **新区块自然生成过程**：
+World Block Rules 默认主要影响 **新区块自然生成过程**。固定替换与加权替换编辑器现在也提供“已加载区块”开关，用于对旧区块进行一次性转换：
+
+- 关闭该开关时不会执行旧区块方块扫描或重写队列，只有极轻量的区块状态记录。
+- 开启后，当前已加载旧区块和之后加载的旧区块会逐步处理，每个服务器 Tick 最多处理 1 个区块。
+- 大量预生成区块或高世界高度会增加转换期间的 CPU 开销，建议分批加载旧区域。
 
 - 不会修改玩家背包里的同名物品。
 - 不会修改玩家手动放置的方块。
@@ -740,13 +734,3 @@ config/kineticcore/teleport.toml
 主要配置/数据路径：
 
 - `config/kineticcore/teleport.toml`
-
-### 从源码构建
-
-- Minecraft：`1.20.1`
-- Java：`17`
-- ForgeGradle：`6.0.24`
-- Gradle：项目固定使用 `8.1.1` Wrapper，请不要使用 Gradle 9 直接导入。
-- 默认本地依赖目录由 `local_libs_dir` 控制，可在 `gradle.properties` 或命令行参数中覆盖。
-- 常用构建命令：`gradlew.bat build`（Windows）或 `./gradlew build`（Linux/macOS）。
-- 生成的开发/发布文件以 `realmcontrol` 作为当前工程标识。

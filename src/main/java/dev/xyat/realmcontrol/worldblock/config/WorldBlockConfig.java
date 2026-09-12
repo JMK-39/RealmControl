@@ -79,6 +79,8 @@ public class WorldBlockConfig {
         public Map<String, List<WeightedBlockTarget>> weightedBlockReplacements = new LinkedHashMap<>();
         public Map<String, Integer> blockReplacementChances = new LinkedHashMap<>();
         public Map<String, Integer> weightedBlockReplacementChances = new LinkedHashMap<>();
+        public boolean applyBlockReplacementToLoadedChunksOnce = false;
+        public boolean applyWeightedBlockReplacementToLoadedChunksOnce = false;
     }
 
     public static class WeightedBlockTarget {

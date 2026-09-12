@@ -37,7 +37,7 @@
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_source": "§aTarget: %s Available sources: %s §bFilter: %s",
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_target": "§eChoose the final replacement target. Available: %s",
   "gui.realmcontrol.worldblock.banitem.block.merge.save": "§aSave & Apply",
-  "gui.realmcontrol.worldblock.banitem.block.merge.save_success": "§aOre / block generation merge saved. It applies to blocks generated afterward; existing chunks are unchanged.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.save_success": "§aBlock merge rules saved. New-chunk rules update immediately; the Loaded Chunks switch takes effect only after a full game restart.",
   "gui.realmcontrol.worldblock.banitem.block.merge.search": "Search blocks",
   "gui.realmcontrol.worldblock.banitem.block.merge.title": "§bOre / Block Merge",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.add_source": "§aLeft-click to add this block as a source that will be replaced by the target block.",
@@ -134,7 +134,7 @@
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.selected.tooltip": "§eCurrent weight: %s §aActual probability: %s%%",
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.remove.tooltip": "§cRight-click to remove this block from the random targets.",
   "gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip": "§aLeft-click to add this random target with default weight 100.",
-  "gui.realmcontrol.worldblock.banitem.block.weighted.save_success": "§aWeighted random block replacement configuration saved and applied.",
+  "gui.realmcontrol.worldblock.banitem.block.weighted.save_success": "§aWeighted block replacement rules saved. New-chunk rules update immediately; the Loaded Chunks switch takes effect only after a full game restart.",
   "gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus": "§e-10",
   "gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus": "§a+10",
   "gui.realmcontrol.worldblock.banitem.block.weighted.too_many_targets": "§cA weighted replacement rule can contain at most 1024 target blocks.",
@@ -371,5 +371,14 @@
   "gui.realmcontrol.teleport.module.tooltip": "Modifies player teleport rules, including authorization, bypass rules, and messages.",
   "gui.realmcontrol.module.name": "Realm Control",
   "gui.realmcontrol.module.function": "World and server rules",
-  "gui.realmcontrol.module.tooltip": "World blocks, world generation, beacon areas, and teleport permissions."
+  "gui.realmcontrol.module.tooltip": "World blocks, world generation, beacon areas, and teleport permissions.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off": "§6Loaded Chunks: OFF",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on": "§aLoaded Chunks: ON",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title": "§6Loaded Chunk Mode (Restart Required)",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off": "§aAfter restarting with it off: no chunk-scan events, tick handler, processing queue, or chunk-state tracking are registered; runtime cost is effectively the same as not having this feature.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on": "§eAfter restarting with it on: existing chunks are queued for one-time processing when they load, using the current replacement rules.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle": "§ePerformance while enabled: medium to high during processing; at most 1 chunk is processed per tick to avoid burst scanning.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale": "§cMore old loaded chunks and taller worlds take longer; completed chunks are marked and are not rescanned for the same rule type.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.save": "§aSave the current block merge rules. The Loaded Chunks switch only changes the next-launch state and takes effect after a full game restart.",
+  "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart": "§cChanging this switch requires a full game restart. Saving it only changes the next-launch state; it does not enable or disable the system live."
 }
