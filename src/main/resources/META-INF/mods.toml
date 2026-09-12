@@ -14,7 +14,7 @@ World generation, world rules, beacon area control, and teleport permission tool
 [[dependencies.realmcontrol]]
 modId="forge"
 mandatory=true
-versionRange="[47,)"
+versionRange="[47.4.0,)"
 ordering="NONE"
 side="BOTH"
 

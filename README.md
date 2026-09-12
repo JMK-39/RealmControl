@@ -19,12 +19,11 @@ The project is designed around in-game administration. Where a feature changes s
 - Server-authoritative configuration through the KineticCore configuration center.
 - Optional Jade integration for contextual information.
 
-### Requirements and Compatibility
+### Dependencies
 
 | Type | Dependency |
 |---|---|
-| Required | Minecraft 1.20.1 |
-| Required | Minecraft Forge 47+ |
+| Required | Forge 47.4.0+ |
 | Required | KineticCore 26.9.8+ |
 | Optional | Jade 11+ |
 
@@ -351,12 +350,11 @@ Primary configuration/data paths:
 - 配置由服务端权威保存，并通过 KineticCore 配置中心进行可视化管理。
 - 可选支持 Jade 信息显示。
 
-### 运行环境与兼容
+### 依赖
 
 | 类型 | 依赖 |
 |---|---|
-| 必需 | Minecraft 1.20.1 |
-| 必需 | Minecraft Forge 47+ |
+| 必需 | Forge 47.4.0+ |
 | 必需 | KineticCore 26.9.8+ |
 | 可选 | Jade 11+ |
 
