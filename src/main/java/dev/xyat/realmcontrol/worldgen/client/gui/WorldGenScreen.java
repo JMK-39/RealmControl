@@ -45,8 +45,6 @@ import java.util.stream.Collectors;
 public class WorldGenScreen extends KineticScreen {
     private static final int STRUCTURE_ROW_HEIGHT = 30;
     private static final int STRUCTURE_ROW_GAP = 2;
-    private static final int STRUCTURE_SCROLLBAR_WIDTH = 4;
-    private static final int STRUCTURE_SCROLLBAR_RIGHT_MARGIN = 2;
     private static final Map<String, String> ZH_CN_CACHE = new ConcurrentHashMap<>();
     private static final Set<String> ZH_CN_LOADED_NAMESPACES = ConcurrentHashMap.newKeySet();
 
@@ -621,11 +619,6 @@ public class WorldGenScreen extends KineticScreen {
         @Override
         public int getRowWidth() {
             return this.width - 12;
-        }
-
-        @Override
-        protected int getScrollbarPosition() {
-            return this.getLeft() + this.width - STRUCTURE_SCROLLBAR_WIDTH - STRUCTURE_SCROLLBAR_RIGHT_MARGIN;
         }
 
         class Entry extends ObjectSelectionList.Entry<Entry> {

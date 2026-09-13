@@ -46,7 +46,7 @@ public final class TpdConfigGui {
                         Component.translatable("cfg.realmcontrol.teleport.tpd.mode.tooltip"),
                         "FREE", "AUTHORIZED"
                 )
-                .stringValue(
+                .longTextValue(
                         "deny_custom_message",
                         Component.translatable("cfg.realmcontrol.teleport.tpd.deny_msg"),
                         () -> TpdConfig.tpDenyCustomMessage,
