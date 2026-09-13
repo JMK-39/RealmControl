@@ -1,5 +1,6 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
+import dev.xyat.kineticcore.api.client.text.KineticText;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
@@ -40,8 +41,7 @@ public class OreMergeScreen extends KineticScreen {
     private static final int SCROLL_THUMB_DRAG_COLOR = 0xFFFFD700;
     private static final int RIGHT_SCROLL_THUMB_COLOR = 0xFFFF9800;
     private static final int RIGHT_SCROLL_THUMB_HOVER_COLOR = 0xFFFFD700;
-    private static final int RIGHT_SCROLLBAR_INSET = 8;
-    private static final int RIGHT_FOOTER_HEIGHT = 24;
+    private static final int RIGHT_SCROLLBAR_INSET = 7;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
 
@@ -175,7 +175,7 @@ public class OreMergeScreen extends KineticScreen {
         compactLayout =
                 isPortraitLayout()
                         || isCompactLayout()
-                        || canvasWidth < 560;
+                        || canvasWidth() < 560;
 
         if (compactLayout) {
             initCompactLayout(
@@ -207,7 +207,7 @@ public class OreMergeScreen extends KineticScreen {
                         120,
                         Math.min(
                                 170,
-                                canvasWidth / 4
+                                canvasWidth() / 4
                         )
                 );
 
@@ -217,7 +217,7 @@ public class OreMergeScreen extends KineticScreen {
         leftH =
                 Math.max(
                         80,
-                        canvasHeight
+                        canvasHeight()
                                 - panelY
                                 - 8
                 );
@@ -232,7 +232,7 @@ public class OreMergeScreen extends KineticScreen {
         rightW =
                 Math.max(
                         SLOT_PITCH * 4,
-                        canvasWidth
+                        canvasWidth()
                                 - sidePadding
                                 - rightX
                 );
@@ -339,7 +339,7 @@ public class OreMergeScreen extends KineticScreen {
         int contentW =
                 Math.max(
                         140,
-                        canvasWidth
+                        canvasWidth()
                                 - sidePadding * 2
                 );
 
@@ -406,8 +406,7 @@ public class OreMergeScreen extends KineticScreen {
 
         int minimumRightHeight =
                 SLOT_PITCH * 3
-                        + getRightHeaderHeight()
-                        + RIGHT_FOOTER_HEIGHT;
+                        + getRightHeaderHeight();
 
         int reservedForRight =
                 20
@@ -416,7 +415,7 @@ public class OreMergeScreen extends KineticScreen {
                         + 8;
 
         int availableForLeft =
-                canvasHeight
+                canvasHeight()
                         - leftY
                         - reservedForRight;
 
@@ -452,7 +451,7 @@ public class OreMergeScreen extends KineticScreen {
                 Math.max(
                         getRightHeaderHeight()
                                 + SLOT_PITCH * 2,
-                        canvasHeight
+                        canvasHeight()
                                 - rightY
                                 - 8
                 );
@@ -474,14 +473,7 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         EditBox box =
-                new EditBox(
-                        font,
-                        x,
-                        y,
-                        width,
-                        20,
-                        Component.empty()
-                );
+                addTextField(x, y, width, Component.empty());
 
         box.setResponder(
                 query -> {
@@ -497,9 +489,7 @@ public class OreMergeScreen extends KineticScreen {
         box.setValue(
                 rememberedLeftSearch
         );
-
-        addRenderableWidget(box);
-        return box;
+return box;
     }
 
     private EditBox createRightSearchBox(
@@ -508,14 +498,7 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         EditBox box =
-                new EditBox(
-                        font,
-                        x,
-                        y,
-                        width,
-                        20,
-                        Component.empty()
-                );
+                addTextField(x, y, width, Component.empty());
 
         box.setResponder(
                 query -> {
@@ -531,24 +514,20 @@ public class OreMergeScreen extends KineticScreen {
         box.setValue(
                 rememberedRightSearch
         );
-
-        addRenderableWidget(box);
-        return box;
+return box;
     }
 
     private Button createLoadedChunksToggleButton() {
-        int footerY = getRightFooterY() + 2;
-        int width = Math.min(148, Math.max(118, rightW / 3));
-        int x = rightX + rightW - width - 6;
-        Button button = Button.builder(
-                getLoadedChunksToggleText(),
-                ignored -> {
+        int width = 80;
+        int chanceBoxX = rightX + rightW - 48;
+        int chanceLabelWidth = font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+        int x = chanceBoxX - chanceLabelWidth - width - 10;
+        int y = rightY + 2;
+        Button button = addButton(x, y, width, getLoadedChunksToggleText(), null, ignored -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
                     loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
-                }
-        ).bounds(x, footerY, width, 20).build();
-        addRenderableWidget(button);
-        return button;
+                });
+return button;
     }
 
     private Component getLoadedChunksToggleText() {
@@ -560,19 +539,11 @@ public class OreMergeScreen extends KineticScreen {
     }
 
     private EditBox createReplacementChanceBox() {
-        EditBox box = new EditBox(
-                font,
-                rightX + rightW - 48,
-                rightY + 2,
-                44,
-                20,
-                Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")
-        );
+        EditBox box = addTextField(rightX + rightW - 48, rightY + 2, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         box.setMaxLength(3);
         box.setFilter(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         box.setResponder(this::updateReplacementChance);
-        addRenderableWidget(box);
-        return box;
+return box;
     }
 
     private void updateReplacementChance(String text) {
@@ -602,11 +573,9 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         Button button =
-                Button.builder(
-                                Component.translatable(
+                addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.merge_add"
-                                ),
-                                ignored -> {
+                                ), null, ignored -> {
                                     isCreatingRule = true;
                                     selectingNewTarget = false;
                                     selectedTarget = null;
@@ -615,18 +584,8 @@ public class OreMergeScreen extends KineticScreen {
 
                                     updateLeftEntries();
                                     updateRightPanel();
-                                }
-                        )
-                        .bounds(
-                                x,
-                                y,
-                                width,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(button);
-        return button;
+                                });
+return button;
     }
 
     private Button createDoneButton(
@@ -634,18 +593,14 @@ public class OreMergeScreen extends KineticScreen {
             int y,
             int width
     ) {
-        Button button = Button.builder(
-                Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done"),
-                ignored -> {
+        Button button = addButton(x, y, width, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done"), null, ignored -> {
                     if (!isCreatingRule || selectingNewTarget || pendingSources.isEmpty()) return;
                     selectingNewTarget = true;
                     groupFilterEnabled = false;
                     updateRightPanel();
-                }
-        ).bounds(x, y, width, 20).build();
+                });
         button.visible = false;
-        addRenderableWidget(button);
-        return button;
+return button;
     }
 
     private Button createFilterButton(
@@ -654,27 +609,15 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         Button button =
-                Button.builder(
-                                Component.translatable(
+                addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"
-                                ),
-                                ignored -> {
+                                ), null, ignored -> {
                                     groupFilterEnabled =
                                             !groupFilterEnabled;
 
                                     updateRightPanel();
-                                }
-                        )
-                        .bounds(
-                                x,
-                                y,
-                                width,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(button);
-        return button;
+                                });
+return button;
     }
 
     private Button createSaveButton(
@@ -683,22 +626,10 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         Button button =
-                Button.builder(
-                                Component.translatable(
+                addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.save"
-                                ),
-                                ignored -> saveAndApply()
-                        )
-                        .bounds(
-                                x,
-                                y,
-                                width,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(button);
-        return button;
+                                ), null, ignored -> saveAndApply());
+return button;
     }
 
     private Button createCloseButton(
@@ -707,24 +638,12 @@ public class OreMergeScreen extends KineticScreen {
             int width
     ) {
         Button button =
-                Button.builder(
-                                Component.translatable(
+                addButton(x, y, width, Component.translatable(
                                         parent == null
                                                 ? "gui.realmcontrol.worldblock.banitem.btn.close"
                                                 : "gui.realmcontrol.worldblock.config.back"
-                                ),
-                                ignored -> closeScreen()
-                        )
-                        .bounds(
-                                x,
-                                y,
-                                width,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(button);
-        return button;
+                                ), null, ignored -> closeScreen());
+return button;
     }
 
     private void updateLeftEntries() {
@@ -937,7 +856,7 @@ public class OreMergeScreen extends KineticScreen {
 
     private void closeScreen() {
         if (onChanged != null) onChanged.run();
-        if (this.minecraft != null) this.minecraft.setScreen(parent);
+        if (this.minecraft != null) this.navigateBack();
     }
 
     private Set<ItemUnificationHelper.MergeGroup> getOreGroupsForId(String idStr) {
@@ -980,7 +899,7 @@ public class OreMergeScreen extends KineticScreen {
 
     @Override
     protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, canvasWidth, canvasHeight, 0xFF222222, 0xFF111111);
+        g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
         GuiTheme.panel(g, leftX, leftY, leftW, leftH, 0xFF1C1C1C, 0xFF555555);
         GuiTheme.panel(g, rightX, rightY, rightW, rightH, 0xFF1C1C1C, 0xFF555555);
     }
@@ -1010,13 +929,12 @@ public class OreMergeScreen extends KineticScreen {
             }
             currentY += entry.h + 1;
         }
-        g.disableScissor();
-
+        disableCanvasScissor(g);
         leftScroll.render(
                 g,
                 smx,
                 smy,
-                leftX + leftW + 2,
+                leftX + leftW - 7,
                 leftY,
                 4,
                 leftH,
@@ -1028,10 +946,10 @@ public class OreMergeScreen extends KineticScreen {
     }
 
     private void fitRightPanelToWholeRows() {
-        int availableGridHeight = Math.max(SLOT_PITCH, rightH - getRightHeaderHeight() - RIGHT_FOOTER_HEIGHT);
+        int availableGridHeight = Math.max(SLOT_PITCH, rightH - getRightHeaderHeight());
         int fullRows = Math.max(1, availableGridHeight / SLOT_PITCH);
         gridAreaH = fullRows * SLOT_PITCH;
-        rightH = getRightHeaderHeight() + gridAreaH + RIGHT_FOOTER_HEIGHT;
+        rightH = getRightHeaderHeight() + gridAreaH;
     }
 
     private int getRightHeaderHeight() {
@@ -1040,10 +958,6 @@ public class OreMergeScreen extends KineticScreen {
 
     private int getRightGridY() {
         return rightY + getRightHeaderHeight();
-    }
-
-    private int getRightFooterY() {
-        return getRightGridY() + gridAreaH;
     }
 
     private void renderRightStatus(GuiGraphics g) {
@@ -1078,11 +992,31 @@ public class OreMergeScreen extends KineticScreen {
         int infoRight = replacementChanceBox != null && replacementChanceBox.visible
                 ? replacementChanceBox.getX() - font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")) - 6
                 : rightX + rightW - 4;
-        var lines = font.split(info, Math.max(1, infoRight - (rightX + 6)));
-        if (!lines.isEmpty()) g.drawString(font, lines.get(0), rightX + 6, rightY + 8, 0xFFFFFFFF, false);
+        if (loadedChunksToggleBtn != null && loadedChunksToggleBtn.visible) {
+            infoRight = Math.min(infoRight, loadedChunksToggleBtn.getX() - 6);
+        }
+        KineticText.drawScrollingLeft(
+                g,
+                font,
+                info,
+                rightX + 6,
+                rightY + 8,
+                Math.max(1, infoRight - (rightX + 6)),
+                0xFFFFFFFF,
+                false
+        );
         if (replacementChanceBox != null && replacementChanceBox.visible) {
             Component chanceLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            g.drawString(font, chanceLabel, replacementChanceBox.getX() - font.width(chanceLabel) - 3, rightY + 8, 0xFFFFFFFF, false);
+            KineticText.drawScrollingRight(
+                    g,
+                    font,
+                    chanceLabel,
+                    replacementChanceBox.getX() - 3,
+                    rightY + 8,
+                    Math.max(1, replacementChanceBox.getX() - rightX - 9),
+                    0xFFFFFFFF,
+                    false
+            );
         }
     }
 
@@ -1109,19 +1043,16 @@ public class OreMergeScreen extends KineticScreen {
             ItemSearchIndex.CachedItem item = rightDisplayList.get(i);
             boolean hovered = smx >= x && smx < x + SLOT_SIZE
                     && smy >= y && smy < y + SLOT_SIZE;
-            GuiTheme.itemSlot(g, item.stack, x, y, SLOT_SIZE, 4, hovered);
+            boolean selected = isCreatingRule && !selectingNewTarget && pendingSources.contains(item.idStr);
+            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, selected, hovered, false);
             RenderSystem.enableDepthTest();
             ItemBanControl.withSkip(() -> {
                 g.renderItem(item.stack, x + 1, y + 1);
                 return null;
             });
             RenderSystem.disableDepthTest();
-            if (isCreatingRule && !selectingNewTarget && pendingSources.contains(item.idStr)) {
-                g.renderOutline(x, y, SLOT_SIZE, SLOT_SIZE, 0xFFFFFFFF);
-            }
         }
-        g.disableScissor();
-
+        disableCanvasScissor(g);
         rightScroll.render(
                 g,
                 smx,
@@ -1138,12 +1069,16 @@ public class OreMergeScreen extends KineticScreen {
     }
 
     private void renderSearchHints(GuiGraphics g) {
-        if (leftSearchBox != null && leftSearchBox.getValue().isEmpty() && !leftSearchBox.isFocused()) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint"), leftSearchBox.getX() + 6, leftSearchBox.getY() + 6, 0x888888, false);
-        }
-        if (searchBox != null && searchBox.visible && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search"), searchBox.getX() + 6, searchBox.getY() + 6, 0x888888, false);
-        }
+        renderTextFieldPlaceholder(
+                g,
+                leftSearchBox,
+                Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint")
+        );
+        renderTextFieldPlaceholder(
+                g,
+                searchBox,
+                Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")
+        );
     }
 
     private boolean isHoveringButton(Button button, double mx, double my) {
@@ -1154,34 +1089,34 @@ public class OreMergeScreen extends KineticScreen {
     protected void renderTooltips(@NotNull GuiGraphics g, int smx, int smy, int mx, int my) {
         int tooltipY = smy < leftY ? my + 15 : my;
         if (isHoveringButton(addBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"));
             return;
         }
         if (isHoveringButton(doneBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"));
             return;
         }
         if (isHoveringButton(filterBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"));
             return;
         }
         if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(List.of(
+            showTooltip(List.of(
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
-            ), mx, tooltipY);
+            ));
             return;
         }
         if (isHoveringButton(saveBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"));
             return;
         }
         if (isHoveringButton(closeBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable(parent == null ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"), mx, tooltipY);
+            showTooltip(Component.translatable(parent == null ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"));
             return;
         }
 
@@ -1210,7 +1145,7 @@ public class OreMergeScreen extends KineticScreen {
                     ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.unselect_replaced"
                     : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.select_replaced";
             tooltip.add(Component.translatable(actionKey));
-            GuiOverlay.requestTooltip(tooltip, mx, my);
+            showTooltip(tooltip);
         }
     }
 
@@ -1398,7 +1333,8 @@ public class OreMergeScreen extends KineticScreen {
             boolean selected = id.equals(selectedTarget);
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
             g.fill(x, y, x + w, y + h, selected ? 0xFF555555 : hover ? 0xFF333333 : 0xFF222222);
-            GuiTheme.itemSlot(g, stack, x + 1, y + 1, SLOT_SIZE, 4, hover);
+            GuiTheme.stateOutline(g, x, y, w, h, selected, hover, false);
+            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, selected, hover, false);
             RenderSystem.enableDepthTest();
             ItemBanControl.withSkip(() -> {
                 g.renderItem(stack, x + 2, y + 2);
@@ -1406,9 +1342,27 @@ public class OreMergeScreen extends KineticScreen {
             });
             RenderSystem.disableDepthTest();
             String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
-            g.drawString(font, font.plainSubstrByWidth(name, w - 58), x + 24, y + 6, 0xFFFFFF, false);
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count)).withStyle(ChatFormatting.YELLOW)), x + w - 24, y + 6, 0xFFFFFF, false);
-            g.drawString(font, Component.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"), x + w - 36, y + 6, 0xFFFFFF, false);
+            KineticText.drawScrollingLeft(g, font, name, x + 24, y + 6, w - 58, 0xFFFFFF, false);
+            KineticText.drawScrollingRight(
+                    g,
+                    font,
+                    Component.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count)).withStyle(ChatFormatting.YELLOW)),
+                    x + w - 4,
+                    y + 6,
+                    22,
+                    0xFFFFFF,
+                    false
+            );
+            KineticText.drawScrollingLeft(
+                    g,
+                    font,
+                    Component.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"),
+                    x + w - 36,
+                    y + 6,
+                    10,
+                    0xFFFFFF,
+                    false
+            );
         }
 
         @Override
@@ -1443,7 +1397,7 @@ public class OreMergeScreen extends KineticScreen {
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(id));
             tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.target_del"));
-            GuiOverlay.requestTooltip(tooltip, mx, my);
+            showTooltip(tooltip);
         }
     }
 
@@ -1462,7 +1416,8 @@ public class OreMergeScreen extends KineticScreen {
         void render(GuiGraphics g, int mx, int my) {
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
             g.fill(x, y, x + w, y + h, hover ? 0xFF2A2A2A : 0xFF141414);
-            GuiTheme.itemSlot(g, stack, x + 1, y + 1, SLOT_SIZE, 4, hover);
+            GuiTheme.stateOutline(g, x, y, w, h, false, hover, false);
+            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, false, hover, false);
             RenderSystem.enableDepthTest();
             ItemBanControl.withSkip(() -> {
                 g.renderItem(stack, x + 2, y + 2);
@@ -1489,7 +1444,7 @@ public class OreMergeScreen extends KineticScreen {
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(sourceId));
             tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.source_del"));
-            GuiOverlay.requestTooltip(tooltip, mx, my);
+            showTooltip(tooltip);
         }
     }
 }

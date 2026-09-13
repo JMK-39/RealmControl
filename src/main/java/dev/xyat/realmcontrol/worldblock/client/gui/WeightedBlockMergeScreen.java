@@ -1,5 +1,6 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
+import dev.xyat.kineticcore.api.client.text.KineticText;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
@@ -154,7 +155,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         }
         this.applyWeightedToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyWeightedBlockReplacementToLoadedChunksOnce;
         this.allItems = ItemSearchCache.getAllItems();
-        useCanvas(640f, 360f, 6);
+        useStandardCanvas();
         configureStandaloneDraft(this::captureWeightedSnapshot, this::restoreWeightedSnapshot);
     }
 
@@ -162,13 +163,13 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     protected void buildUi() {
         int pad = 8;
         int gap = 6;
-        leftW = Math.max(150, Math.min(190, canvasWidth / 3));
+        leftW = Math.max(150, Math.min(190, canvasWidth() / 3));
         leftX = pad;
         rightX = leftX + leftW + gap;
-        rightW = Math.max(180, canvasWidth - rightX - pad);
+        rightW = Math.max(180, canvasWidth() - rightX - pad);
         leftY = 58;
         rightY = 58;
-        leftH = Math.max(100, canvasHeight - leftY - 10);
+        leftH = Math.max(100, canvasHeight() - leftY - 10);
         rightH = leftH;
 
         leftContentX = leftX + PANEL_INSET;
@@ -181,72 +182,43 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         rightContentH = Math.max(1, rightH - PANEL_INSET * 2);
         cols = Math.max(1, rightContentW / SLOT_PITCH);
 
-        leftSearch = new EditBox(font, leftX, 5, leftW, 20, Component.empty());
+        leftSearch = addTextField(leftX, 5, leftW, Component.empty());
         leftSearch.setResponder(ignored -> refreshLeft());
-        addRenderableWidget(leftSearch);
-
-        int buttonWidth = 62;
+int buttonWidth = 62;
         int closeX = rightX + rightW - buttonWidth;
         int saveX = closeX - gap - buttonWidth;
         int doneX = saveX - gap - buttonWidth;
         int newX = doneX - gap - buttonWidth;
         int searchWidth = Math.max(80, newX - rightX - gap);
 
-        rightSearch = new EditBox(font, rightX, 5, searchWidth, 20, Component.empty());
+        rightSearch = addTextField(rightX, 5, searchWidth, Component.empty());
         rightSearch.setResponder(ignored -> refreshRight());
-        addRenderableWidget(rightSearch);
-
-        newButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new"), ignored -> startNewRule())
-                .bounds(newX, 5, buttonWidth, 20).build();
-        addRenderableWidget(newButton);
-
-        doneButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done"), ignored -> finishTargets())
-                .bounds(doneX, 5, buttonWidth, 20).build();
-        addRenderableWidget(doneButton);
-
-        saveButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save"), ignored -> save())
-                .bounds(saveX, 5, buttonWidth, 20).build();
-        addRenderableWidget(saveButton);
-
-        backButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.config.back"), ignored -> onClose())
-                .bounds(closeX, 5, buttonWidth, 20).build();
-        addRenderableWidget(backButton);
-
-        Component weightLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight");
+newButton = addButton(newX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new"), null, ignored -> startNewRule());
+doneButton = addButton(doneX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done"), null, ignored -> finishTargets());
+saveButton = addButton(saveX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save"), null, ignored -> save());
+backButton = addButton(closeX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.config.back"), null, ignored -> onClose());
+Component weightLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight");
         int weightBoxX = rightX + font.width(weightLabel) + 6;
-        weightBox = new EditBox(font, weightBoxX, 31, 72, 20, Component.empty());
+        weightBox = addTextField(weightBoxX, 31, 72, Component.empty());
         weightBox.setMaxLength(7);
         weightBox.setFilter(value -> value.isEmpty() || value.matches("\\d{1,7}"));
         weightBox.setResponder(this::updateActiveWeightFromText);
-        addRenderableWidget(weightBox);
-
-        int minusX = weightBoxX + weightBox.getWidth() + 4;
-        minusButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus"), ignored -> adjustWeight(-10))
-                .bounds(minusX, 31, 42, 20).build();
-        addRenderableWidget(minusButton);
-        plusButton = Button.builder(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus"), ignored -> adjustWeight(10))
-                .bounds(minusX + 46, 31, 42, 20).build();
-        addRenderableWidget(plusButton);
-
-        int chanceBoxX = rightX + rightW - 48;
-        chanceBox = new EditBox(font, chanceBoxX, 31, 44, 20, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+int minusX = weightBoxX + weightBox.getWidth() + 4;
+        minusButton = addButton(minusX, 31, 42, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus"), null, ignored -> adjustWeight(-10));
+plusButton = addButton(minusX + 46, 31, 42, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus"), null, ignored -> adjustWeight(10));
+int chanceBoxX = rightX + rightW - 48;
+        chanceBox = addTextField(chanceBoxX, 31, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         chanceBox.setMaxLength(3);
         chanceBox.setFilter(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         chanceBox.setResponder(this::updateReplacementChance);
-        addRenderableWidget(chanceBox);
-
-        int loadedToggleWidth = 132;
-        int loadedToggleX = chanceBoxX - loadedToggleWidth - 6;
-        loadedChunksToggleBtn = Button.builder(
-                getLoadedChunksToggleText(),
-                ignored -> {
+int loadedToggleWidth = 80;
+        int chanceLabelWidth = font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+        int loadedToggleX = chanceBoxX - chanceLabelWidth - loadedToggleWidth - 10;
+        loadedChunksToggleBtn = addButton(loadedToggleX, 31, loadedToggleWidth, getLoadedChunksToggleText(), null, ignored -> {
                     applyWeightedToLoadedChunksOnce = !applyWeightedToLoadedChunksOnce;
                     loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
-                }
-        ).bounds(loadedToggleX, 31, loadedToggleWidth, 20).build();
-        addRenderableWidget(loadedChunksToggleBtn);
-
-        refreshLeft();
+                });
+refreshLeft();
         refreshRight();
         updateControls();
     }
@@ -594,12 +566,12 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
 
     @Override
     public void onClose() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) navigateBack();
     }
 
     @Override
     protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, canvasWidth, canvasHeight, 0xFF222222, 0xFF111111);
+        g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
         GuiTheme.panel(g, leftX, leftY, leftW, leftH, 0xFF1C1C1C, 0xFF555555);
         GuiTheme.panel(g, rightX, rightY, rightW, rightH, 0xFF1C1C1C, 0xFF555555);
     }
@@ -631,28 +603,35 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
             });
             statusX += SLOT_SIZE + 4;
         }
-        int statusRight = canvasWidth - 8;
+        int statusRight = canvasWidth() - 8;
         int statusWidth = mode == Mode.SELECT_TARGETS && activeTarget != null
                 ? Math.max(1, leftW - (statusX - leftX))
                 : Math.max(1, statusRight - statusX);
-        var statusLines = font.split(status, statusWidth);
-        if (!statusLines.isEmpty()) {
-            g.drawString(font, statusLines.get(0), statusX, 36, 0xFFFFFFFF, false);
-        }
-        g.drawString(
-                font,
-                Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.rule_hint"),
-                leftX,
-                48,
-                0xFFFFFFFF,
-                false
-        );
+        KineticText.drawScrollingLeft(g, font, status, statusX, 36, statusWidth, 0xFFFFFFFF, false);
         if (mode == Mode.SELECT_TARGETS && activeTarget != null) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"), rightX, 37, 0xFFFFFFFF, false);
+            KineticText.drawScrollingLeft(
+                    g,
+                    font,
+                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"),
+                    rightX,
+                    37,
+                    Math.max(1, weightBox.getX() - rightX - 3),
+                    0xFFFFFFFF,
+                    false
+            );
         }
         if (chanceBox != null && chanceBox.visible) {
             Component chanceLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            g.drawString(font, chanceLabel, chanceBox.getX() - font.width(chanceLabel) - 3, 37, 0xFFFFFFFF, false);
+            KineticText.drawScrollingRight(
+                    g,
+                    font,
+                    chanceLabel,
+                    chanceBox.getX() - 3,
+                    37,
+                    Math.max(1, chanceBox.getX() - rightX - 6),
+                    0xFFFFFFFF,
+                    false
+            );
         }
     }
 
@@ -672,10 +651,12 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
                         && mx < leftContentX + leftContentW
                         && my >= rowY
                         && my < rowY + 24;
+                boolean selected = source.equals(selectedSource);
                 int rowColor = hovered ? 0xFF30303A : 0xFF1A1A22;
-                GuiTheme.panel(g, leftContentX, rowY, leftContentW, 24, rowColor, 0xFF555555);
+                g.fill(leftContentX, rowY, leftContentX + leftContentW, rowY + 24, rowColor);
+                GuiTheme.stateOutline(g, leftContentX, rowY, leftContentW, 24, selected, hovered, false);
                 var stack = WorldBlockConfig.parseItemStack(source);
-                GuiTheme.itemSlot(g, stack, leftContentX + 2, rowY + 2, 20, 4, hovered);
+                GuiTheme.itemSlot(g, leftContentX + 2, rowY + 2, 20, selected, hovered, false);
                 RenderSystem.enableDepthTest();
                 ItemBanControl.withSkip(() -> {
                     g.renderItem(stack, leftContentX + 4, rowY + 4);
@@ -685,28 +666,32 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
                 String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
                 int countWidth = 18;
                 int nameWidth = Math.max(8, leftContentW - 30 - countWidth);
-                g.drawString(
+                KineticText.drawScrollingLeft(
+                        g,
                         font,
-                        font.plainSubstrByWidth(name, nameWidth),
+                        name,
                         leftContentX + 26,
                         rowY + 8,
+                        nameWidth,
                         0xFFFFFFFF,
                         false
                 );
                 int count = rules.getOrDefault(source, List.of()).size();
                 Component countText = Component.literal(String.valueOf(count));
-                g.drawString(
+                KineticText.drawScrollingRight(
+                        g,
                         font,
                         countText,
-                        leftContentX + leftContentW - 2 - font.width(countText),
+                        leftContentX + leftContentW - 2,
                         rowY + 8,
+                        24,
                         0xFFFFFFFF,
                         false
                 );
             }
             y += 25;
         }
-        g.disableScissor();
+        disableCanvasScissor(g);
         GuiTheme.scrollbar(
                 leftScroll,
                 g,
@@ -741,23 +726,18 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
             ItemSearchIndex.CachedItem item = visibleItems.get(i);
             boolean hovered = mx >= x && mx < x + SLOT_SIZE && my >= y && my < y + SLOT_SIZE;
             boolean selected = selectedTargets.containsKey(item.idStr);
-            GuiTheme.itemSlot(g, item.stack, x, y, SLOT_SIZE, 4, false);
+            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, selected, hovered, false);
             ItemBanControl.withSkip(() -> {
                 GuiTheme.item(g, font, item.stack, x, y, SLOT_SIZE, 1.0F, false);
                 return null;
             });
-            if (hovered) {
-                g.renderOutline(x, y, SLOT_SIZE, SLOT_SIZE, HOVER_OUTLINE_COLOR);
-            } else if (selected) {
-                g.renderOutline(x, y, SLOT_SIZE, SLOT_SIZE, SELECTED_OUTLINE_COLOR);
-            }
             if (selected) {
                 String probability = formatProbability(selectedTargets.get(item.idStr), totalWeight);
                 Component badge = Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.probability_badge", probability);
                 renderProbabilityBadge(g, x, y, badge);
             }
         }
-        g.disableScissor();
+        disableCanvasScissor(g);
         GuiTheme.scrollbar(
                 rightScroll,
                 g,
@@ -781,7 +761,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         g.fill(Math.max(x, drawX - 1), drawY - 1, x + SLOT_SIZE, y + SLOT_SIZE, 0xA0000000);
         g.pose().translate(drawX, drawY, 0.0F);
         g.pose().scale(0.5F, 0.5F, 1.0F);
-        g.drawString(font, badge, 0, 0, 0xFF55FF55, false);
+        KineticText.drawScrollingRight(g, font, badge, scaledWidth * 2, 0, scaledWidth * 2, 0xFF55FF55, false);
         g.pose().popPose();
         RenderSystem.enableDepthTest();
     }
@@ -794,12 +774,16 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     }
 
     private void renderHints(GuiGraphics g) {
-        if (leftSearch != null && leftSearch.getValue().isEmpty() && !leftSearch.isFocused()) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint"), leftSearch.getX() + 5, leftSearch.getY() + 6, 0xFFAAAAAA, false);
-        }
-        if (rightSearch != null && rightSearch.getValue().isEmpty() && !rightSearch.isFocused()) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search"), rightSearch.getX() + 5, rightSearch.getY() + 6, 0xFFAAAAAA, false);
-        }
+        renderTextFieldPlaceholder(
+                g,
+                leftSearch,
+                Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint")
+        );
+        renderTextFieldPlaceholder(
+                g,
+                rightSearch,
+                Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")
+        );
     }
 
     private boolean isHoveringButton(Button button, double mx, double my) {
@@ -814,29 +798,29 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     @Override
     protected void renderTooltips(@NotNull GuiGraphics g, int smx, int smy, int mx, int my) {
         if (isHoveringButton(newButton, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new.tooltip"), mx, my);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new.tooltip"));
             return;
         }
         if (isHoveringButton(doneButton, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done.tooltip"), mx, my);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done.tooltip"));
             return;
         }
         if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(List.of(
+            showTooltip(List.of(
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
-            ), mx, my);
+            ));
             return;
         }
         if (mode == Mode.SELECT_TARGETS && activeTarget != null) {
             if ((weightBox != null && weightBox.isMouseOver(smx, smy))
                     || isHoveringButton(minusButton, smx, smy)
                     || isHoveringButton(plusButton, smx, smy)) {
-                GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.tooltip"), mx, my);
+                showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.tooltip"));
                 return;
             }
         }
@@ -844,18 +828,18 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
                 && smx >= leftX && smx < leftX + SLOT_SIZE
                 && smy >= 32 && smy < 32 + SLOT_SIZE) {
             var sourceStack = WorldBlockConfig.parseItemStack(selectedSource);
-            GuiOverlay.requestTooltip(List.of(ItemCacheHudRenderer.getDisplayNameCustom(sourceStack), Component.literal(selectedSource)), mx, my);
+            showTooltip(List.of(ItemCacheHudRenderer.getDisplayNameCustom(sourceStack), Component.literal(selectedSource)));
             return;
         }
         int leftRuleIndex = leftRuleAt(smx, smy);
         if (leftRuleIndex >= 0) {
             String source = visibleSources.get(leftRuleIndex);
             var sourceStack = WorldBlockConfig.parseItemStack(source);
-            GuiOverlay.requestTooltip(List.of(
+            showTooltip(List.of(
                             ItemCacheHudRenderer.getDisplayNameCustom(sourceStack),
                             Component.literal(source),
                             Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.rule.tooltip")
-                    ), mx, my);
+                    ));
             return;
         }
         int index = rightItemAt(smx, smy);
@@ -877,7 +861,7 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
             } else {
                 tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip"));
             }
-            GuiOverlay.requestTooltip(tooltip, mx, my);
+            showTooltip(tooltip);
         }
     }
 

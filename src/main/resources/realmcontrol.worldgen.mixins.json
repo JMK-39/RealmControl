@@ -7,6 +7,8 @@
     "WorldGenMixins$MinecraftServerMixin",
     "StructurePlacementAccessor",
     "StructureSetAccessor",
-    "ChunkGeneratorStructureStateAccessor"
+    "ChunkGeneratorStructureStateAccessor",
+    "MultiNoiseBiomeSourceAccessor",
+    "BiomeSourceAccessor"
   ]
 }

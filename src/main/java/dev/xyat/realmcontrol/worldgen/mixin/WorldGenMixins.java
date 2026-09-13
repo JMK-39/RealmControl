@@ -1,5 +1,6 @@
 package dev.xyat.realmcontrol.worldgen.mixin;
 
+import dev.xyat.realmcontrol.worldgen.config.BiomeGenerationControl;
 import dev.xyat.realmcontrol.worldgen.config.StructureGenerationControl;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.progress.ChunkProgressListener;
@@ -13,7 +14,9 @@ public class WorldGenMixins {
     public static abstract class MinecraftServerMixin {
         @Inject(method = "prepareLevels(Lnet/minecraft/server/level/progress/ChunkProgressListener;)V", at = @At("HEAD"))
         private void realmcontrol_worldgen$applyStructureGenerationRules(ChunkProgressListener progressListener, CallbackInfo ci) {
-            StructureGenerationControl.applyBeforeWorldPreparation((MinecraftServer) (Object) this);
+            MinecraftServer server = (MinecraftServer) (Object) this;
+            BiomeGenerationControl.applyBeforeWorldPreparation(server);
+            StructureGenerationControl.applyBeforeWorldPreparation(server);
         }
     }
 }

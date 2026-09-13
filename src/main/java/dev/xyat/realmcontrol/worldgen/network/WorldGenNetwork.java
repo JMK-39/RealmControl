@@ -4,6 +4,7 @@ import com.mojang.datafixers.util.Pair;
 import dev.xyat.kineticcore.api.KTNetworkProtocol;
 import dev.xyat.kineticcore.api.NetworkCompressUtil;
 import dev.xyat.realmcontrol.worldgen.WorldGenModule;
+import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import dev.xyat.realmcontrol.worldgen.config.StructureEntryRule;
 import dev.xyat.realmcontrol.worldgen.config.StructureGenerationControl;
 import dev.xyat.realmcontrol.worldgen.config.StructurePlacementRule;
@@ -14,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -22,6 +24,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -49,7 +54,7 @@ import java.util.stream.Collectors;
 
 @Mod.EventBusSubscriber(modid = WorldGenModule.MODID)
 public class WorldGenNetwork {
-    private static final String PROTOCOL_VERSION = "5";
+    private static final String PROTOCOL_VERSION = "6";
     private static final int MAX_COMPRESSED_PAYLOAD_BYTES = 8 * 1024 * 1024;
     private static final int MAX_DECOMPRESSED_PAYLOAD_BYTES = 32 * 1024 * 1024;
     private static final int MAX_STRING_LIST_SIZE = 65536;
@@ -74,7 +79,10 @@ public class WorldGenNetwork {
         CHANNEL.registerMessage(id++, StructureRegistryPacket.class, StructureRegistryPacket::toBytes, StructureRegistryPacket::decode, StructureRegistryPacket::handle);
         CHANNEL.registerMessage(id++, LocateStructurePacket.class, LocateStructurePacket::toBytes, LocateStructurePacket::new, LocateStructurePacket::handle);
         CHANNEL.registerMessage(id++, TeleportStructureDimensionPacket.class, TeleportStructureDimensionPacket::toBytes, TeleportStructureDimensionPacket::new, TeleportStructureDimensionPacket::handle);
-        CHANNEL.registerMessage(id, StructureActionResultPacket.class, StructureActionResultPacket::toBytes, StructureActionResultPacket::new, StructureActionResultPacket::handle);
+        CHANNEL.registerMessage(id++, StructureActionResultPacket.class, StructureActionResultPacket::toBytes, StructureActionResultPacket::new, StructureActionResultPacket::handle);
+        CHANNEL.registerMessage(id++, RequestOpenBiomeControlPacket.class, RequestOpenBiomeControlPacket::toBytes, RequestOpenBiomeControlPacket::new, RequestOpenBiomeControlPacket::handle);
+        CHANNEL.registerMessage(id++, OpenBiomeControlPacket.class, OpenBiomeControlPacket::toBytes, OpenBiomeControlPacket::decode, OpenBiomeControlPacket::handle);
+        CHANNEL.registerMessage(id, SaveBiomeControlPacket.class, SaveBiomeControlPacket::toBytes, SaveBiomeControlPacket::decode, SaveBiomeControlPacket::handle);
     }
 
     @SubscribeEvent
@@ -123,9 +131,41 @@ public class WorldGenNetwork {
         return result;
     }
 
+
+    private static void writeBiomeRuleList(FriendlyByteBuf buf, List<BiomeReplacementRule> rules) {
+        List<BiomeReplacementRule> safeRules = rules == null ? List.of() : rules;
+        if (safeRules.size() > MAX_RULE_LIST_SIZE) {
+            throw new IllegalArgumentException("Too many biome rules");
+        }
+        buf.writeVarInt(safeRules.size());
+        for (BiomeReplacementRule rule : safeRules) {
+            buf.writeUtf(rule == null ? "" : rule.dimensionId());
+            buf.writeUtf(rule == null ? "" : rule.source());
+            buf.writeUtf(rule == null ? "" : rule.target());
+        }
+    }
+
+    private static List<BiomeReplacementRule> readBiomeRuleList(FriendlyByteBuf buf) {
+        int size = buf.readVarInt();
+        if (size < 0 || size > MAX_RULE_LIST_SIZE) {
+            throw new IllegalArgumentException("Invalid biome rule list size");
+        }
+        List<BiomeReplacementRule> rules = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            rules.add(new BiomeReplacementRule(buf.readUtf(32767), buf.readUtf(32767), buf.readUtf(32767)));
+        }
+        return rules;
+    }
+
     public static void requestOpenEditor() {
         if (CHANNEL != null) {
             CHANNEL.sendToServer(new RequestOpenWorldGenGuiPacket());
+        }
+    }
+
+    public static void requestOpenBiomeControl() {
+        if (CHANNEL != null) {
+            CHANNEL.sendToServer(new RequestOpenBiomeControlPacket());
         }
     }
 
@@ -611,6 +651,155 @@ public class WorldGenNetwork {
             });
             ctx.get().setPacketHandled(true);
         }
+    }
+
+    public record RequestOpenBiomeControlPacket() {
+        public RequestOpenBiomeControlPacket(FriendlyByteBuf ignored) {
+            this();
+        }
+
+        public void toBytes(FriendlyByteBuf ignored) {
+        }
+
+        public void handle(Supplier<NetworkEvent.Context> ctx) {
+            ctx.get().enqueueWork(() -> {
+                ServerPlayer player = ctx.get().getSender();
+                if (player == null || !player.hasPermissions(2)) {
+                    return;
+                }
+                sendBiomeControlEditor(player);
+            });
+            ctx.get().setPacketHandled(true);
+        }
+    }
+
+    public record OpenBiomeControlPacket(
+            boolean enabled,
+            List<BiomeReplacementRule> rules,
+            List<String> biomes,
+            List<String> biomeTags,
+            List<String> dimensions
+    ) {
+        public static OpenBiomeControlPacket decode(FriendlyByteBuf buf) {
+            FriendlyByteBuf payload = readCompressedPayload(buf);
+            try {
+                return new OpenBiomeControlPacket(
+                        payload.readBoolean(),
+                        readBiomeRuleList(payload),
+                        readStringList(payload),
+                        readStringList(payload),
+                        readStringList(payload)
+                );
+            } finally {
+                payload.release();
+            }
+        }
+
+        public void toBytes(FriendlyByteBuf buf) {
+            writeCompressedPayload(buf, payload -> {
+                payload.writeBoolean(enabled);
+                writeBiomeRuleList(payload, rules);
+                writeStringList(payload, biomes);
+                writeStringList(payload, biomeTags);
+                writeStringList(payload, dimensions);
+            });
+        }
+
+        public void handle(Supplier<NetworkEvent.Context> ctx) {
+            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
+                    Dist.CLIENT,
+                    () -> () -> WorldGenNetworkClient.handleOpenBiomeControl(this)
+            ));
+            ctx.get().setPacketHandled(true);
+        }
+    }
+
+    public record SaveBiomeControlPacket(boolean enabled, List<BiomeReplacementRule> rules) {
+        public static SaveBiomeControlPacket decode(FriendlyByteBuf buf) {
+            FriendlyByteBuf payload = readCompressedPayload(buf);
+            try {
+                return new SaveBiomeControlPacket(payload.readBoolean(), readBiomeRuleList(payload));
+            } finally {
+                payload.release();
+            }
+        }
+
+        public void toBytes(FriendlyByteBuf buf) {
+            writeCompressedPayload(buf, payload -> {
+                payload.writeBoolean(enabled);
+                writeBiomeRuleList(payload, rules);
+            });
+        }
+
+        public void handle(Supplier<NetworkEvent.Context> ctx) {
+            ctx.get().enqueueWork(() -> {
+                ServerPlayer player = ctx.get().getSender();
+                if (player == null || !player.hasPermissions(2)) {
+                    if (player != null) sendSaveResult(player, false);
+                    return;
+                }
+                if (!validateBiomeRules(player.server, rules)) {
+                    sendSaveResult(player, false);
+                    return;
+                }
+                try {
+                    WorldGenConfig.enableBiomeControl = enabled;
+                    WorldGenConfig.biomeReplacementRules = new ArrayList<>(rules);
+                    WorldGenConfig.save();
+                    sendSaveResult(player, true);
+                } catch (Throwable throwable) {
+                    WorldGenModule.LOGGER.error("Failed to save biome generation config", throwable);
+                    sendSaveResult(player, false);
+                }
+            });
+            ctx.get().setPacketHandled(true);
+        }
+    }
+
+    private static void sendBiomeControlEditor(ServerPlayer player) {
+        WorldGenConfig.load();
+        Registry<Biome> biomeRegistry = player.server.registryAccess().registryOrThrow(Registries.BIOME);
+        List<String> biomes = biomeRegistry.keySet().stream().map(ResourceLocation::toString).sorted().toList();
+        List<String> tags = biomeRegistry.getTagNames().map(tag -> "#" + tag.location()).sorted().toList();
+        List<String> dimensions = getSupportedBiomeControlDimensions(player.server);
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenBiomeControlPacket(
+                WorldGenConfig.enableBiomeControl,
+                new ArrayList<>(WorldGenConfig.biomeReplacementRules),
+                biomes,
+                tags,
+                dimensions
+        ));
+    }
+
+    private static List<String> getSupportedBiomeControlDimensions(MinecraftServer server) {
+        Registry<LevelStem> registry = server.registryAccess().registryOrThrow(Registries.LEVEL_STEM);
+        List<String> dimensions = new ArrayList<>();
+        for (ResourceKey<LevelStem> key : registry.registryKeySet()) {
+            LevelStem stem = registry.get(key);
+            if (stem != null && stem.generator().getBiomeSource() instanceof MultiNoiseBiomeSource) {
+                dimensions.add(key.location().toString());
+            }
+        }
+        dimensions.sort(String::compareTo);
+        return dimensions;
+    }
+
+    private static boolean validateBiomeRules(MinecraftServer server, List<BiomeReplacementRule> rules) {
+        if (rules == null || rules.size() > MAX_RULE_LIST_SIZE) return false;
+        Registry<Biome> biomeRegistry = server.registryAccess().registryOrThrow(Registries.BIOME);
+        Set<String> biomeIds = biomeRegistry.keySet().stream().map(ResourceLocation::toString).collect(Collectors.toSet());
+        Set<String> tagIds = biomeRegistry.getTagNames().map(tag -> "#" + tag.location()).collect(Collectors.toSet());
+        Set<String> dimensionIds = new HashSet<>(getSupportedBiomeControlDimensions(server));
+        Set<String> seen = new HashSet<>();
+        for (BiomeReplacementRule rule : rules) {
+            if (rule == null || rule.isEmpty()) return false;
+            if (!BiomeReplacementRule.ALL_DIMENSIONS.equals(rule.dimensionId()) && !dimensionIds.contains(rule.dimensionId())) return false;
+            if (!(biomeIds.contains(rule.source()) || tagIds.contains(rule.source()))) return false;
+            if (!rule.isRemoval() && !biomeIds.contains(rule.target())) return false;
+            String signature = rule.dimensionId() + "|" + rule.source();
+            if (!seen.add(signature)) return false;
+        }
+        return true;
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean success) {

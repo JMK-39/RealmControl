@@ -22,6 +22,8 @@ public class WorldGenConfig {
     public static List<String> disabledStructures = new ArrayList<>();
     public static Map<String, StructureEntryRule> structureEntryRules = new LinkedHashMap<>();
     public static Map<String, StructurePlacementRule> structurePlacementRules = new LinkedHashMap<>();
+    public static boolean enableBiomeControl = true;
+    public static List<BiomeReplacementRule> biomeReplacementRules = new ArrayList<>();
 
     public static void load() {
         try {
@@ -74,6 +76,18 @@ public class WorldGenConfig {
         define("structure_control.placement_rules", new ArrayList<>(), """
                  StructureSet 放置规则覆盖。格式由界面自动维护，包含 frequency、salt、间距和环形分布参数。
                  StructureSet placement overrides maintained by the GUI, including frequency, salt, spacing and concentric-ring parameters.""");
+
+        configData.setComment("biome_control", """
+                 群系替换与移除规则。只改变群系选择，不改变地形形状。
+                 Biome replacement/removal rules. Changes biome selection only, not terrain shape.""");
+
+        define("biome_control.enable", true, """
+                 是否启用群系控制。规则会在世界启动时应用到 MultiNoise 群系源。
+                 Whether biome control is enabled. Rules are applied to MultiNoise biome sources on world start.""");
+
+        define("biome_control.rules", new ArrayList<>(), """
+                 由界面维护的群系规则：维度|源群系或#标签|目标群系或null。
+                 GUI-managed biome rules: dimension|source biome or #tag|target biome or null.""");
     }
 
     private static void define(String path, Object def, String comment) {
@@ -118,6 +132,16 @@ public class WorldGenConfig {
                 .sorted()
                 .toList();
 
+        enableBiomeControl = configData.getOrElse("biome_control.enable", true);
+        biomeReplacementRules = new ArrayList<>();
+        List<String> rawBiomeRules = configData.getOrElse("biome_control.rules", new ArrayList<>());
+        for (String encoded : rawBiomeRules) {
+            BiomeReplacementRule rule = BiomeRuleCodec.decode(encoded);
+            if (rule != null && !rule.isEmpty()) {
+                biomeReplacementRules.add(rule);
+            }
+        }
+
         StructureGenerationControl.refresh(structureEntryRules, structurePlacementRules, enableStructureBlocking);
     }
 
@@ -154,6 +178,11 @@ public class WorldGenConfig {
                     .filter(rule -> rule != null && !rule.isEmpty())
                     .sorted(Comparator.comparing(StructurePlacementRule::structureSetId))
                     .map(StructureRuleCodec::encodePlacement)
+                    .toList());
+            configData.set("biome_control.enable", enableBiomeControl);
+            configData.set("biome_control.rules", biomeReplacementRules.stream()
+                    .filter(rule -> rule != null && !rule.isEmpty())
+                    .map(BiomeRuleCodec::encode)
                     .toList());
 
             configData.save();

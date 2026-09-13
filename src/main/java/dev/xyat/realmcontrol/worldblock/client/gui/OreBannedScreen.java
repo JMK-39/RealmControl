@@ -1,6 +1,7 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.xyat.kineticcore.api.client.text.KineticText;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.overlay.GuiOverlay;
 import dev.xyat.kineticcore.api.client.search.ItemSearchIndex;
@@ -95,7 +96,7 @@ public class OreBannedScreen extends KineticScreen {
         compactToolbar =
                 isPortraitLayout()
                         || isCompactLayout()
-                        || canvasWidth < 520;
+                        || canvasWidth() < 520;
 
         int searchY = 5;
         int spacing = 5;
@@ -109,7 +110,7 @@ public class OreBannedScreen extends KineticScreen {
         int availableWidth =
                 Math.max(
                         SLOT_SIZE,
-                        canvasWidth
+                        canvasWidth()
                                 - sidePadding * 2
                                 - 12
                 );
@@ -127,7 +128,7 @@ public class OreBannedScreen extends KineticScreen {
                 Math.max(
                         sidePadding,
                         (
-                                canvasWidth
+                                canvasWidth()
                                         - contentW
                                         - 8
                         ) / 2
@@ -139,7 +140,7 @@ public class OreBannedScreen extends KineticScreen {
                         (
                                 Math.max(
                                         SLOT_SIZE,
-                                        canvasHeight
+                                        canvasHeight()
                                                 - gridY
                                                 - 8
                                 ) / SLOT_SIZE
@@ -171,37 +172,17 @@ public class OreBannedScreen extends KineticScreen {
                         : 120;
 
         searchBox =
-                new EditBox(
-                        font,
-                        gridX,
-                        searchY,
-                        searchW,
-                        20,
-                        Component.empty()
-                );
+                addTextField(gridX, searchY, searchW, Component.empty());
 
         searchBox.setValue(lastSearchQuery);
         searchBox.setResponder(this::updateSearch);
-        addRenderableWidget(searchBox);
-        ruleBtn =
-                Button.builder(
-                                Component.empty(),
-                                button ->
-                                        toggleRuleFromSearch()
-                        )
-                        .bounds(
-                                searchBox.getX()
+ruleBtn =
+                addButton(searchBox.getX()
                                         + searchBox.getWidth()
-                                        + 2,
-                                searchY,
-                                ruleBtnW,
-                                20
-                        )
-                        .build();
+                                        + 2, searchY, ruleBtnW, Component.empty(), null, button ->
+                                        toggleRuleFromSearch());
         ruleBtn.visible = false;
-        addRenderableWidget(ruleBtn);
-
-        int buttonY =
+int buttonY =
                 compactToolbar
                         ? 31
                         : searchY;
@@ -220,26 +201,11 @@ public class OreBannedScreen extends KineticScreen {
             saveX = viewX - spacing - btnW;
         }
         saveBtn =
-                Button.builder(
-                                Component.translatable(
+                addButton(saveX, buttonY, btnW, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.save"
-                                ),
-                                button -> save()
-                        )
-                        .bounds(
-                                saveX,
-                                buttonY,
-                                btnW,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(saveBtn);
-
-        viewBtn =
-                Button.builder(
-                                getViewModeText(),
-                                button -> {
+                                ), null, button -> save());
+viewBtn =
+                addButton(viewX, buttonY, btnW, getViewModeText(), null, button -> {
                                     viewMode =
                                             (viewMode + 1) % 2;
 
@@ -250,35 +216,12 @@ public class OreBannedScreen extends KineticScreen {
                                     updateSearch(
                                             searchBox.getValue()
                                     );
-                                }
-                        )
-                        .bounds(
-                                viewX,
-                                buttonY,
-                                btnW,
-                                20
-                        )
-                        .build();
-        addRenderableWidget(viewBtn);
-
-        closeBtn =
-                Button.builder(
-                                Component.translatable(
+                                });
+closeBtn =
+                addButton(closeX, buttonY, btnW, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.back"
-                                ),
-                                button -> onClose()
-                        )
-                        .bounds(
-                                closeX,
-                                buttonY,
-                                btnW,
-                                20
-                        )
-                        .build();
-
-        addRenderableWidget(closeBtn);
-
-        infoY =
+                                ), null, button -> onClose());
+infoY =
                 compactToolbar
                         ? 57
                         : 11;
@@ -480,7 +423,7 @@ public class OreBannedScreen extends KineticScreen {
 
     @Override
     protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, canvasWidth, canvasHeight, 0xFF222222, 0xFF111111);
+        g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
         g.fill(gridX - 3, gridY - 3, gridX + contentW + 9, gridY + contentH + 3, 0xFF000000);
         g.fill(gridX - 2, gridY - 2, gridX + contentW + 8, gridY + contentH + 2, 0xFF2A2A2A);
     }
@@ -491,10 +434,19 @@ public class OreBannedScreen extends KineticScreen {
         if (ruleBtn != null && ruleBtn.visible) countX = ruleBtn.getX() + ruleBtn.getWidth() + 10;
 
         if (isAutoCompleteMode) {
-            g.drawString(font, Component.translatable(
-                    "gui.realmcontrol.worldblock.banitem.autocomplete.matches_count",
-                    Component.literal(String.valueOf(autoCompleteList.size())).withStyle(ChatFormatting.YELLOW)
-            ).withStyle(ChatFormatting.GRAY), countX, 11, 0xFFFFFF, false);
+            KineticText.drawScrollingLeft(
+                    g,
+                    font,
+                    Component.translatable(
+                            "gui.realmcontrol.worldblock.banitem.autocomplete.matches_count",
+                            Component.literal(String.valueOf(autoCompleteList.size())).withStyle(ChatFormatting.YELLOW)
+                    ).withStyle(ChatFormatting.GRAY),
+                    countX,
+                    11,
+                    Math.max(1, canvasWidth() - countX - 10),
+                    0xFFFFFF,
+                    false
+            );
             enableCanvasScissor(
                     g,
                     gridX,
@@ -508,13 +460,22 @@ public class OreBannedScreen extends KineticScreen {
                 if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
                     boolean hovered = smx >= gridX && smx < gridX + contentW && smy >= y && smy < y + SLOT_SIZE;
                     g.fill(gridX, y, gridX + contentW, y + SLOT_SIZE, hovered ? 0x88FFFFFF : ((i % 2 == 0) ? 0x44FFFFFF : 0x44888888));
-                    g.drawString(font, entry, gridX + 5, y + 6, 0xFFFFFF, false);
+                    KineticText.drawScrollingLeft(g, font, entry, gridX + 5, y + 6, Math.max(1, contentW - 10), 0xFFFFFF, false);
                 }
             }
         } else {
-            g.drawString(font, Component.literal(String.valueOf(displayList.size())).withStyle(ChatFormatting.GREEN)
-                    .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal(String.valueOf(currentSourceList.size())).withStyle(ChatFormatting.YELLOW)), countX, 11, 0xFFFFFF, false);
+            KineticText.drawScrollingLeft(
+                    g,
+                    font,
+                    Component.literal(String.valueOf(displayList.size())).withStyle(ChatFormatting.GREEN)
+                            .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal(String.valueOf(currentSourceList.size())).withStyle(ChatFormatting.YELLOW)),
+                    countX,
+                    11,
+                    Math.max(1, canvasWidth() - countX - 10),
+                    0xFFFFFF,
+                    false
+            );
             enableCanvasScissor(
                     g,
                     gridX,
@@ -545,12 +506,14 @@ public class OreBannedScreen extends KineticScreen {
                 }
             }
         }
-        g.disableScissor();
+        disableCanvasScissor(g);
         renderScrollbar(g, smx, smy);
 
-        if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
-            g.drawString(font, Component.translatable("gui.realmcontrol.worldblock.banblock.search.hint"), searchBox.getX() + 6, searchBox.getY() + 6, 0xAAAAAA, false);
-        }
+        renderTextFieldPlaceholder(
+                g,
+                searchBox,
+                Component.translatable("gui.realmcontrol.worldblock.banblock.search.hint")
+        );
     }
 
     private void renderScrollbar(GuiGraphics g, int mouseX, int mouseY) {
@@ -577,19 +540,19 @@ public class OreBannedScreen extends KineticScreen {
     protected void renderTooltips(GuiGraphics g, int smx, int smy, int mx, int my) {
         int tooltipY = smy < 30 ? my + 15 : my;
         if (isHoveringButton(saveBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.save"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.save"));
             return;
         }
         if (isHoveringButton(viewBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.view"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.view"));
             return;
         }
         if (isHoveringButton(closeBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.close"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.close"));
             return;
         }
         if (isHoveringButton(ruleBtn, smx, smy)) {
-            GuiOverlay.requestTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.rule_desc"), mx, tooltipY);
+            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.rule_desc"));
             return;
         }
         renderGridTooltip(g, smx, smy, mx, my);
@@ -614,7 +577,7 @@ public class OreBannedScreen extends KineticScreen {
                 tooltip.add(Component.literal(item.idStr));
                 tooltip.add(WorldBlockConfig.isOreGenerationBanned(item.stack) ? Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban") : Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.left_ban"));
             }
-            GuiOverlay.requestTooltip(tooltip, mx, my);
+            showTooltip(tooltip);
             return null;
         });
     }
@@ -710,7 +673,7 @@ public class OreBannedScreen extends KineticScreen {
     @Override
     public void onClose() {
         if (minecraft != null) {
-            minecraft.setScreen(parent);
+            navigateBack();
         }
     }
 

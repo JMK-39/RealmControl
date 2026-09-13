@@ -1,5 +1,6 @@
 package dev.xyat.realmcontrol.worldgen.client.gui;
 
+import dev.xyat.kineticcore.api.client.text.KineticText;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.overlay.GuiOverlay;
 import dev.xyat.kineticcore.api.client.screen.KineticScreen;
@@ -10,7 +11,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -41,7 +41,7 @@ public final class StructureRuleEditScreen extends KineticScreen {
         super(Component.translatable("gui.realmcontrol.worldgen.structure_edit.title"));
         this.parent = parent;
         this.descriptor = descriptor;
-        useCanvas(520f, 360f, 6);
+        useResponsiveCanvas(520f, 360f, 6);
 
         StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
         StructurePlacementRule placementRule = descriptor.structureSetId().isBlank() ? null : parent.getPlacementRule(descriptor.structureSetId());
@@ -59,16 +59,11 @@ public final class StructureRuleEditScreen extends KineticScreen {
         int rowY = 84;
         int rowGap = 26;
 
-        disabledButton = Button.builder(disabledMessage(), button -> {
+        disabledButton = addButton(360, 48, 125, disabledMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip"), button -> {
                     disabled = !disabled;
                     button.setMessage(disabledMessage());
-                })
-                .bounds(360, 48, 125, 20)
-                .tooltip(Tooltip.create(Component.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip")))
-                .build();
-        this.addRenderableWidget(disabledButton);
-
-        StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
+                });
+StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
         int currentWeight = entryRule != null && entryRule.weight() != null ? entryRule.weight() : descriptor.originalWeight();
         weightBox = addField("gui.realmcontrol.worldgen.structure_edit.weight", fieldX, rowY, fieldW, Integer.toString(currentWeight), Integer.toString(descriptor.originalWeight()));
         rowY += rowGap;
@@ -90,15 +85,11 @@ public final class StructureRuleEditScreen extends KineticScreen {
                 separationBox = addField("gui.realmcontrol.worldgen.structure_edit.separation", fieldX, rowY, fieldW, Integer.toString(separation), Integer.toString(descriptor.originalSeparation()));
                 rowY += rowGap;
 
-                spreadTypeButton = Button.builder(spreadTypeMessage(), button -> {
+                spreadTypeButton = addButton(fieldX, rowY, fieldW, spreadTypeMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type.tooltip"), button -> {
                             spreadType = "triangular".equals(spreadType) ? "linear" : "triangular";
                             button.setMessage(spreadTypeMessage());
-                        })
-                        .bounds(fieldX, rowY, fieldW, 18)
-                        .tooltip(Tooltip.create(Component.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type.tooltip")))
-                        .build();
-                this.addRenderableWidget(spreadTypeButton);
-                rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", null, descriptor.originalSpreadType(), rowY));
+                        });
+rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", null, descriptor.originalSpreadType(), rowY));
             } else if ("concentric_rings".equals(descriptor.placementType())) {
                 int distance = rule != null && rule.distance() != null ? rule.distance() : descriptor.originalDistance();
                 int spread = rule != null && rule.spread() != null ? rule.spread() : descriptor.originalSpread();
@@ -115,25 +106,17 @@ public final class StructureRuleEditScreen extends KineticScreen {
         disabledButton.active = assigned;
         if (weightBox != null) weightBox.setEditable(assigned);
 
-        int buttonY = this.canvasHeight - 34;
-        this.addRenderableWidget(Button.builder(Component.translatable("gui.realmcontrol.worldgen.structure_edit.save_current"), b -> saveCurrent())
-                .bounds(158, buttonY, 100, 20)
-                .build());
-        this.addRenderableWidget(Button.builder(Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default"), b -> resetDefault())
-                .bounds(263, buttonY, 100, 20)
-                .tooltip(Tooltip.create(Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip")))
-                .build());
-        this.addRenderableWidget(Button.builder(Component.translatable("gui.realmcontrol.worldgen.config.back"), b -> back())
-                .bounds(368, buttonY, 72, 20)
-                .build());
+        int buttonY = this.canvasHeight() - 34;
+        addButton(158, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.save_current"), null, b -> saveCurrent());
+        addButton(263, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default"), Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip"), b -> resetDefault());
+        addButton(368, buttonY, 72, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, b -> back());
     }
 
     private EditBox addField(String labelKey, int x, int y, int width, String value, String original) {
-        EditBox box = new EditBox(this.font, x, y, width, 18, Component.translatable(labelKey));
+        EditBox box = addTextField(x, y, width, Component.translatable(labelKey));
         box.setMaxLength(32);
         box.setValue(value);
-        this.addRenderableWidget(box);
-        rows.add(new FieldRow(labelKey, box, original, y));
+rows.add(new FieldRow(labelKey, box, original, y));
         return box;
     }
 
@@ -201,7 +184,7 @@ public final class StructureRuleEditScreen extends KineticScreen {
     }
 
     private void back() {
-        if (this.minecraft != null) this.minecraft.setScreen(parent);
+        if (this.minecraft != null) this.navigateBack();
     }
 
     @Override
@@ -211,43 +194,61 @@ public final class StructureRuleEditScreen extends KineticScreen {
 
     @Override
     protected void renderCanvasBackground(@NotNull GuiGraphics g, int mx, int my, float pt) {
-        GuiTheme.shadow(g, this.canvasWidth, this.canvasHeight);
-        GuiTheme.panel(g, 10, 8, this.canvasWidth - 20, this.canvasHeight - 16);
-        GuiTheme.panelAlt(g, 20, 76, this.canvasWidth - 40, this.canvasHeight - 124);
+        GuiTheme.shadow(g, this.canvasWidth(), this.canvasHeight());
+        GuiTheme.panel(g, 10, 8, this.canvasWidth() - 20, this.canvasHeight() - 16);
+        GuiTheme.panelAlt(g, 20, 76, this.canvasWidth() - 40, this.canvasHeight() - 124);
     }
 
     @Override
     protected void renderCanvasForeground(@NotNull GuiGraphics g, int mx, int my, float pt) {
         Component title = Component.translatable("gui.realmcontrol.worldgen.structure_edit.title");
-        g.drawString(this.font, title, 26, 20, 0xFFFFAA00, false);
+        KineticText.drawScrollingLeft(g, this.font, title, 26, 20, Math.max(1, canvasWidth() - 52), 0xFFFFAA00, false);
 
         Component structureLine = Component.translatable(
                 "gui.realmcontrol.worldgen.structure_edit.structure",
                 Component.literal(parent.toDisplayEntry(descriptor.structureId())).withStyle(ChatFormatting.GOLD)
         );
-        g.drawString(this.font, structureLine, 26, 36, 0xFFFFFFFF, false);
+        KineticText.drawScrollingLeft(g, this.font, structureLine, 26, 36, Math.max(1, canvasWidth() - 52), 0xFFFFFFFF, false);
 
         Component setValue = descriptor.structureSetId().isBlank()
                 ? Component.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned").withStyle(ChatFormatting.RED)
                 : Component.literal(descriptor.structureSetId()).withStyle(ChatFormatting.AQUA);
-        g.drawString(this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, 0xFFFFFFFF, false);
+        KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, Math.max(1, canvasWidth() - 52), 0xFFFFFFFF, false);
 
         if (descriptor.supportsPlacementEditing()) {
-            g.drawString(this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, 0xFFFFCC55, false);
+            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFFCC55, false);
         } else if ("other".equals(descriptor.placementType())) {
-            g.drawString(this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 68, 0xFFFFCC55, false);
+            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFFCC55, false);
         } else {
-            g.drawString(this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 68, 0xFFFF5555, false);
+            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFF5555, false);
         }
 
         for (FieldRow row : rows) {
             int y = row.y() + 5;
-            g.drawString(this.font, Component.translatable(row.labelKey()), 32, y, 0xFFFFFFFF, false);
+            KineticText.drawScrollingLeft(
+                    g,
+                    this.font,
+                    Component.translatable(row.labelKey()),
+                    32,
+                    y,
+                    190,
+                    0xFFFFFFFF,
+                    false
+            );
             Component original = Component.translatable(
                     "gui.realmcontrol.worldgen.structure_edit.original",
                     Component.literal(row.original()).withStyle(ChatFormatting.AQUA)
             );
-            g.drawString(this.font, original, 340, y, 0xFFCCCCCC, false);
+            KineticText.drawScrollingLeft(
+                    g,
+                    this.font,
+                    original,
+                    340,
+                    y,
+                    Math.max(1, canvasWidth() - 366),
+                    0xFFCCCCCC,
+                    false
+            );
         }
     }
 
