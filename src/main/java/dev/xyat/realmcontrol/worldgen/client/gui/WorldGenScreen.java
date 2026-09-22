@@ -1,26 +1,29 @@
 package dev.xyat.realmcontrol.worldgen.client.gui;
 
 import dev.xyat.kineticcore.api.client.text.KineticText;
+import dev.xyat.kineticcore.api.client.input.KineticMouseButtons;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
-import dev.xyat.kineticcore.api.client.overlay.GuiOverlay;
+import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.screen.KineticScreen;
+import dev.xyat.kineticcore.api.client.search.KineticSearch;
 import dev.xyat.kineticcore.api.client.widget.KineticWidgets;
-import dev.xyat.kineticcore.config.client.KTConfigApi;
-import dev.xyat.kineticcore.api.client.widget.KineticWidgets.SmoothSelectionList;
-import dev.xyat.kineticcore.api.client.widget.KineticWidgets.AutoCompleteBox;
+import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
+import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
+import dev.xyat.kineticcore.api.config.client.KTConfigApi;
+import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.SmoothEntry;
+import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.SmoothSelectionList;
+import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete;
+import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete.AutoCompleteBox;
 import dev.xyat.realmcontrol.worldgen.config.StructureEntryRule;
 import dev.xyat.realmcontrol.worldgen.config.WorldGenConfigGui;
 import dev.xyat.realmcontrol.worldgen.config.StructurePlacementRule;
 import dev.xyat.realmcontrol.worldgen.data.StructureRuleDescriptor;
 import dev.xyat.realmcontrol.worldgen.network.WorldGenNetwork;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -28,6 +31,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import org.jetbrains.annotations.NotNull;
+import dev.xyat.kineticcore.api.client.widget.KineticControl;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -59,8 +63,8 @@ public class WorldGenScreen extends KineticScreen {
     private String structureSearch = "";
     private AutoCompleteBox activeInput;
     private StructureListWidget structureListWidget;
-    private Button locateStructureButton;
-    private Button teleportDimensionButton;
+    private StateButton locateStructureButton;
+    private StateButton teleportDimensionButton;
     private String selectedStructureId = "";
 
     private record WorldGenSnapshot(
@@ -94,7 +98,8 @@ public class WorldGenScreen extends KineticScreen {
     public WorldGenScreen(WorldGenNetwork.OpenWorldGenGuiPacket packet, Screen parent) {
         super(Component.translatable("gui.realmcontrol.worldgen.worldgen.title"));
         this.parent = parent;
-        useStandardCanvas();
+        setParentScreen(parent);
+        useCanvas(STANDARD_CANVAS_WIDTH, STANDARD_CANVAS_HEIGHT, STANDARD_SAFE_MARGIN);
         this.structureBlockingEnable = packet.structureBlockingEnable();
         this.serverDictStructs = packet.allStructs() != null ? new ArrayList<>(packet.allStructs()) : new ArrayList<>();
         this.structureDescriptors = packet.structureDescriptors() != null ? new ArrayList<>(packet.structureDescriptors()) : new ArrayList<>();
@@ -110,12 +115,6 @@ public class WorldGenScreen extends KineticScreen {
         configureStandaloneDraft(this::captureWorldGenSnapshot, this::restoreWorldGenSnapshot);
     }
 
-    @Override
-    public void onClose() {
-        if (this.minecraft != null) {
-            this.navigateBack();
-        }
-    }
 
     @Override
     protected void buildUi() {
@@ -137,24 +136,24 @@ public class WorldGenScreen extends KineticScreen {
         int teleportX = saveX - gap - actionW;
         int locateX = teleportX - gap - actionW;
 
-        locateStructureButton = addButton(locateX, topY, actionW, Component.translatable("gui.realmcontrol.worldgen.worldgen.locate_structure"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.locate_structure"), b -> locateSelectedStructure());
+        locateStructureButton = addButton(locateX, topY, actionW, Component.translatable("gui.realmcontrol.worldgen.worldgen.locate_structure"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.locate_structure"), () -> locateSelectedStructure());
 
-        teleportDimensionButton = addButton(teleportX, topY, actionW, Component.translatable("gui.realmcontrol.worldgen.worldgen.teleport_dimension"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.teleport_dimension"), b -> teleportSelectedStructureDimension());
+        teleportDimensionButton = addButton(teleportX, topY, actionW, Component.translatable("gui.realmcontrol.worldgen.worldgen.teleport_dimension"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.teleport_dimension"), () -> teleportSelectedStructureDimension());
 
-        addButton(saveX, topY, saveW, Component.translatable("gui.realmcontrol.worldgen.worldgen.save_all"), null, b -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveWorldGenPacket(
+        addButton(saveX, topY, saveW, Component.translatable("gui.realmcontrol.worldgen.worldgen.save_all"), null, () -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveWorldGenPacket(
                 structureBlockingEnable,
                 new ArrayList<>(structureEntryRules.values()),
                 new ArrayList<>(structurePlacementRules.values())
         )));
 
-        addButton(backX, topY, backW, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, b -> this.onClose());
+        addButton(backX, topY, backW, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, () -> this.onClose());
 
         updateStructureActionButtons();
 
         int searchY = 46;
         int inputW = panelW - 180;
         activeInput = addAutoCompleteField(
-                startX, searchY, inputW, Component.empty(), this::getStructDict, null
+                startX, searchY, inputW, Component.empty(), Component.translatable("gui.realmcontrol.worldgen.worldgen.hint_structure_rules"), this::getStructDict, null
         );
         activeInput.setValue(structureSearch);
         activeInput.setResponder(value -> {
@@ -164,27 +163,27 @@ public class WorldGenScreen extends KineticScreen {
             }
         });
 
-        addButton(startX + inputW + 5, searchY, 85, Component.translatable(
+        addButtonWithHandler(startX + inputW + 5, searchY, 85, Component.translatable(
                 "gui.realmcontrol.worldgen.worldgen.rules_btn",
                 Component.translatable(structureBlockingEnable ? "gui.realmcontrol.worldgen.worldgen.enable" : "gui.realmcontrol.worldgen.worldgen.disable")
                         .withStyle(structureBlockingEnable ? ChatFormatting.GREEN : ChatFormatting.RED)
         ), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.rules_btn"), b -> {
             structureBlockingEnable = !structureBlockingEnable;
-            b.setMessage(Component.translatable(
+            b.setText(Component.translatable(
                     "gui.realmcontrol.worldgen.worldgen.rules_btn",
                     Component.translatable(structureBlockingEnable ? "gui.realmcontrol.worldgen.worldgen.enable" : "gui.realmcontrol.worldgen.worldgen.disable")
                             .withStyle(structureBlockingEnable ? ChatFormatting.GREEN : ChatFormatting.RED)
             ));
         });
 
-        addButton(startX + inputW + 95, searchY, 85, Component.translatable("gui.realmcontrol.worldgen.worldgen.refresh_structures"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.refresh_structures"), b -> WorldGenNetwork.requestStructureRegistryRefresh());
+        addButton(startX + inputW + 95, searchY, 85, Component.translatable("gui.realmcontrol.worldgen.worldgen.refresh_structures"), Component.translatable("gui.realmcontrol.worldgen.worldgen.tooltip.refresh_structures"), () -> WorldGenNetwork.requestStructureRegistryRefresh());
 
         int listY = 76;
         int listH = this.canvasHeight() - listY - 16;
-        structureListWidget = new StructureListWidget(this.minecraft, panelW, listH, listY, listY + listH, STRUCTURE_ROW_HEIGHT);
+        structureListWidget = new StructureListWidget(panelW, listH, listY, listY + listH, STRUCTURE_ROW_HEIGHT);
         structureListWidget.setLeftPos(startX);
         structureListWidget.setScrollAmount(structureScrollAmount);
-        addEventListWidget(structureListWidget);
+        addSmoothSelectionList(structureListWidget);
         updateStructureActionButtons();
     }
 
@@ -193,7 +192,7 @@ public class WorldGenScreen extends KineticScreen {
             commitDraft();
             KTConfigApi.notifySaved(WorldGenConfigGui.RULES_PAGE_ID);
         } else {
-            GuiOverlay.toast(Component.translatable("gui.realmcontrol.worldgen.worldgen.save_invalid_toast"));
+            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.worldgen.save_invalid_toast"));
         }
     }
 
@@ -218,7 +217,7 @@ public class WorldGenScreen extends KineticScreen {
             activeInput.setValue(value);
         }
         updateStructureActionButtons();
-        GuiOverlay.toast(Component.translatable("gui.realmcontrol.worldgen.worldgen.structure_refresh_toast"));
+        KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.worldgen.structure_refresh_toast"));
     }
 
     private StructureRuleDescriptor getSelectedStructureDescriptor() {
@@ -248,21 +247,21 @@ public class WorldGenScreen extends KineticScreen {
         StructureRuleDescriptor descriptor = getSelectedStructureDescriptor();
         boolean active = descriptor != null && !isStructureDisabled(descriptor);
         if (locateStructureButton != null) {
-            locateStructureButton.active = active;
+            setControlEnabled(locateStructureButton, active);
         }
         if (teleportDimensionButton != null) {
-            teleportDimensionButton.active = active;
+            setControlEnabled(teleportDimensionButton, active);
         }
     }
 
     private void locateSelectedStructure() {
         StructureRuleDescriptor descriptor = getSelectedStructureDescriptor();
         if (descriptor == null) {
-            GuiOverlay.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.no_selection"));
+            KineticOverlays.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.no_selection"));
             return;
         }
         if (isStructureDisabled(descriptor)) {
-            GuiOverlay.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.disabled"));
+            KineticOverlays.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.disabled"));
             return;
         }
         WorldGenNetwork.requestLocateStructure(descriptor.structureId());
@@ -271,11 +270,11 @@ public class WorldGenScreen extends KineticScreen {
     private void teleportSelectedStructureDimension() {
         StructureRuleDescriptor descriptor = getSelectedStructureDescriptor();
         if (descriptor == null) {
-            GuiOverlay.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.no_selection"));
+            KineticOverlays.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.no_selection"));
             return;
         }
         if (isStructureDisabled(descriptor)) {
-            GuiOverlay.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.disabled"));
+            KineticOverlays.toast(Component.translatable("msg.realmcontrol.worldgen.structure_action.disabled"));
             return;
         }
         WorldGenNetwork.requestTeleportStructureDimension(descriptor.structureId());
@@ -342,9 +341,7 @@ public class WorldGenScreen extends KineticScreen {
         if (structureListWidget != null) {
             structureScrollAmount = structureListWidget.getScrollAmount();
         }
-        if (this.minecraft != null) {
-            this.minecraft.setScreen(new StructureRuleEditScreen(this, descriptor));
-        }
+        KineticClientRuntime.openScreen(new StructureRuleEditScreen(this, descriptor));
     }
 
     private boolean isStructureModified(StructureRuleDescriptor descriptor) {
@@ -420,7 +417,7 @@ public class WorldGenScreen extends KineticScreen {
         }
         try {
             ResourceLocation langFile = new ResourceLocation(namespace, "lang/zh_cn.json");
-            Minecraft.getInstance().getResourceManager().getResource(langFile).ifPresent(this::loadZhCnResource);
+            KineticClientRuntime.resourceManager().getResource(langFile).ifPresent(this::loadZhCnResource);
         } catch (Exception ignored) {
         }
     }
@@ -480,9 +477,27 @@ public class WorldGenScreen extends KineticScreen {
         return keys;
     }
 
-    private List<String> getStructDict() {
+    private KineticAutoComplete.Suggestion toSuggestion(String id, String translationPrefix) {
+        ResourceLocation loc = ResourceLocation.tryParse(id);
+        if (loc == null) {
+            return new KineticAutoComplete.Suggestion(id, Component.empty());
+        }
+
+        List<String> translationKeys = new ArrayList<>();
+        translationKeys.add(translationPrefix + "." + loc.getNamespace() + "." + loc.getPath());
+        if ("structure".equals(translationPrefix)) {
+            translationKeys.addAll(getStructureFallbackKeys(loc));
+        }
+        String translated = KineticSearch.resolveTranslation(translationKeys.toArray(String[]::new));
+        return new KineticAutoComplete.Suggestion(
+                id,
+                translated == null ? Component.empty() : Component.literal(translated)
+        );
+    }
+
+    private List<KineticAutoComplete.Suggestion> getStructDict() {
         return this.serverDictStructs.stream()
-                .map(this::toDisplayEntry)
+                .map(id -> toSuggestion(id, "structure"))
                 .collect(Collectors.toList());
     }
 
@@ -495,10 +510,10 @@ public class WorldGenScreen extends KineticScreen {
         int listH = this.canvasHeight() - listY - 16;
 
         GuiTheme.panel(g, 10, 8, this.canvasWidth() - 20, this.canvasHeight() - 16);
-        g.fill(16, 40, this.canvasWidth() - 16, 41, 0xFF444444);
-        g.fill(16, 71, this.canvasWidth() - 16, 72, 0xFF444444);
+        GuiTheme.separator(g, 16, 40, this.canvasWidth() - 32);
+        GuiTheme.separator(g, 16, 71, this.canvasWidth() - 32);
         GuiTheme.panelAlt(g, startX - 2, listY - 2, panelW + 4, listH + 4);
-        renderScaledList(structureListWidget, g, mx, my, pt);
+        renderSmoothSelectionList(structureListWidget, g, mx, my, pt);
     }
 
     @Override
@@ -522,65 +537,11 @@ public class WorldGenScreen extends KineticScreen {
                 0xFFFFFFFF,
                 false
         );
-        if (activeInput != null) {
-            renderTextFieldPlaceholder(g, activeInput, Component.translatable("gui.realmcontrol.worldgen.worldgen.hint_structure_rules"));
-            activeInput.renderSuggestions(g, mx, my);
-        }
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (activeInput != null && activeInput.handleKeyPressed(keyCode)) {
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    protected boolean canvasMouseClicked(double mx, double my, int btn) {
-        if (activeInput != null) {
-            if (!activeInput.isMouseOver(mx, my)) {
-                activeInput.setFocused(false);
-                if (this.getFocused() == activeInput) {
-                    this.setFocused(null);
-                }
-            } else {
-                this.setFocused(activeInput);
-            }
-            if (activeInput.handleMouseClick(mx, my)) {
-                return true;
-            }
-        }
-        return super.canvasMouseClicked(mx, my, btn);
-    }
-
-    @Override
-    protected boolean canvasMouseReleased(double mx, double my, int btn) {
-        if (activeInput != null && activeInput.handleMouseReleased(btn)) {
-            return true;
-        }
-        return super.canvasMouseReleased(mx, my, btn);
-    }
-
-    @Override
-    protected boolean canvasMouseDragged(double mx, double my, int btn, double dx, double dy) {
-        if (activeInput != null && activeInput.handleMouseDragged(my)) {
-            return true;
-        }
-        return super.canvasMouseDragged(mx, my, btn, dx, dy);
-    }
-
-    @Override
-    protected boolean canvasMouseScrolled(double mx, double my, double d) {
-        if (activeInput != null && activeInput.handleMouseScrolled(d)) {
-            return true;
-        }
-        return super.canvasMouseScrolled(mx, my, d);
     }
 
     class StructureListWidget extends SmoothSelectionList<StructureListWidget.Entry> {
-        StructureListWidget(Minecraft mc, int w, int h, int t, int b, int ih) {
-            super(mc, w, h, t, b, ih);
+        StructureListWidget(int w, int h, int t, int b, int ih) {
+            super(w, h, t, b, ih);
             setRenderBackground(false);
             setRenderTopAndBottom(false);
             refresh();
@@ -598,17 +559,10 @@ public class WorldGenScreen extends KineticScreen {
                             .thenComparing(StructureRuleDescriptor::structureSetId))
                     .toList();
 
-            Entry selectedEntry = null;
             for (StructureRuleDescriptor descriptor : visibleDescriptors) {
-                Entry entry = new Entry(descriptor);
-                addEntry(entry);
-                if (descriptor.structureId().equals(selectedStructureId)) {
-                    selectedEntry = entry;
-                }
+                addEntry(new Entry(descriptor));
             }
-            if (selectedEntry != null) {
-                setSelected(selectedEntry);
-            }
+            setSelected(null);
         }
 
         @Override
@@ -621,14 +575,14 @@ public class WorldGenScreen extends KineticScreen {
             return this.width - 12;
         }
 
-        class Entry extends ObjectSelectionList.Entry<Entry> {
+        class Entry extends SmoothEntry<Entry> {
             private final StructureRuleDescriptor descriptor;
-            private final Button editButton;
+            private final StateButton editButton;
 
             Entry(StructureRuleDescriptor descriptor) {
                 this.descriptor = descriptor;
-                this.editButton = KineticWidgets.createCompactButton(0, 0, 54, Component.translatable("gui.realmcontrol.worldgen.worldgen.edit"), null, button -> openStructureEditor(descriptor));
-                this.editButton.active = !"unassigned".equals(descriptor.placementType());
+                this.editButton = KineticWidgets.createCompactButton(0, 0, 54, Component.translatable("gui.realmcontrol.worldgen.worldgen.edit"), null, () -> openStructureEditor(descriptor));
+                setControlEnabled(editButton, !"unassigned".equals(descriptor.placementType()));
             }
 
             @Override
@@ -636,15 +590,26 @@ public class WorldGenScreen extends KineticScreen {
                 boolean modified = isStructureModified(descriptor);
                 boolean disabled = isStructureDisabled(descriptor);
                 boolean selected = descriptor.structureId().equals(selectedStructureId);
-                int background = index % 2 == 0 ? 0x88333333 : 0x881C1C1C;
                 int contentH = STRUCTURE_ROW_HEIGHT - STRUCTURE_ROW_GAP;
-                g.fill(l, t, l + w, t + contentH, background);
-                int outline = selected ? 0xFFFFFF55
-                        : hovered ? 0xFF55AAFF
-                        : disabled ? 0xFFFF5555
-                        : modified ? 0xFF55FF55
-                        : 0xFF555555;
-                g.renderOutline(l, t, w, contentH, outline);
+                GuiTheme.surface(
+                        g,
+                        l,
+                        t,
+                        w,
+                        contentH,
+                        index % 2 == 0 ? GuiTheme.Surface.PANEL : GuiTheme.Surface.PANEL_ALT
+                );
+                if (selected) {
+                    GuiTheme.stateOutline(g, l, t, w, contentH, true, false, false);
+                } else if (hovered) {
+                    GuiTheme.stateOutline(g, l, t, w, contentH, false, true, false);
+                } else if (disabled) {
+                    GuiTheme.indicatorOutline(g, l, t, w, contentH, GuiTheme.Indicator.DANGER);
+                } else if (modified) {
+                    GuiTheme.indicatorOutline(g, l, t, w, contentH, GuiTheme.Indicator.SUCCESS);
+                } else {
+                    GuiTheme.indicatorOutline(g, l, t, w, contentH, GuiTheme.Indicator.MUTED);
+                }
 
                 int editX = l + w - editButton.getWidth() - 4;
                 int editY = t + Math.max(0, (contentH - editButton.getHeight()) / 2);
@@ -654,12 +619,12 @@ public class WorldGenScreen extends KineticScreen {
 
                 String display = toDisplayEntry(descriptor.structureId());
                 int maxW = editX - l - 12;
-                int lineHeight = Minecraft.getInstance().font.lineHeight;
+                int lineHeight = font.lineHeight;
                 int textGap = 1;
                 int textBlockH = lineHeight * 2 + textGap;
                 int firstLineY = t + (contentH - textBlockH) / 2;
                 int secondLineY = firstLineY + lineHeight + textGap;
-                KineticText.drawScrollingLeft(g, Minecraft.getInstance().font, display, l + 6, firstLineY, maxW, 0xFFFFFFFF, false);
+                KineticText.drawScrollingLeft(g, font, display, l + 6, firstLineY, maxW, 0xFFFFFFFF, false);
 
                 StructureEntryRule entryRule = structureEntryRules.get(descriptor.structureId());
                 StructurePlacementRule placementRule = descriptor.structureSetId().isBlank() ? null : structurePlacementRules.get(descriptor.structureSetId());
@@ -681,7 +646,7 @@ public class WorldGenScreen extends KineticScreen {
                         .append(dimension);
                 KineticText.drawScrollingLeft(
                         g,
-                        Minecraft.getInstance().font,
+                        font,
                         summary,
                         l + 6,
                         secondLineY,
@@ -693,11 +658,11 @@ public class WorldGenScreen extends KineticScreen {
 
             @Override
             public boolean mouseClicked(double mx, double my, int btn) {
-                if (btn != 0) {
+                if (!KineticMouseButtons.isPrimary(btn)) {
                     return false;
                 }
-                StructureListWidget.this.setSelected(this);
                 selectStructure(descriptor);
+                StructureListWidget.this.setSelected(null);
                 if (editButton.mouseClicked(mx, my, btn)) {
                     return true;
                 }
@@ -709,6 +674,22 @@ public class WorldGenScreen extends KineticScreen {
                 return Component.translatable("gui.realmcontrol.worldgen.worldgen.edit");
             }
         }
+    }
+
+    private static boolean isControlVisible(KineticControl control) {
+        return control != null && control.isVisible();
+    }
+
+    private static boolean isControlEnabled(KineticControl control) {
+        return control != null && control.isEnabled();
+    }
+
+    private static void setControlVisible(KineticControl control, boolean visible) {
+        if (control != null) control.setVisible(visible);
+    }
+
+    private static void setControlEnabled(KineticControl control, boolean enabled) {
+        if (control != null) control.setEnabled(enabled);
     }
 
 }

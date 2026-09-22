@@ -2,7 +2,7 @@ package dev.xyat.realmcontrol.teleport;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import dev.xyat.kineticcore.command.CommandUtils;
+import dev.xyat.kineticcore.api.command.CommandText;
 import dev.xyat.realmcontrol.teleport.api.ITeleportAuth;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -57,16 +57,16 @@ public final class TpdCommand {
     }
 
     private static int sendHelp(CommandSourceStack source) {
-        MutableComponent message = CommandUtils.createHeader("cmd.realmcontrol.teleport.tpd.desc").append("\n");
-        message.append(CommandUtils.createExecutableCommand("/kt tpd", "cmd.realmcontrol.teleport.tpd.help.self"));
+        MutableComponent message = CommandText.header("cmd.realmcontrol.teleport.tpd.desc").append("\n");
+        message.append(CommandText.executable("/kt tpd", "cmd.realmcontrol.teleport.tpd.help.self"));
         if (source.hasPermission(2)) {
-            message.append("\n").append(CommandUtils.createSuggestCommand(
+            message.append("\n").append(CommandText.createSuggestCommand(
                     "/kt tpd check <player>", "/kt tpd check ", "cmd.realmcontrol.teleport.tpd.help.check"));
-            message.append("\n").append(CommandUtils.createSuggestCommand(
+            message.append("\n").append(CommandText.createSuggestCommand(
                     "/kt tpd allow count <player> <num>", "/kt tpd allow count ", "cmd.realmcontrol.teleport.tpd.help.allow_count"));
-            message.append("\n").append(CommandUtils.createSuggestCommand(
+            message.append("\n").append(CommandText.createSuggestCommand(
                     "/kt tpd allow time <player> <sec>", "/kt tpd allow time ", "cmd.realmcontrol.teleport.tpd.help.allow_time"));
-            message.append("\n").append(CommandUtils.createSuggestCommand(
+            message.append("\n").append(CommandText.createSuggestCommand(
                     "/kt tpd clear <player>", "/kt tpd clear ", "cmd.realmcontrol.teleport.tpd.help.clear"));
         }
         source.sendSuccess(() -> message, false);

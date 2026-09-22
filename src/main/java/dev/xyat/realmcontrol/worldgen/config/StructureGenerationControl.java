@@ -1,6 +1,7 @@
 package dev.xyat.realmcontrol.worldgen.config;
 
-import dev.xyat.realmcontrol.worldgen.WorldGenModule;
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.realmcontrol.worldgen.data.StructureRuleDescriptor;
 import dev.xyat.realmcontrol.worldgen.mixin.ChunkGeneratorStructureStateAccessor;
 import dev.xyat.realmcontrol.worldgen.mixin.StructurePlacementAccessor;
@@ -20,9 +21,6 @@ import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStr
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadType;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
-import net.minecraftforge.event.server.ServerStoppedEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,7 +33,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-@Mod.EventBusSubscriber(modid = WorldGenModule.MODID)
 public final class StructureGenerationControl {
     private static final Map<StructureSet, Snapshot> SNAPSHOTS = new IdentityHashMap<>();
     private static final Map<String, Snapshot> SNAPSHOTS_BY_ID = new LinkedHashMap<>();
@@ -43,8 +40,15 @@ public final class StructureGenerationControl {
     private static volatile boolean enabled = true;
     private static volatile Map<String, StructureEntryRule> entryRules = Map.of();
     private static volatile Map<String, StructurePlacementRule> placementRules = Map.of();
+    private static boolean installed;
 
     private StructureGenerationControl() {
+    }
+
+    public static synchronized void install() {
+        if (installed) return;
+        installed = true;
+        KineticServerEvents.onStopped(KineticEventPriority.NORMAL, server -> onServerStopped());
     }
 
     public static synchronized void refresh(
@@ -64,8 +68,7 @@ public final class StructureGenerationControl {
         invalidateStructureStateCaches(server);
     }
 
-    @SubscribeEvent
-    public static synchronized void onServerStopped(ServerStoppedEvent event) {
+    private static synchronized void onServerStopped() {
         restoreOriginalValues();
         SNAPSHOTS.clear();
         SNAPSHOTS_BY_ID.clear();

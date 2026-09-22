@@ -6,7 +6,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraftforge.common.world.ForgeChunkManager;
+import dev.xyat.kineticcore.api.world.chunk.KineticChunkLoading;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -89,7 +89,7 @@ public class WorldChunkLoaderManager extends SavedData {
         for (int x = centerX - radius; x <= centerX + radius; x++) {
             for (int z = centerZ - radius; z <= centerZ + radius; z++) {
                 // 调用 Forge 强加载接口
-                ForgeChunkManager.forceChunk(level, "realmcontrol", new BlockPos(x, 0, z), x, z, force, true);
+                KineticChunkLoading.setForced(level, "realmcontrol", new BlockPos(x, 0, z), x, z, force, true);
             }
         }
     }

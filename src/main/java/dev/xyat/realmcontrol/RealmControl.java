@@ -12,9 +12,9 @@ public final class RealmControl {
     public static final String MODID = "realmcontrol";
 
     public RealmControl(FMLJavaModLoadingContext context) {
-        new WorldBlockModule(context);
-        new WorldGenModule(context);
-        new BeaconModule(context);
-        new TeleportModule(context);
+        new WorldBlockModule();
+        new WorldGenModule();
+        new BeaconModule();
+        new TeleportModule();
     }
 }

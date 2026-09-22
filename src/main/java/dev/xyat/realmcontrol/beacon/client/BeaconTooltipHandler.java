@@ -1,29 +1,33 @@
 package dev.xyat.realmcontrol.beacon.client;
 
 import dev.xyat.realmcontrol.beacon.util.ColorText;
-import dev.xyat.realmcontrol.beacon.BeaconModule;
+import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
-import net.minecraft.client.gui.screens.Screen;
+import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.entity.player.ItemTooltipEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = BeaconModule.MODID, value = Dist.CLIENT)
-public class BeaconTooltipHandler {
+public final class BeaconTooltipHandler {
+    private static boolean installed;
 
-    @SubscribeEvent
-    public static void onTooltip(ItemTooltipEvent event) {
-        ItemStack stack = event.getItemStack();
+    private BeaconTooltipHandler() {
+    }
+
+    public static synchronized void install() {
+        if (installed) return;
+        installed = true;
+        KineticClientEvents.onItemTooltip(BeaconTooltipHandler::onTooltip);
+    }
+
+    private static void onTooltip(KineticClientEvents.ItemTooltipContext event) {
+        ItemStack stack = event.itemStack();
         if (stack.isEmpty()) return;
 
-        List<Component> tooltip = event.getToolTip();
+        List<Component> tooltip = event.tooltip();
         if (stack.is(Items.BEACON)) {
             tooltip.add(ColorText.translatable("tip.realmcontrol.beacon.beacon.grid_hint"));
             tooltip.add(ColorText.translatable("tip.realmcontrol.beacon.beacon.color_hint"));
@@ -47,7 +51,7 @@ public class BeaconTooltipHandler {
                 tooltip.add(ColorText.translatable("tip.realmcontrol.beacon.beacon.offline_warn", ClientQuotaCache.offlineTimeout, acts.trim()));
             }
 
-            if (Screen.hasShiftDown()) {
+            if (KineticClientRuntime.shiftModifierDown()) {
                 tooltip.add(Component.empty());
                 for (int level = 1; level <= 4; level++) {
                     int radius = BeaconConfig.getBeaconRadius(level);

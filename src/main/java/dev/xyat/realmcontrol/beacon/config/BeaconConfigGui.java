@@ -1,16 +1,13 @@
 package dev.xyat.realmcontrol.beacon.config;
 
-import dev.xyat.kineticcore.config.client.KTConfigApi;
-import dev.xyat.kineticcore.config.client.KTConfigPage;
-import dev.xyat.kineticcore.config.client.KTConfigScope;
+import dev.xyat.kineticcore.api.config.client.KTConfigApi;
+import dev.xyat.kineticcore.api.config.client.KTConfigPage;
+import dev.xyat.kineticcore.api.config.client.KTConfigScope;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
 
 import java.util.List;
 
-@OnlyIn(Dist.CLIENT)
 public final class BeaconConfigGui {
     public static final String PAGE_ID = "realmcontrol:beacon";
 
@@ -27,7 +24,7 @@ public final class BeaconConfigGui {
                 .serverManaged()
                 .applyTiming(KTConfigPage.ApplyTiming.MIXED)
                 .applyNotice(Component.translatable("cfg.realmcontrol.beacon.beacon.apply_notice"))
-                .section(Component.translatable("cfg.realmcontrol.beacon.beacon.chunk.section"))
+                .divider()
                 .description(Component.translatable("cfg.realmcontrol.beacon.beacon.chunk.description"))
                 .booleanValue(
                         "enable_chunk_loading",
@@ -45,7 +42,7 @@ public final class BeaconConfigGui {
                         List.of(0, 1, 2, 3),
                         Component.translatable("cfg.realmcontrol.beacon.beacon.radii.tooltip")
                 )
-                .section(Component.translatable("cfg.realmcontrol.beacon.beacon.spawn.section"))
+                .divider()
                 .description(Component.translatable("cfg.realmcontrol.beacon.beacon.spawn.description"))
                 .booleanValue(
                         "enable_spawn_prevention",
@@ -79,7 +76,7 @@ public final class BeaconConfigGui {
                         List.of("minecraft:zombie;A", "minecraft:skeleton;AE"),
                         Component.translatable("cfg.realmcontrol.beacon.beacon.spawn_rules.tooltip")
                 )
-                .section(Component.translatable("cfg.realmcontrol.beacon.beacon.limits.section"))
+                .divider()
                 .description(Component.translatable("cfg.realmcontrol.beacon.beacon.limits.description"))
                 .intValue(
                         "global_chunk_load_limit",
@@ -109,7 +106,7 @@ public final class BeaconConfigGui {
                         Integer.MAX_VALUE,
                         Component.translatable("cfg.realmcontrol.beacon.beacon.per_player_limit.tooltip")
                 )
-                .section(Component.translatable("cfg.realmcontrol.beacon.beacon.offline.section"))
+                .divider()
                 .description(Component.translatable("cfg.realmcontrol.beacon.beacon.offline.description"))
                 .intValue(
                         "offline_timeout",

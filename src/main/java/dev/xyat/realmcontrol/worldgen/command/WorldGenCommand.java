@@ -1,7 +1,7 @@
 package dev.xyat.realmcontrol.worldgen.command;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import dev.xyat.kineticcore.command.CommandUtils;
+import dev.xyat.kineticcore.api.command.CommandText;
 import dev.xyat.realmcontrol.worldgen.util.StructureUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -30,10 +30,10 @@ public class WorldGenCommand {
     }
 
     private static int sendHelp(CommandSourceStack source) {
-        MutableComponent msg = CommandUtils.createHeader("cmd.realmcontrol.worldgen.world.desc").append("\n");
-        msg.append(CommandUtils.createExecutableCommand("/kt world structure", "cmd.realmcontrol.worldgen.world.structure.desc"));
+        MutableComponent msg = CommandText.header("cmd.realmcontrol.worldgen.world.desc").append("\n");
+        msg.append(CommandText.executable("/kt world structure", "cmd.realmcontrol.worldgen.world.structure.desc"));
         if (source.hasPermission(2)) {
-            msg.append("\n").append(CommandUtils.createExecutableCommand("/kt world list-structures", "cmd.realmcontrol.worldgen.world.list_structures.desc"));
+            msg.append("\n").append(CommandText.executable("/kt world list-structures", "cmd.realmcontrol.worldgen.world.list_structures.desc"));
         }
         source.sendSuccess(() -> msg, false);
         return 1;

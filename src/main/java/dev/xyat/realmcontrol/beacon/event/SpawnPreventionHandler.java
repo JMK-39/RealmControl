@@ -1,6 +1,8 @@
 package dev.xyat.realmcontrol.beacon.event;
 
-import dev.xyat.realmcontrol.beacon.BeaconModule;
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.registry.KineticRegistries;
+import dev.xyat.kineticcore.api.world.event.KineticWorldEvents;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import dev.xyat.realmcontrol.beacon.mixin.LevelAccess;
 import dev.xyat.realmcontrol.beacon.util.IBeaconAccess;
@@ -15,19 +17,22 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraftforge.event.entity.living.BabyEntitySpawnEvent;
-import net.minecraftforge.event.entity.living.MobSpawnEvent;
-import net.minecraftforge.event.level.BlockEvent;
-import net.minecraftforge.event.level.ChunkEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Mod.EventBusSubscriber(modid = BeaconModule.MODID)
 public class SpawnPreventionHandler {
+    private static boolean installed;
+
+    public static synchronized void install() {
+        if (installed) return;
+        installed = true;
+        KineticWorldEvents.onChunkLoad(KineticEventPriority.NORMAL, SpawnPreventionHandler::onChunkLoad);
+        KineticWorldEvents.onChunkUnload(KineticEventPriority.NORMAL, SpawnPreventionHandler::onChunkUnload);
+        KineticWorldEvents.onBlockBreak(KineticEventPriority.NORMAL, SpawnPreventionHandler::onBlockBreak);
+        KineticWorldEvents.onMobFinalizeSpawn(KineticEventPriority.NORMAL, SpawnPreventionHandler::onCheckSpawn);
+        KineticWorldEvents.onBabySpawn(KineticEventPriority.NORMAL, SpawnPreventionHandler::onBabySpawn);
+    }
 
     public record BeaconProtectData(int radius, int type, String codes) {}
 
@@ -44,9 +49,8 @@ public class SpawnPreventionHandler {
         if (map != null) map.remove(pos);
     }
 
-    @SubscribeEvent
-    public static void onChunkLoad(ChunkEvent.Load event) {
-        if (event.getLevel() instanceof ServerLevel level && event.getChunk() instanceof LevelChunk chunk) {
+    private static void onChunkLoad(KineticWorldEvents.ChunkContext event) {
+        if (event.level() instanceof ServerLevel level && event.chunk() instanceof LevelChunk chunk) {
             for (BlockEntity be : chunk.getBlockEntities().values()) {
                 if (be instanceof BeaconBlockEntity beacon && be instanceof IBeaconAccess accessor) {
                     int levels = ((LevelAccess) beacon).realmcontrol_beacon$getLevels();
@@ -63,9 +67,8 @@ public class SpawnPreventionHandler {
         }
     }
 
-    @SubscribeEvent
-    public static void onChunkUnload(ChunkEvent.Unload event) {
-        if (event.getLevel() instanceof ServerLevel level && event.getChunk() instanceof LevelChunk chunk) {
+    private static void onChunkUnload(KineticWorldEvents.ChunkContext event) {
+        if (event.level() instanceof ServerLevel level && event.chunk() instanceof LevelChunk chunk) {
             for (BlockEntity be : chunk.getBlockEntities().values()) {
                 if (be instanceof BeaconBlockEntity beacon) {
                     removeBeacon(level, beacon.getBlockPos());
@@ -74,10 +77,9 @@ public class SpawnPreventionHandler {
         }
     }
 
-    @SubscribeEvent
-    public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (event.getState().is(Blocks.BEACON) && event.getLevel() instanceof ServerLevel level) {
-            removeBeacon(level, event.getPos());
+    private static void onBlockBreak(KineticWorldEvents.BlockBreakContext event) {
+        if (event.state().is(Blocks.BEACON) && event.level() instanceof ServerLevel level) {
+            removeBeacon(level, event.pos());
         }
     }
 
@@ -85,7 +87,7 @@ public class SpawnPreventionHandler {
         Map<BlockPos, BeaconProtectData> beacons = ACTIVE_SPAWN_PREVENTERS.get(level.dimension());
         if (beacons == null || beacons.isEmpty()) return false;
 
-        ResourceLocation entityRL = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+        ResourceLocation entityRL = KineticRegistries.entityTypes().id(entity.getType());
         if (entityRL == null) return false;
 
         int chunkX = spawnPos.getX() >> 4;
@@ -132,27 +134,24 @@ public class SpawnPreventionHandler {
         }
     }
 
-    @SubscribeEvent
-    public static void onCheckSpawn(MobSpawnEvent.FinalizeSpawn event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) return;
-        if (!BeaconConfig.enableBeaconSpawnPrevention) return;
+    private static void onCheckSpawn(KineticWorldEvents.MobFinalizeSpawnContext event) {
+        ServerLevel level = event.serverLevel();
+        if (level == null || !BeaconConfig.enableBeaconSpawnPrevention) return;
 
-        String spawnCode = mapSpawnTypeToCode(event.getSpawnType());
+        String spawnCode = mapSpawnTypeToCode(event.spawnType());
 
-        if (shouldCancelSpawn(level, event.getEntity().blockPosition(), event.getEntity(), spawnCode)) {
-            event.setSpawnCancelled(true);
-            event.setCanceled(true);
+        if (shouldCancelSpawn(level, event.entity().blockPosition(), event.entity(), spawnCode)) {
+            event.cancel();
         }
     }
 
-    @SubscribeEvent
-    public static void onBabySpawn(BabyEntitySpawnEvent event) {
-        if (!(event.getParentA().level() instanceof ServerLevel level)) return;
+    private static void onBabySpawn(KineticWorldEvents.BabySpawnContext event) {
+        if (!(event.parentA().level() instanceof ServerLevel level)) return;
         if (!BeaconConfig.enableBeaconSpawnPrevention) return;
-        if (event.getChild() == null) return;
+        if (event.child() == null) return;
 
-        if (shouldCancelSpawn(level, event.getParentA().blockPosition(), event.getChild(), "H")) {
-            event.setCanceled(true);
+        if (shouldCancelSpawn(level, event.parentA().blockPosition(), event.child(), "H")) {
+            event.cancel();
         }
     }
 

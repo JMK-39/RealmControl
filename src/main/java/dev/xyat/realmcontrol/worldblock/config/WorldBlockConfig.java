@@ -16,14 +16,14 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraftforge.registries.ForgeRegistries;
+import dev.xyat.kineticcore.api.registry.KineticRegistries;
+import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,8 +33,8 @@ import java.util.stream.Collectors;
 public class WorldBlockConfig {
     private static final Logger LOGGER = LogManager.getLogger("realmcontrol/WorldBlockConfig");
     public static final String VOID_ID = "realmcontrol:void_placeholder";
-    public static final Path PATH = Paths.get("config", "kineticcore", "worldblock.json");
-    public static final Path BACKUP_PATH = Paths.get("config", "kineticcore", "worldblock.old.json");
+    public static final Path PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.json");
+    public static final Path BACKUP_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.old.json");
     public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     public static volatile Data data = new Data();
     public static volatile Map<ItemRule, String> ruleReplacementMap = new HashMap<>();
@@ -66,7 +66,7 @@ public class WorldBlockConfig {
 
     public static String getItemIdFromCache(Item item) {
         return ITEM_ID_CACHE.computeIfAbsent(item, k -> {
-            ResourceLocation rl = ForgeRegistries.ITEMS.getKey(k);
+            ResourceLocation rl = KineticRegistries.items().id(k);
             return rl != null ? rl.toString() : "";
         });
     }
@@ -1022,7 +1022,7 @@ public class WorldBlockConfig {
     private static Block getBlockById(String id) {
         if (id == null || id.isBlank()) return null;
         try {
-            return ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id));
+            return KineticRegistries.blocks().get(new ResourceLocation(id));
         } catch (Exception ignored) {
             return null;
         }
@@ -1033,8 +1033,8 @@ public class WorldBlockConfig {
         if (blockReplacements == null || blockReplacements.isEmpty()) return result;
         for (Map.Entry<String, String> entry : blockReplacements.entrySet()) {
             try {
-                Block sourceBlock = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(entry.getKey()));
-                Block targetBlock = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(entry.getValue()));
+                Block sourceBlock = KineticRegistries.blocks().get(new ResourceLocation(entry.getKey()));
+                Block targetBlock = KineticRegistries.blocks().get(new ResourceLocation(entry.getValue()));
                 if (sourceBlock == null || targetBlock == null) continue;
                 if (sourceBlock == Blocks.AIR || targetBlock == Blocks.AIR || sourceBlock == targetBlock) continue;
                 result.put(sourceBlock, targetBlock.defaultBlockState());
@@ -1083,10 +1083,10 @@ public class WorldBlockConfig {
     private static Set<Block> buildWorldgenBannedBlocks(List<ItemRule> rules, Set<Block> protectedTargets) {
         if (rules == null || rules.isEmpty()) return Collections.emptySet();
         Set<Block> result = newIdentityBlockSet();
-        for (Block block : ForgeRegistries.BLOCKS.getValues()) {
+        for (Block block : KineticRegistries.blocks().values()) {
             if (block == null || block == Blocks.AIR) continue;
             if (protectedTargets != null && protectedTargets.contains(block)) continue;
-            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
+            ResourceLocation blockId = KineticRegistries.blocks().id(block);
             if (blockId == null) continue;
             BlockState defaultState = block.defaultBlockState();
             Item item = block.asItem();
@@ -1177,7 +1177,7 @@ public class WorldBlockConfig {
         if (ruleString == null || ruleString.isBlank() || worldgenMergeTargetBlocks.isEmpty()) return false;
         ItemRule rule = new ItemRule(ruleString.trim().toLowerCase(Locale.ROOT));
         for (Block block : worldgenMergeTargetBlocks) {
-            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
+            ResourceLocation blockId = KineticRegistries.blocks().id(block);
             if (blockId == null) continue;
             Item item = block.asItem();
             ItemStack stack = item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
@@ -1260,7 +1260,7 @@ public class WorldBlockConfig {
 
     public static String getItemIdentifier(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return "";
-        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        ResourceLocation id = KineticRegistries.items().id(stack.getItem());
         if (id == null) return "";
         String base = id.toString();
         CompoundTag tag = stack.getTag();
@@ -1279,12 +1279,12 @@ public class WorldBlockConfig {
             try {
                 int bracket = clean.indexOf('{');
                 if (bracket == -1) {
-                    Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(clean));
+                    Item item = KineticRegistries.items().get(new ResourceLocation(clean));
                     if (item != null) result[0] = new ItemStack(item);
                 } else {
                     String id = clean.substring(0, bracket);
                     String nbt = clean.substring(bracket);
-                    Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(id));
+                    Item item = KineticRegistries.items().get(new ResourceLocation(id));
                     if (item != null) {
                         CompoundTag tag = safeParseTagForRule(clean, nbt);
                         if (tag != null) {

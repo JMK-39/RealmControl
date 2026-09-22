@@ -2,16 +2,18 @@ package dev.xyat.realmcontrol.worldblock.event;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraftforge.common.MinecraftForge;
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.world.event.KineticWorldEvents;
 
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public final class LoadedChunkRewriteBootstrap {
-    private static final Path CONFIG_PATH = Paths.get("config", "kineticcore", "worldblock.json");
+    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.json");
     private static final StartupMode STARTUP_MODE = readStartupMode();
 
     private LoadedChunkRewriteBootstrap() {
@@ -19,7 +21,11 @@ public final class LoadedChunkRewriteBootstrap {
 
     public static void initialize() {
         if (!STARTUP_MODE.anyEnabled()) return;
-        MinecraftForge.EVENT_BUS.register(new LoadedChunkBlockRewriteHandler());
+        LoadedChunkBlockRewriteHandler handler = new LoadedChunkBlockRewriteHandler();
+        KineticWorldEvents.onChunkLoad(KineticEventPriority.NORMAL, handler::onChunkLoad);
+        KineticWorldEvents.onChunkUnload(KineticEventPriority.NORMAL, handler::onChunkUnload);
+        KineticServerEvents.onStopped(KineticEventPriority.NORMAL, server -> handler.onServerStopped());
+        KineticServerEvents.onTick(KineticEventPriority.NORMAL, KineticServerEvents.TickPhase.END, server -> handler.onServerTick());
     }
 
     public static boolean fixedEnabledAtStartup() {

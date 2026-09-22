@@ -1,22 +1,20 @@
 package dev.xyat.realmcontrol.beacon.util;
 
-import dev.xyat.realmcontrol.beacon.BeaconModule;
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-@Mod.EventBusSubscriber(modid = BeaconModule.MODID)
 public class BeaconStateManager extends SavedData {
     private static final String DATA_NAME = "realmcontrol_state";
     private static final UUID UUID_UNKNOWN = new UUID(0, 0);
+    private static boolean installed;
 
     private final Map<UUID, Long> offlineTimes = new HashMap<>();
 
@@ -25,6 +23,13 @@ public class BeaconStateManager extends SavedData {
 
     private int globalUniqueCount = 0;
     private final Map<UUID, Integer> playerUniqueCount = new HashMap<>();
+
+    public static synchronized void install() {
+        if (installed) return;
+        installed = true;
+        KineticServerEvents.onPlayerLogin(KineticEventPriority.NORMAL, BeaconStateManager::onPlayerLogin);
+        KineticServerEvents.onPlayerLogout(KineticEventPriority.NORMAL, BeaconStateManager::onPlayerLogout);
+    }
 
     public static BeaconStateManager get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(
@@ -216,22 +221,20 @@ public class BeaconStateManager extends SavedData {
         playerUniqueCount.put(uuid, total);
     }
 
-    @SubscribeEvent
-    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        MinecraftServer server = event.getEntity().getServer();
+    private static void onPlayerLogin(net.minecraft.server.level.ServerPlayer player) {
+        MinecraftServer server = player.getServer();
         if (server != null) {
             BeaconStateManager manager = get(server);
-            manager.offlineTimes.put(event.getEntity().getUUID(), -1L);
+            manager.offlineTimes.put(player.getUUID(), -1L);
             manager.setDirty();
         }
     }
 
-    @SubscribeEvent
-    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        MinecraftServer server = event.getEntity().getServer();
+    private static void onPlayerLogout(net.minecraft.server.level.ServerPlayer player) {
+        MinecraftServer server = player.getServer();
         if (server != null) {
             BeaconStateManager manager = get(server);
-            manager.offlineTimes.put(event.getEntity().getUUID(), System.currentTimeMillis());
+            manager.offlineTimes.put(player.getUUID(), System.currentTimeMillis());
             manager.setDirty();
         }
     }

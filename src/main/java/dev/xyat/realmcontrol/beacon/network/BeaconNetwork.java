@@ -8,8 +8,11 @@ import dev.xyat.realmcontrol.beacon.mixin.BeaconMenuAccessor;
 import dev.xyat.realmcontrol.beacon.mixin.LevelAccess;
 import dev.xyat.realmcontrol.beacon.util.BeaconStateManager;
 import dev.xyat.realmcontrol.beacon.util.IBeaconAccess;
-import dev.xyat.kineticcore.api.KTNetworkProtocol;
-import net.minecraft.network.FriendlyByteBuf;
+import dev.xyat.kineticcore.api.network.NetworkBuffer;
+import dev.xyat.kineticcore.api.network.NetworkCodec;
+import dev.xyat.kineticcore.api.network.NetworkVersionPolicy;
+import dev.xyat.kineticcore.api.network.PacketChannel;
+import dev.xyat.kineticcore.api.network.ServerPacketContext;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -17,55 +20,31 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.BeaconMenu;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.LogicalSide;
-import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.network.NetworkDirection;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
 
 import java.util.UUID;
-import java.util.function.Supplier;
 
 public class BeaconNetwork {
     private static final String PROTOCOL_VERSION = "1";
     private static final int MAX_SPAWN_CODES_WIRE_LENGTH = 32;
-    public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
+    public static final PacketChannel CHANNEL = PacketChannel.create(
             new ResourceLocation(BeaconModule.MODID, "beacon"),
-            () -> PROTOCOL_VERSION,
-            KTNetworkProtocol::acceptsAnyVersion,
-            KTNetworkProtocol::acceptsAnyVersion
+            PROTOCOL_VERSION,
+            NetworkVersionPolicy.ANY
     );
 
     public static void register() {
-        int id = 0;
-        CHANNEL.messageBuilder(BeaconConfigPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(BeaconConfigPacket::encode).decoder(BeaconConfigPacket::decode)
-                .consumerNetworkThread(BeaconConfigPacket::handle).add();
-        CHANNEL.messageBuilder(QuotaSyncPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(QuotaSyncPacket::encode).decoder(QuotaSyncPacket::decode)
-                .consumerNetworkThread(QuotaSyncPacket::handle).add();
-        CHANNEL.messageBuilder(ServerConfigSyncPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(ServerConfigSyncPacket::encode).decoder(ServerConfigSyncPacket::decode)
-                .consumerNetworkThread(ServerConfigSyncPacket::handle).add();
-        CHANNEL.messageBuilder(BeaconSaveResultPacket.class, id, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(BeaconSaveResultPacket::encode).decoder(BeaconSaveResultPacket::decode)
-                .consumerNetworkThread(BeaconSaveResultPacket::handle).add();
-    }
-
-    private static NetworkEvent.Context contextForSide(
-            Supplier<NetworkEvent.Context> supplier,
-            LogicalSide expectedSide
-    ) {
-        NetworkEvent.Context context = supplier.get();
-        NetworkDirection direction = context.getDirection();
-        if (direction == null || direction.getReceptionSide() != expectedSide) {
-            context.setPacketHandled(true);
-            return null;
-        }
-        return context;
+        CHANNEL.registerServerbound(0, BeaconConfigPacket.class,
+                NetworkCodec.of((buf, packet) -> packet.encode(buf), BeaconConfigPacket::decode),
+                BeaconConfigPacket::handle);
+        CHANNEL.registerClientbound(1, QuotaSyncPacket.class,
+                NetworkCodec.of((buf, packet) -> packet.encode(buf), QuotaSyncPacket::decode),
+                QuotaSyncPacket::handleClient);
+        CHANNEL.registerClientbound(2, ServerConfigSyncPacket.class,
+                NetworkCodec.of((buf, packet) -> packet.encode(buf), ServerConfigSyncPacket::decode),
+                ServerConfigSyncPacket::handleClient);
+        CHANNEL.registerClientbound(3, BeaconSaveResultPacket.class,
+                NetworkCodec.of((buf, packet) -> packet.encode(buf), BeaconSaveResultPacket::decode),
+                BeaconSaveResultPacket::handleClient);
     }
 
     private static String normalizeSpawnCodes(String raw) {
@@ -84,37 +63,31 @@ public class BeaconNetwork {
         return normalized.toString();
     }
 
-    private static boolean isRadiusAllowed(int radius, int maximum) {
-        return radius == -1 || (maximum >= 0 && radius >= 0 && radius <= maximum);
+    private static boolean isRadiusDisallowed(int radius, int maximum) {
+        return radius != -1 && (maximum < 0 || radius < 0 || radius > maximum);
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean success) {
         if (player == null) return;
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new BeaconSaveResultPacket(success));
+        CHANNEL.sendToPlayer(player, new BeaconSaveResultPacket(success));
     }
 
     public record BeaconSaveResultPacket(boolean success) {
-        public static BeaconSaveResultPacket decode(FriendlyByteBuf buf) {
+        public static BeaconSaveResultPacket decode(NetworkBuffer buf) {
             return new BeaconSaveResultPacket(buf.readBoolean());
         }
 
-        public void encode(FriendlyByteBuf buf) {
+        public void encode(NetworkBuffer buf) {
             buf.writeBoolean(success);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            NetworkEvent.Context context = contextForSide(ctx, LogicalSide.CLIENT);
-            if (context == null) return;
-            context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> BeaconGuiHandler.handleSaveResult(success)
-            ));
-            context.setPacketHandled(true);
+        public void handleClient() {
+            BeaconGuiHandler.handleSaveResult(success);
         }
     }
 
     public static void syncConfigToPlayer(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ServerConfigSyncPacket(
+        CHANNEL.sendToPlayer(player, new ServerConfigSyncPacket(
                 BeaconConfig.beaconOfflineTimeout,
                 BeaconConfig.offlineDisableDeactivate,
                 BeaconConfig.offlineDisableChunkLoad,
@@ -131,67 +104,57 @@ public class BeaconNetwork {
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             int personalUsed = state.getUsedQuota(player.getUUID());
-            CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new QuotaSyncPacket(globalUsed, globalMax, personalUsed, personalMax));
+            CHANNEL.sendToPlayer(player, new QuotaSyncPacket(globalUsed, globalMax, personalUsed, personalMax));
         }
     }
 
     public record ServerConfigSyncPacket(int offlineTimeout, boolean deact, boolean cl, boolean sp, boolean perPlayer) {
-        public static ServerConfigSyncPacket decode(FriendlyByteBuf buf) {
+        public static ServerConfigSyncPacket decode(NetworkBuffer buf) {
             return new ServerConfigSyncPacket(buf.readInt(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
         }
-        public void encode(FriendlyByteBuf buf) {
+        public void encode(NetworkBuffer buf) {
             buf.writeInt(offlineTimeout);
             buf.writeBoolean(deact);
             buf.writeBoolean(cl);
             buf.writeBoolean(sp);
             buf.writeBoolean(perPlayer);
         }
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            NetworkEvent.Context context = contextForSide(ctx, LogicalSide.CLIENT);
-            if (context == null) return;
-            context.enqueueWork(() -> {
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineTimeout = this.offlineTimeout;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineDeact = this.deact;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineCL = this.cl;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineSP = this.sp;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.perPlayerEnabled = this.perPlayer;
-            });
-            context.setPacketHandled(true);
+        public void handleClient() {
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineTimeout = this.offlineTimeout;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineDeact = this.deact;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineCL = this.cl;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.offlineSP = this.sp;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.perPlayerEnabled = this.perPlayer;
         }
     }
 
     public record QuotaSyncPacket(int globalUsed, int globalMax, int personalUsed, int personalMax) {
-        public static QuotaSyncPacket decode(FriendlyByteBuf buf) {
+        public static QuotaSyncPacket decode(NetworkBuffer buf) {
             return new QuotaSyncPacket(buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt());
         }
-        public void encode(FriendlyByteBuf buf) {
+        public void encode(NetworkBuffer buf) {
             buf.writeInt(globalUsed);
             buf.writeInt(globalMax);
             buf.writeInt(personalUsed);
             buf.writeInt(personalMax);
         }
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            NetworkEvent.Context context = contextForSide(ctx, LogicalSide.CLIENT);
-            if (context == null) return;
-            context.enqueueWork(() -> {
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.globalUsed = this.globalUsed;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.globalMax = this.globalMax;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.personalUsed = this.personalUsed;
-                dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.personalMax = this.personalMax;
-            });
-            context.setPacketHandled(true);
+        public void handleClient() {
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.globalUsed = this.globalUsed;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.globalMax = this.globalMax;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.personalUsed = this.personalUsed;
+            dev.xyat.realmcontrol.beacon.client.ClientQuotaCache.personalMax = this.personalMax;
         }
     }
 
     public record BeaconConfigPacket(boolean clEnabled, int clRad, boolean spEnabled, int spRad, int spType, String spCodes) {
-        public static BeaconConfigPacket decode(FriendlyByteBuf buf) {
+        public static BeaconConfigPacket decode(NetworkBuffer buf) {
             return new BeaconConfigPacket(
                     buf.readBoolean(), buf.readInt(), buf.readBoolean(), buf.readInt(), buf.readInt(),
                     buf.readUtf(MAX_SPAWN_CODES_WIRE_LENGTH)
             );
         }
 
-        public void encode(FriendlyByteBuf buf) {
+        public void encode(NetworkBuffer buf) {
             buf.writeBoolean(clEnabled);
             buf.writeInt(clRad);
             buf.writeBoolean(spEnabled);
@@ -200,12 +163,8 @@ public class BeaconNetwork {
             buf.writeUtf(spCodes == null ? "" : spCodes, MAX_SPAWN_CODES_WIRE_LENGTH);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            NetworkEvent.Context context = contextForSide(ctx, LogicalSide.SERVER);
-            if (context == null) return;
-            context.enqueueWork(() -> {
-                ServerPlayer player = context.getSender();
-                if (player == null) return;
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
                 if (!(player.containerMenu instanceof BeaconMenu menu) || !menu.stillValid(player)) {
                     sendSaveResult(player, false);
                     return;
@@ -226,8 +185,8 @@ public class BeaconNetwork {
                         int maxRadius = BeaconConfig.getBeaconRadius(currentLevel);
                         int maxPreventRadius = maxRadius >= 0 ? maxRadius + 1 : -1;
                         String normalizedCodes = normalizeSpawnCodes(this.spCodes);
-                        if (!isRadiusAllowed(this.clRad, maxRadius)
-                                || !isRadiusAllowed(this.spRad, maxPreventRadius)
+                        if (isRadiusDisallowed(this.clRad, maxRadius)
+                                || isRadiusDisallowed(this.spRad, maxPreventRadius)
                                 || this.spType < 0 || this.spType > 2
                                 || normalizedCodes == null) {
                             BeaconModule.LOGGER.warn("Rejected invalid beacon settings from {}", player.getGameProfile().getName());
@@ -269,8 +228,6 @@ public class BeaconNetwork {
                         sendSaveResult(player, false);
                     }
                 });
-            });
-            context.setPacketHandled(true);
         }
     }
 }

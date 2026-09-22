@@ -26,7 +26,7 @@ apply plugin: 'org.spongepowered.mixin'
 
 configurations.configureEach {
     resolutionStrategy.cacheDynamicVersionsFor 99999, 'days'
-    resolutionStrategy.cacheChangingModulesFor 99999, 'days'
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
 def getDynamicVersion() {
@@ -41,6 +41,7 @@ def pVersion = getDynamicVersion()
 def pGroup = project.findProperty('mod_group_id')?.toString() ?: 'dev.xyat.realmcontrol'
 def pModId = project.findProperty('mod_id')?.toString() ?: 'realmcontrol'
 def primaryInternalModId = 'realmcontrol'
+def kineticCoreLibsDir = file(project.findProperty('kineticcore_libs_dir') ?: 'D:/IDEA_Caches/libs')
 def mixinConfigList = ['realmcontrol.beacon.mixins.json', 'realmcontrol.tpd.mixins.json', 'realmcontrol.worldblock.mixins.json', 'realmcontrol.worldgen.mixins.json']
 
 version = pVersion
@@ -101,6 +102,42 @@ repositories {
     flatDir {
         dir project.findProperty('local_libs_dir') ?: 'libs'
     }
+    flatDir { dirs kineticCoreLibsDir }
+}
+
+def kineticCoreMod = { File libsDir ->
+    if (!libsDir.exists() || !libsDir.isDirectory()) {
+        throw new GradleException("KineticCore libs directory does not exist: ${libsDir.absolutePath}")
+    }
+    File[] jars = libsDir.listFiles()
+    if (jars == null) {
+        throw new GradleException("Cannot read KineticCore libs directory: ${libsDir.absolutePath}")
+    }
+
+    String fileNamePrefix = 'kineticcore-'
+    def matches = jars.findAll { File candidate ->
+        candidate.isFile()
+                && candidate.name.toLowerCase().endsWith('.jar')
+                && candidate.name.regionMatches(true, 0, fileNamePrefix, 0, fileNamePrefix.length())
+    }
+    if (matches.isEmpty()) {
+        throw new GradleException(
+                "Cannot find a JAR starting with '${fileNamePrefix}' in ${libsDir.absolutePath}"
+        )
+    }
+    if (matches.size() > 1) {
+        throw new GradleException(
+                "Multiple KineticCore JARs starting with '${fileNamePrefix}' were found in ${libsDir.absolutePath}: " +
+                        matches.collect { it.name }.sort().join(', ')
+        )
+    }
+
+    File selected = matches[0]
+    String selectedVersion = selected.name.substring(fileNamePrefix.length(), selected.name.length() - 4)
+    if (selectedVersion.isBlank()) {
+        throw new GradleException("Cannot determine KineticCore version from ${selected.name}")
+    }
+    return "blank:kineticcore:${selectedVersion}"
 }
 
 def localMod = { String artifactName ->
@@ -142,7 +179,9 @@ def localMod = { String artifactName ->
 dependencies {
     minecraft "net.minecraftforge:forge:${project.findProperty('minecraft_version')?.toString()}-${project.findProperty('forge_version')?.toString()}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-    implementation fg.deobf(localMod('kineticcore'))
+    implementation(fg.deobf(kineticCoreMod(kineticCoreLibsDir))) {
+        changing = true
+    }
     implementation fg.deobf(localMod('architectury-forge'))
     implementation fg.deobf(localMod('Jade'))
     implementation fg.deobf(localMod('kubejs-forge'))

@@ -1,34 +1,36 @@
 package dev.xyat.realmcontrol.worldgen.client.gui;
 
 import dev.xyat.kineticcore.api.client.text.KineticText;
-import dev.xyat.kineticcore.api.client.overlay.GuiOverlay;
+import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.screen.KineticScreen;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
-import dev.xyat.kineticcore.api.client.widget.KineticWidgets;
+import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete;
+import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete.AutoCompleteBox;
+import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
+import dev.xyat.kineticcore.api.client.widget.KineticControl;
 
-import java.util.List;
 
 public final class BiomeRuleEditScreen extends KineticScreen {
     private final BiomeControlScreen parent;
     private final int ruleIndex;
     private final BiomeReplacementRule original;
-    private KineticWidgets.AutoCompleteBox dimensionBox;
-    private KineticWidgets.AutoCompleteBox sourceBox;
-    private KineticWidgets.AutoCompleteBox targetBox;
-    private KineticWidgets.AutoCompleteBox activeBox;
+    private AutoCompleteBox dimensionBox;
+    private AutoCompleteBox sourceBox;
+    private AutoCompleteBox targetBox;
     private boolean removeTarget;
 
     BiomeRuleEditScreen(BiomeControlScreen parent, int ruleIndex, BiomeReplacementRule original) {
         super(Component.translatable("gui.realmcontrol.worldgen.biome.editor.title"));
         this.parent = parent;
+        setParentScreen(parent);
         this.ruleIndex = ruleIndex;
         this.original = original;
         this.removeTarget = original != null && original.isRemoval();
-        useStandardCanvas();
+        useCanvas(STANDARD_CANVAS_WIDTH, STANDARD_CANVAS_HEIGHT, STANDARD_SAFE_MARGIN);
     }
 
     @Override
@@ -37,14 +39,14 @@ public final class BiomeRuleEditScreen extends KineticScreen {
         int width = 400;
         int y = 70;
 
-        dimensionBox = addAutoCompleteField(x, y, width, Component.empty(), parent::dimensionSuggestions, null);
-        sourceBox = addAutoCompleteField(x, y + 54, width, Component.empty(), parent::sourceSuggestions, null);
-        targetBox = addAutoCompleteField(x, y + 108, width, Component.empty(), parent::targetSuggestions, null);
+        dimensionBox = addAutoCompleteField(x, y, width, Component.empty(), Component.translatable("gui.realmcontrol.worldgen.biome.dimension.placeholder"), parent::dimensionSuggestions, null);
+        sourceBox = addAutoCompleteField(x, y + 54, width, Component.empty(), Component.translatable("gui.realmcontrol.worldgen.biome.source.placeholder"), parent::sourceSuggestions, null);
+        targetBox = addAutoCompleteField(x, y + 108, width, Component.empty(), Component.translatable("gui.realmcontrol.worldgen.biome.target.placeholder"), parent::targetSuggestions, null);
 
         dimensionBox.setValue(original == null ? BiomeReplacementRule.ALL_DIMENSIONS : original.dimensionId());
         sourceBox.setValue(original == null ? "" : original.source());
         targetBox.setValue(original == null || original.isRemoval() ? "" : original.target());
-        targetBox.active = !removeTarget;
+        setControlEnabled(targetBox, !removeTarget);
 
         addToggleButton(x, y + 152, 150, removeTarget,
                 Component.translatable("gui.realmcontrol.worldgen.biome.remove.on"),
@@ -52,12 +54,12 @@ public final class BiomeRuleEditScreen extends KineticScreen {
                 Component.translatable("gui.realmcontrol.worldgen.biome.remove.tooltip"),
                 value -> {
                     removeTarget = value;
-                    targetBox.active = !removeTarget;
-                    if (removeTarget) targetBox.setFocused(false);
+                    setControlEnabled(targetBox, !removeTarget);
+                    if (removeTarget) blurControl(targetBox);
                 });
 
-        addButton(x + 240, y + 202, 80, Component.translatable("gui.realmcontrol.worldgen.biome.editor.save"), null, button -> saveRule());
-        addButton(x + 325, y + 202, 75, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, button -> onClose());
+        addButton(x + 240, y + 202, 80, Component.translatable("gui.realmcontrol.worldgen.biome.editor.save"), null, () -> saveRule());
+        addButton(x + 325, y + 202, 75, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, () -> onClose());
     }
 
     private void saveRule() {
@@ -65,15 +67,15 @@ public final class BiomeRuleEditScreen extends KineticScreen {
         String source = sourceBox.getValue().trim();
         String target = removeTarget ? BiomeReplacementRule.REMOVE_TARGET : targetBox.getValue().trim();
         if (!parent.validDimension(dimension)) {
-            GuiOverlay.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_dimension"));
+            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_dimension"));
             return;
         }
         if (!parent.validSource(source)) {
-            GuiOverlay.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_source"));
+            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_source"));
             return;
         }
         if (!removeTarget && !parent.validTarget(target)) {
-            GuiOverlay.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_target"));
+            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_target"));
             return;
         }
         parent.applyRule(ruleIndex, new BiomeReplacementRule(dimension, source, target));
@@ -81,8 +83,9 @@ public final class BiomeRuleEditScreen extends KineticScreen {
     }
 
     @Override
-    public void onClose() {
-        if (minecraft != null) minecraft.setScreen(parent);
+    protected boolean handleCloseRequest() {
+        navigateBack();
+        return true;
     }
 
     @Override
@@ -97,50 +100,21 @@ public final class BiomeRuleEditScreen extends KineticScreen {
         KineticText.drawScrollingLeft(graphics, font, Component.translatable("gui.realmcontrol.worldgen.biome.dimension"), 120, 60, 400, 0xFFCCCCCC, false);
         KineticText.drawScrollingLeft(graphics, font, Component.translatable("gui.realmcontrol.worldgen.biome.source"), 120, 114, 400, 0xFFCCCCCC, false);
         KineticText.drawScrollingLeft(graphics, font, Component.translatable("gui.realmcontrol.worldgen.biome.target"), 120, 168, 400, 0xFFCCCCCC, false);
-        renderTextFieldPlaceholder(graphics, dimensionBox, Component.translatable("gui.realmcontrol.worldgen.biome.dimension.placeholder"));
-        renderTextFieldPlaceholder(graphics, sourceBox, Component.translatable("gui.realmcontrol.worldgen.biome.source.placeholder"));
-        if (!removeTarget) renderTextFieldPlaceholder(graphics, targetBox, Component.translatable("gui.realmcontrol.worldgen.biome.target.placeholder"));
-        if (activeBox != null) activeBox.renderSuggestions(graphics, mouseX, mouseY);
+    }
+    private static boolean isControlVisible(KineticControl control) {
+        return control != null && control.isVisible();
     }
 
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (activeBox != null && activeBox.handleKeyPressed(keyCode)) return true;
-        return super.keyPressed(keyCode, scanCode, modifiers);
+    private static boolean isControlEnabled(KineticControl control) {
+        return control != null && control.isEnabled();
     }
 
-    @Override
-    protected boolean canvasMouseClicked(double mouseX, double mouseY, int button) {
-        activeBox = null;
-        for (KineticWidgets.AutoCompleteBox box : List.of(dimensionBox, sourceBox, targetBox)) {
-            if (!box.active) continue;
-            if (box.isMouseOver(mouseX, mouseY)) {
-                activeBox = box;
-                setFocused(box);
-                box.setFocused(true);
-                if (box.handleMouseClick(mouseX, mouseY)) return true;
-            } else {
-                box.setFocused(false);
-            }
-        }
-        return super.canvasMouseClicked(mouseX, mouseY, button);
+    private static void setControlVisible(KineticControl control, boolean visible) {
+        if (control != null) control.setVisible(visible);
     }
 
-    @Override
-    protected boolean canvasMouseReleased(double mouseX, double mouseY, int button) {
-        if (activeBox != null && activeBox.handleMouseReleased(button)) return true;
-        return super.canvasMouseReleased(mouseX, mouseY, button);
+    private static void setControlEnabled(KineticControl control, boolean enabled) {
+        if (control != null) control.setEnabled(enabled);
     }
 
-    @Override
-    protected boolean canvasMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (activeBox != null && activeBox.handleMouseDragged(mouseY)) return true;
-        return super.canvasMouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    @Override
-    protected boolean canvasMouseScrolled(double mouseX, double mouseY, double delta) {
-        if (activeBox != null && activeBox.handleMouseScrolled(delta)) return true;
-        return super.canvasMouseScrolled(mouseX, mouseY, delta);
-    }
 }

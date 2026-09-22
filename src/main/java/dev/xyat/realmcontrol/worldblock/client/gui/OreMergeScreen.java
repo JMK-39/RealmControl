@@ -1,20 +1,21 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
+import dev.xyat.kineticcore.api.client.widget.input.KineticTextFields.KineticEditBox;
+import dev.xyat.kineticcore.api.client.widget.KineticControl;
+import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
+import dev.xyat.kineticcore.api.client.input.KineticMouseButtons;
 import dev.xyat.kineticcore.api.client.text.KineticText;
-import com.mojang.blaze3d.systems.RenderSystem;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
-import dev.xyat.kineticcore.api.client.overlay.GuiOverlay;
-import dev.xyat.kineticcore.api.client.search.ItemSearchIndex;
+import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
 import dev.xyat.kineticcore.api.client.screen.KineticScreen;
-import dev.xyat.kineticcore.api.client.widget.KineticWidgets.GridScrollController;
+import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.GridScrollController;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
@@ -36,11 +37,6 @@ import java.util.TreeSet;
 public class OreMergeScreen extends KineticScreen {
     private static final int SLOT_SIZE = 18;
     private static final int SLOT_PITCH = 19;
-    private static final int SCROLL_TRACK_COLOR = 0xFF171717;
-    private static final int SCROLL_THUMB_COLOR = 0xFFFF9800;
-    private static final int SCROLL_THUMB_DRAG_COLOR = 0xFFFFD700;
-    private static final int RIGHT_SCROLL_THUMB_COLOR = 0xFFFF9800;
-    private static final int RIGHT_SCROLL_THUMB_HOVER_COLOR = 0xFFFFD700;
     private static final int RIGHT_SCROLLBAR_INSET = 7;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
@@ -49,21 +45,21 @@ public class OreMergeScreen extends KineticScreen {
     private final Map<String, List<String>> tempRules;
     private final Map<String, Integer> replacementChances = new LinkedHashMap<>();
     private final Runnable onChanged;
-    private final List<ItemSearchIndex.CachedItem> allItemsCache;
+    private final List<KineticItemSearch.CachedItem> allItemsCache;
     private final Set<String> expandedTargets = new HashSet<>();
     private final List<LeftEntry> leftEntries = new ArrayList<>();
 
-    private EditBox leftSearchBox;
-    private EditBox searchBox;
-    private Button addBtn;
-    private Button filterBtn;
-    private Button doneBtn;
-    private Button saveBtn;
-    private Button closeBtn;
-    private Button loadedChunksToggleBtn;
-    private EditBox replacementChanceBox;
+    private KineticEditBox leftSearchBox;
+    private KineticEditBox searchBox;
+    private StateButton addBtn;
+    private StateButton filterBtn;
+    private StateButton doneBtn;
+    private StateButton saveBtn;
+    private StateButton closeBtn;
+    private StateButton loadedChunksToggleBtn;
+    private KineticEditBox replacementChanceBox;
 
-    private List<ItemSearchIndex.CachedItem> rightDisplayList = new ArrayList<>();
+    private List<KineticItemSearch.CachedItem> rightDisplayList = new ArrayList<>();
     private String selectedTarget;
     private boolean isCreatingRule;
     private boolean selectingNewTarget;
@@ -135,7 +131,7 @@ public class OreMergeScreen extends KineticScreen {
         pendingSources.clear();
         pendingSources.addAll(snapshot.pendingSources());
         applyToLoadedChunksOnce = snapshot.applyToLoadedChunksOnce();
-        if (loadedChunksToggleBtn != null) loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
+        if (loadedChunksToggleBtn != null) loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
         if (selectedTarget != null && !tempRules.containsKey(selectedTarget) && !isCreatingRule) {
             selectedTarget = null;
         }
@@ -145,18 +141,15 @@ public class OreMergeScreen extends KineticScreen {
     public OreMergeScreen(Screen parent, Map<String, List<String>> tempRules, Runnable onChanged) {
         super(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.title"));
         this.parent = parent;
+        setParentScreen(parent);
         this.tempRules = tempRules == null ? new LinkedHashMap<>() : tempRules;
         this.onChanged = onChanged;
         if (WorldBlockConfig.data != null && WorldBlockConfig.data.blockReplacementChances != null) {
             replacementChances.putAll(WorldBlockConfig.data.blockReplacementChances);
         }
         this.applyToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyBlockReplacementToLoadedChunksOnce;
-        useFluidCanvas(
-                640f,
-                360f,
-                4
-        );
-        this.allItemsCache = ItemSearchCache.getAllItems();
+        useCanvas(640f, 360f, 4);
+        this.allItemsCache = new ArrayList<>(ItemSearchCache.getAllItems());
         configureStandaloneDraft(this::captureMergeSnapshot, this::restoreMergeSnapshot);
     }
 
@@ -193,6 +186,12 @@ public class OreMergeScreen extends KineticScreen {
         replacementChanceBox = createReplacementChanceBox();
         updateLeftEntries();
         updateRightPanel();
+        ItemSearchCache.prepareCache(() -> {
+            allItemsCache.clear();
+            allItemsCache.addAll(ItemSearchCache.getAllItems());
+            updateLeftEntries();
+            updateRightPanel();
+        });
     }
 
     private void initWideLayout(
@@ -467,13 +466,13 @@ public class OreMergeScreen extends KineticScreen {
         fitRightPanelToWholeRows();
     }
 
-    private EditBox createLeftSearchBox(
+    private KineticEditBox createLeftSearchBox(
             int x,
             int y,
             int width
     ) {
-        EditBox box =
-                addTextField(x, y, width, Component.empty());
+        KineticEditBox box =
+                addTextField(x, y, width, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint"), null, null);
 
         box.setResponder(
                 query -> {
@@ -492,13 +491,13 @@ public class OreMergeScreen extends KineticScreen {
 return box;
     }
 
-    private EditBox createRightSearchBox(
+    private KineticEditBox createRightSearchBox(
             int x,
             int y,
             int width
     ) {
-        EditBox box =
-                addTextField(x, y, width, Component.empty());
+        KineticEditBox box =
+                addTextField(x, y, width, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search"), null, null);
 
         box.setResponder(
                 query -> {
@@ -517,15 +516,15 @@ return box;
 return box;
     }
 
-    private Button createLoadedChunksToggleButton() {
+    private StateButton createLoadedChunksToggleButton() {
         int width = 80;
         int chanceBoxX = rightX + rightW - 48;
         int chanceLabelWidth = font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         int x = chanceBoxX - chanceLabelWidth - width - 10;
         int y = rightY + 2;
-        Button button = addButton(x, y, width, getLoadedChunksToggleText(), null, ignored -> {
+        StateButton button = addButton(x, y, width, getLoadedChunksToggleText(), null, () -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
-                    loadedChunksToggleBtn.setMessage(getLoadedChunksToggleText());
+                    loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
                 });
 return button;
     }
@@ -538,10 +537,10 @@ return button;
         );
     }
 
-    private EditBox createReplacementChanceBox() {
-        EditBox box = addTextField(rightX + rightW - 48, rightY + 2, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+    private KineticEditBox createReplacementChanceBox() {
+        KineticEditBox box = addTextField(rightX + rightW - 48, rightY + 2, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         box.setMaxLength(3);
-        box.setFilter(value -> value.isEmpty() || value.matches("\\d{1,3}"));
+        box.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         box.setResponder(this::updateReplacementChance);
 return box;
     }
@@ -560,22 +559,22 @@ return box;
     private void syncReplacementChanceBox() {
         if (replacementChanceBox == null) return;
         boolean visible = selectedTarget != null && !isCreatingRule;
-        replacementChanceBox.visible = visible;
-        replacementChanceBox.active = visible;
+        setControlVisible(replacementChanceBox, visible);
+        setControlEnabled(replacementChanceBox, visible);
         if (!visible) return;
         String value = String.valueOf(replacementChances.getOrDefault(getBaseIdentifier(selectedTarget), 100));
         if (!value.equals(replacementChanceBox.getValue())) replacementChanceBox.setValue(value);
     }
 
-    private Button createAddButton(
+    private StateButton createAddButton(
             int x,
             int y,
             int width
     ) {
-        Button button =
+        StateButton button =
                 addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.merge_add"
-                                ), null, ignored -> {
+                                ), null, () -> {
                                     isCreatingRule = true;
                                     selectingNewTarget = false;
                                     selectedTarget = null;
@@ -588,30 +587,30 @@ return box;
 return button;
     }
 
-    private Button createDoneButton(
+    private StateButton createDoneButton(
             int x,
             int y,
             int width
     ) {
-        Button button = addButton(x, y, width, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done"), null, ignored -> {
+        StateButton button = addButton(x, y, width, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done"), null, () -> {
                     if (!isCreatingRule || selectingNewTarget || pendingSources.isEmpty()) return;
                     selectingNewTarget = true;
                     groupFilterEnabled = false;
                     updateRightPanel();
                 });
-        button.visible = false;
+        setControlVisible(button, false);
 return button;
     }
 
-    private Button createFilterButton(
+    private StateButton createFilterButton(
             int x,
             int y,
             int width
     ) {
-        Button button =
+        StateButton button =
                 addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"
-                                ), null, ignored -> {
+                                ), null, () -> {
                                     groupFilterEnabled =
                                             !groupFilterEnabled;
 
@@ -620,29 +619,29 @@ return button;
 return button;
     }
 
-    private Button createSaveButton(
+    private StateButton createSaveButton(
             int x,
             int y,
             int width
     ) {
-        Button button =
+        StateButton button =
                 addButton(x, y, width, Component.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.save"
-                                ), null, ignored -> saveAndApply());
+                                ), null, () -> saveAndApply());
 return button;
     }
 
-    private Button createCloseButton(
+    private StateButton createCloseButton(
             int x,
             int y,
             int width
     ) {
-        Button button =
+        StateButton button =
                 addButton(x, y, width, Component.translatable(
                                         parent == null
                                                 ? "gui.realmcontrol.worldblock.banitem.btn.close"
                                                 : "gui.realmcontrol.worldblock.config.back"
-                                ), null, ignored -> closeScreen());
+                                ), null, () -> closeScreen());
 return button;
     }
 
@@ -652,7 +651,7 @@ return button;
         for (Map.Entry<String, List<String>> entry : tempRules.entrySet()) {
             String target = entry.getKey();
             List<String> sources = entry.getValue();
-            if (!isOreRule(target, sources)) continue;
+            if (isNotOreRule(target, sources)) continue;
 
             boolean targetMatches = query.isEmpty() || KineticSearch.match(ItemSearchCache.getSearchDataForId(target), query) || KineticSearch.match(getOreGroupSearchText(target), query);
             boolean sourceMatches = false;
@@ -688,11 +687,11 @@ return button;
     private void updateRightPanel() {
         syncReplacementChanceBox();
         if (searchBox == null) return;
-        searchBox.visible = isCreatingRule || selectedTarget != null;
-        searchBox.active = searchBox.visible;
+        setControlVisible(searchBox, isCreatingRule || selectedTarget != null);
+        setControlEnabled(searchBox, isControlVisible(searchBox));
         updateFilterButtonState();
         updateDoneButtonState();
-        if (!searchBox.visible) {
+        if (!isControlVisible(searchBox)) {
             rightDisplayList = new ArrayList<>();
             totalRightH = 0;
             rightScroll.reset();
@@ -711,9 +710,9 @@ return button;
                 + creationHash;
 
         rightDisplayList = new ArrayList<>(ItemSearchCache.searchItems("ore_merge_right_block", allItemsCache, query, item -> {
-            if (item == null || item.stack == null || item.stack.isEmpty()) return false;
-            if (!isBlockMergeCandidate(item.stack)) return false;
-            String itemId = item.idStr;
+            if (item == null || item.stack() == null || item.stack().isEmpty()) return false;
+            if (!isBlockMergeCandidate(item.stack())) return false;
+            String itemId = item.id();
             String baseId = getBaseIdentifier(itemId);
             if (isCreatingRule && !selectingNewTarget && pendingSources.contains(itemId)) return true;
             if (excluded.contains(itemId) || excluded.contains(baseId)) return false;
@@ -721,10 +720,10 @@ return button;
                 for (String source : pendingSources) {
                     if (getBaseIdentifier(source).equals(baseId)) return false;
                 }
-                if (WorldBlockConfig.isOreGenerationBanned(item.stack)) return false;
+                if (WorldBlockConfig.isOreGenerationBanned(item.stack())) return false;
                 return true;
             }
-            Set<ItemUnificationHelper.MergeGroup> groups = getOreGroupsForStack(item.stack);
+            Set<ItemUnificationHelper.MergeGroup> groups = getOreGroupsForStack(item.stack());
             return selectedTarget == null || !groupFilterEnabled || targetGroups.isEmpty() || matchesAnyGroup(groups, targetGroups);
         }, sourceHash));
 
@@ -737,25 +736,25 @@ return button;
         if (filterBtn == null) return;
         boolean visible = selectedTarget != null && !isCreatingRule;
         Set<ItemUnificationHelper.MergeGroup> groups = visible ? getOreGroupsForId(selectedTarget) : Collections.emptySet();
-        filterBtn.visible = visible;
-        filterBtn.active = visible && !groups.isEmpty();
-        if (!filterBtn.active) groupFilterEnabled = false;
-        filterBtn.setMessage(Component.translatable(groupFilterEnabled ? "gui.realmcontrol.worldblock.banitem.block.merge.filter_group_on" : "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"));
+        setControlVisible(filterBtn, visible);
+        setControlEnabled(filterBtn, visible && !groups.isEmpty());
+        if (isControlDisabled(filterBtn)) groupFilterEnabled = false;
+        filterBtn.setText(Component.translatable(groupFilterEnabled ? "gui.realmcontrol.worldblock.banitem.block.merge.filter_group_on" : "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"));
     }
 
     private void updateDoneButtonState() {
         if (doneBtn == null) return;
-        doneBtn.visible = isCreatingRule && !selectingNewTarget;
-        doneBtn.active = doneBtn.visible && !pendingSources.isEmpty();
+        setControlVisible(doneBtn, isCreatingRule && !selectingNewTarget);
+        setControlEnabled(doneBtn, isControlVisible(doneBtn) && !pendingSources.isEmpty());
     }
 
-    private boolean isOreRule(String target, List<String> sources) {
-        if (isBlockIdentifier(target) || !getOreGroupsForId(target).isEmpty()) return true;
-        if (sources == null) return false;
+    private boolean isNotOreRule(String target, List<String> sources) {
+        if (isBlockIdentifier(target) || !getOreGroupsForId(target).isEmpty()) return false;
+        if (sources == null) return true;
         for (String source : sources) {
-            if (isBlockIdentifier(source) || !getOreGroupsForId(source).isEmpty()) return true;
+            if (isBlockIdentifier(source) || !getOreGroupsForId(source).isEmpty()) return false;
         }
-        return false;
+        return true;
     }
 
     private boolean isBlockIdentifier(String idStr) {
@@ -801,7 +800,7 @@ return button;
     }
 
     private void saveAndApply() {
-        if (!validateMergeTargets()) return;
+        if (hasInvalidMergeTargets()) return;
         WorldBlockConfig.Data ds = new WorldBlockConfig.Data();
         ds.bannedItems = new ArrayList<>(WorldBlockConfig.data.bannedItems);
         if (WorldBlockConfig.data.bannedOreGenerations != null) {
@@ -823,15 +822,15 @@ return button;
         commitDraft();
     }
 
-    private boolean validateMergeTargets() {
+    private boolean hasInvalidMergeTargets() {
         for (String target : tempRules.keySet()) {
             ItemStack stack = WorldBlockConfig.parseItemStack(target);
             if (WorldBlockConfig.isOreGenerationBanned(stack)) {
-                GuiOverlay.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
-                return false;
+                KineticOverlays.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     private Map<String, List<String>> buildMergedRulesForSave() {
@@ -850,8 +849,9 @@ return button;
     }
 
     @Override
-    public void onClose() {
+    protected boolean handleCloseRequest() {
         closeScreen();
+        return true;
     }
 
     private void closeScreen() {
@@ -900,15 +900,14 @@ return button;
     @Override
     protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
         g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
-        GuiTheme.panel(g, leftX, leftY, leftW, leftH, 0xFF1C1C1C, 0xFF555555);
-        GuiTheme.panel(g, rightX, rightY, rightW, rightH, 0xFF1C1C1C, 0xFF555555);
+        GuiTheme.panel(g, leftX, leftY, leftW, leftH);
+        GuiTheme.panel(g, rightX, rightY, rightW, rightH);
     }
 
     @Override
     protected void renderCanvasForeground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
         renderLeftPanel(g, smx, smy);
         renderRightPanel(g, smx, smy);
-        renderSearchHints(g);
     }
 
     private void renderLeftPanel(GuiGraphics g, int smx, int smy) {
@@ -938,10 +937,7 @@ return button;
                 leftY,
                 4,
                 leftH,
-                20,
-                SCROLL_TRACK_COLOR,
-                SCROLL_THUMB_COLOR,
-                SCROLL_THUMB_DRAG_COLOR
+                20
         );
     }
 
@@ -989,10 +985,10 @@ return button;
                     filterText
             );
         }
-        int infoRight = replacementChanceBox != null && replacementChanceBox.visible
+        int infoRight = replacementChanceBox != null && isControlVisible(replacementChanceBox)
                 ? replacementChanceBox.getX() - font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")) - 6
                 : rightX + rightW - 4;
-        if (loadedChunksToggleBtn != null && loadedChunksToggleBtn.visible) {
+        if (loadedChunksToggleBtn != null && isControlVisible(loadedChunksToggleBtn)) {
             infoRight = Math.min(infoRight, loadedChunksToggleBtn.getX() - 6);
         }
         KineticText.drawScrollingLeft(
@@ -1005,7 +1001,7 @@ return button;
                 0xFFFFFFFF,
                 false
         );
-        if (replacementChanceBox != null && replacementChanceBox.visible) {
+        if (replacementChanceBox != null && isControlVisible(replacementChanceBox)) {
             Component chanceLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
             KineticText.drawScrollingRight(
                     g,
@@ -1040,17 +1036,15 @@ return button;
             int x = gridX + col * SLOT_PITCH;
             int y = gridY + row * SLOT_PITCH - (int) Math.round(rightScroll.smoothOffset());
             if (y + SLOT_SIZE <= gridY || y >= gridY + gridAreaH) continue;
-            ItemSearchIndex.CachedItem item = rightDisplayList.get(i);
+            KineticItemSearch.CachedItem item = rightDisplayList.get(i);
             boolean hovered = smx >= x && smx < x + SLOT_SIZE
                     && smy >= y && smy < y + SLOT_SIZE;
-            boolean selected = isCreatingRule && !selectingNewTarget && pendingSources.contains(item.idStr);
-            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, selected, hovered, false);
-            RenderSystem.enableDepthTest();
+            boolean selected = isCreatingRule && !selectingNewTarget && pendingSources.contains(item.id());
+            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
             ItemBanControl.withSkip(() -> {
-                g.renderItem(item.stack, x + 1, y + 1);
+                GuiTheme.item(g, font, item.stack(), x, y, SLOT_SIZE, 1.0F, false);
                 return null;
             });
-            RenderSystem.disableDepthTest();
         }
         disableCanvasScissor(g);
         rightScroll.render(
@@ -1061,43 +1055,27 @@ return button;
                 gridY,
                 4,
                 gridAreaH,
-                20,
-                SCROLL_TRACK_COLOR,
-                RIGHT_SCROLL_THUMB_COLOR,
-                RIGHT_SCROLL_THUMB_HOVER_COLOR
+                20
         );
     }
 
-    private void renderSearchHints(GuiGraphics g) {
-        renderTextFieldPlaceholder(
-                g,
-                leftSearchBox,
-                Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint")
-        );
-        renderTextFieldPlaceholder(
-                g,
-                searchBox,
-                Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")
-        );
-    }
-
-    private boolean isHoveringButton(Button button, double mx, double my) {
-        return button != null && button.visible && mx >= button.getX() && mx < button.getX() + button.getWidth() && my >= button.getY() && my < button.getY() + button.getHeight();
+    private boolean isHoveringButton(StateButton button, double mx, double my) {
+        return button != null && isControlVisible(button) && mx >= button.getX() && mx < button.getX() + button.getWidth() && my >= button.getY() && my < button.getY() + button.getHeight();
     }
 
     @Override
     protected void renderTooltips(@NotNull GuiGraphics g, int smx, int smy, int mx, int my) {
         int tooltipY = smy < leftY ? my + 15 : my;
         if (isHoveringButton(addBtn, smx, smy)) {
-            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"));
+            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"));
             return;
         }
         if (isHoveringButton(doneBtn, smx, smy)) {
-            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"));
+            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"));
             return;
         }
         if (isHoveringButton(filterBtn, smx, smy)) {
-            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"));
+            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"));
             return;
         }
         if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
@@ -1108,15 +1086,15 @@ return button;
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
                     Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
-            ));
+            ), null);
             return;
         }
         if (isHoveringButton(saveBtn, smx, smy)) {
-            showTooltip(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"));
+            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"));
             return;
         }
         if (isHoveringButton(closeBtn, smx, smy)) {
-            showTooltip(Component.translatable(parent == null ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"));
+            showTooltipLine(Component.translatable(parent == null ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"));
             return;
         }
 
@@ -1133,19 +1111,19 @@ return button;
 
         int idx = getRightItemIndexAt(smx, smy);
         if (idx >= 0) {
-            ItemSearchIndex.CachedItem item = rightDisplayList.get(idx);
+            KineticItemSearch.CachedItem item = rightDisplayList.get(idx);
             List<Component> tooltip = new ArrayList<>();
-            tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack));
-            tooltip.add(Component.literal(item.idStr));
+            tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
+            tooltip.add(Component.literal(item.id()));
             String actionKey = !isCreatingRule
                     ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.add_source"
                     : selectingNewTarget
                     ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.set_final_target"
-                    : pendingSources.contains(item.idStr)
+                    : pendingSources.contains(item.id())
                     ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.unselect_replaced"
                     : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.select_replaced";
             tooltip.add(Component.translatable(actionKey));
-            showTooltip(tooltip);
+            showTooltip(tooltip, null);
         }
     }
 
@@ -1171,7 +1149,7 @@ return button;
 
     @Override
     protected boolean canvasMouseClicked(double smx, double smy, int btn) {
-        if (btn == 0
+        if (KineticMouseButtons.isPrimary(btn)
                 && leftScroll.beginDrag(
                         smx,
                         smy,
@@ -1187,7 +1165,7 @@ return button;
 
         int rightGridYForScroll = getRightGridY();
 
-        if (btn == 0
+        if (KineticMouseButtons.isPrimary(btn)
                 && rightScroll.beginDrag(
                         smx,
                         smy,
@@ -1211,9 +1189,9 @@ return button;
             }
         } else {
             int idx = getRightItemIndexAt(smx, smy);
-            if (btn == 0 && idx >= 0) {
-            ItemSearchIndex.CachedItem clicked = rightDisplayList.get(idx);
-            String id = clicked.idStr;
+            if (KineticMouseButtons.isPrimary(btn) && idx >= 0) {
+            KineticItemSearch.CachedItem clicked = rightDisplayList.get(idx);
+            String id = clicked.id();
             if (isCreatingRule && !selectingNewTarget) {
                 if (!pendingSources.add(id)) pendingSources.remove(id);
             } else if (isCreatingRule) {
@@ -1222,8 +1200,8 @@ return button;
                     updateRightPanel();
                     return true;
                 }
-                if (WorldBlockConfig.isOreGenerationBanned(clicked.stack)) {
-                    GuiOverlay.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
+                if (WorldBlockConfig.isOreGenerationBanned(clicked.stack())) {
+                    KineticOverlays.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
                     return true;
                 }
                 List<String> sources = tempRules.computeIfAbsent(id, key -> new ArrayList<>());
@@ -1287,7 +1265,7 @@ return button;
                 && smx <= leftX + leftW
                 && smy >= leftY
                 && smy <= leftY + leftH
-                && leftScroll.scroll(delta, 10 / 3.0D)) {
+                && leftScroll.scroll(delta, 10D)) {
             return true;
         }
 
@@ -1297,7 +1275,7 @@ return button;
                 && smx <= rightX + rightW
                 && smy >= rightGridY
                 && smy <= rightGridY + gridAreaH
-                && rightScroll.scroll(delta, SLOT_PITCH / 3.0D)) {
+                && rightScroll.scroll(delta, SLOT_PITCH)) {
             return true;
         }
 
@@ -1332,15 +1310,12 @@ return button;
         void render(GuiGraphics g, int mx, int my) {
             boolean selected = id.equals(selectedTarget);
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-            g.fill(x, y, x + w, y + h, selected ? 0xFF555555 : hover ? 0xFF333333 : 0xFF222222);
-            GuiTheme.stateOutline(g, x, y, w, h, selected, hover, false);
-            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, selected, hover, false);
-            RenderSystem.enableDepthTest();
+            GuiTheme.stateSurface(g, x, y, w, h, GuiTheme.Surface.PANEL_ALT, selected, hover, false);
+            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
             ItemBanControl.withSkip(() -> {
-                g.renderItem(stack, x + 2, y + 2);
+                GuiTheme.item(g, font, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
                 return null;
             });
-            RenderSystem.disableDepthTest();
             String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
             KineticText.drawScrollingLeft(g, font, name, x + 24, y + 6, w - 58, 0xFFFFFF, false);
             KineticText.drawScrollingRight(
@@ -1367,7 +1342,7 @@ return button;
 
         @Override
         boolean mouseClicked(double mx, double my, int btn) {
-            if (btn == 0) {
+            if (KineticMouseButtons.isPrimary(btn)) {
                 if (expandedTargets.contains(id)) expandedTargets.remove(id);
                 else expandedTargets.add(id);
                 selectedTarget = id;
@@ -1379,7 +1354,7 @@ return button;
                 updateRightPanel();
                 return true;
             }
-            if (btn == 1) {
+            if (KineticMouseButtons.isSecondary(btn)) {
                 tempRules.remove(id);
                 replacementChances.remove(getBaseIdentifier(id));
                 if (id.equals(selectedTarget)) selectedTarget = null;
@@ -1397,7 +1372,7 @@ return button;
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(id));
             tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.target_del"));
-            showTooltip(tooltip);
+            showTooltip(tooltip, null);
         }
     }
 
@@ -1415,20 +1390,17 @@ return button;
         @Override
         void render(GuiGraphics g, int mx, int my) {
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-            g.fill(x, y, x + w, y + h, hover ? 0xFF2A2A2A : 0xFF141414);
-            GuiTheme.stateOutline(g, x, y, w, h, false, hover, false);
-            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, false, hover, false);
-            RenderSystem.enableDepthTest();
+            GuiTheme.stateSurface(g, x, y, w, h, GuiTheme.Surface.PANEL_ALT, false, hover, false);
+            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
             ItemBanControl.withSkip(() -> {
-                g.renderItem(stack, x + 2, y + 2);
+                GuiTheme.item(g, font, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
                 return null;
             });
-            RenderSystem.disableDepthTest();
         }
 
         @Override
         boolean mouseClicked(double mx, double my, int btn) {
-            if (btn == 1) {
+            if (KineticMouseButtons.isSecondary(btn)) {
                 List<String> sources = tempRules.get(targetId);
                 if (sources != null) sources.remove(sourceId);
                 updateLeftEntries();
@@ -1444,7 +1416,23 @@ return button;
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(sourceId));
             tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.source_del"));
-            showTooltip(tooltip);
+            showTooltip(tooltip, null);
         }
     }
+    private static boolean isControlVisible(KineticControl control) {
+        return control != null && control.isVisible();
+    }
+
+    private static boolean isControlDisabled(KineticControl control) {
+        return control == null || !control.isEnabled();
+    }
+
+    private static void setControlVisible(KineticControl control, boolean visible) {
+        if (control != null) control.setVisible(visible);
+    }
+
+    private static void setControlEnabled(KineticControl control, boolean enabled) {
+        if (control != null) control.setEnabled(enabled);
+    }
+
 }

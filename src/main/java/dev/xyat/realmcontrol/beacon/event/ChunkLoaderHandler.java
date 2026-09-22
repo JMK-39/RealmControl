@@ -1,5 +1,8 @@
 package dev.xyat.realmcontrol.beacon.event;
 
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.world.event.KineticWorldEvents;
 import dev.xyat.realmcontrol.beacon.util.ColorText;
 import dev.xyat.realmcontrol.beacon.BeaconModule;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
@@ -16,8 +19,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -28,6 +29,15 @@ import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = BeaconModule.MODID)
 public class ChunkLoaderHandler {
+    private static boolean installed;
+
+    public static synchronized void install() {
+        if (installed) return;
+        installed = true;
+        KineticServerEvents.onPlayerLogin(KineticEventPriority.NORMAL, ChunkLoaderHandler::onPlayerLogin);
+        KineticWorldEvents.onBlockPlace(KineticEventPriority.NORMAL, ChunkLoaderHandler::onBlockPlace);
+        KineticWorldEvents.onBlockBreak(KineticEventPriority.NORMAL, ChunkLoaderHandler::onBlockBreak);
+    }
 
     private static List<Long> getChunksInRange(BlockPos pos, int radius) {
         List<Long> list = new ArrayList<>();
@@ -41,18 +51,16 @@ public class ChunkLoaderHandler {
         return list;
     }
 
-    @SubscribeEvent
-    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && player.getServer() != null) {
+    private static void onPlayerLogin(ServerPlayer player) {
+        if (player.getServer() != null) {
             BeaconNetwork.syncConfigToPlayer(player);
             BeaconNetwork.syncAllQuotas(player.getServer());
         }
     }
 
-    @SubscribeEvent
-    public static void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
-        if (event.getEntity() instanceof Player player && event.getPlacedBlock().is(Blocks.BEACON)) {
-            if (event.getLevel().getBlockEntity(event.getPos()) instanceof IBeaconAccess accessor) {
+    private static void onBlockPlace(KineticWorldEvents.BlockPlaceContext event) {
+        if (event.entity() instanceof Player player && event.state().is(Blocks.BEACON)) {
+            if (event.level().getBlockEntity(event.pos()) instanceof IBeaconAccess accessor) {
                 accessor.realmcontrol_beacon$setOwner(player.getUUID());
             }
         }
@@ -110,11 +118,10 @@ public class ChunkLoaderHandler {
         manager.setStoredRadius(level, pos, newRadius);
     }
 
-    @SubscribeEvent
-    public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) return;
-        if (event.getState().is(Blocks.BEACON)) {
-            BlockPos pos = event.getPos();
+    private static void onBlockBreak(KineticWorldEvents.BlockBreakContext event) {
+        if (!(event.level() instanceof ServerLevel level)) return;
+        if (event.state().is(Blocks.BEACON)) {
+            BlockPos pos = event.pos();
             WorldChunkLoaderManager manager = WorldChunkLoaderManager.get(level);
             int storedRadius = manager.getStoredRadius(level, pos);
             if (storedRadius >= 0) {

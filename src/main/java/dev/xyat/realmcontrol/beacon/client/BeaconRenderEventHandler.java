@@ -1,16 +1,19 @@
 package dev.xyat.realmcontrol.beacon.client;
 
-import dev.xyat.realmcontrol.beacon.BeaconModule;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
 
-@Mod.EventBusSubscriber(modid = BeaconModule.MODID, value = Dist.CLIENT)
-public class BeaconRenderEventHandler {
+public final class BeaconRenderEventHandler {
+    private static boolean installed;
 
-    @SubscribeEvent
-    public static void onRenderLevelStage(RenderLevelStageEvent event) {
-        BeaconRangeRenderer.render(event);
+    private BeaconRenderEventHandler() {
+    }
+
+    public static void install() {
+        if (installed) return;
+        installed = true;
+        KineticClientEvents.onLevelRender(
+                KineticClientEvents.LevelRenderStage.AFTER_PARTICLES,
+                BeaconRangeRenderer::render
+        );
     }
 }

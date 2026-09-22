@@ -3,13 +3,13 @@ package dev.xyat.realmcontrol.beacon.config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import dev.xyat.realmcontrol.beacon.BeaconModule;
-import net.minecraftforge.fml.loading.FMLPaths;
+import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 
 import java.nio.file.Path;
 import java.util.*;
 
 public class BeaconConfig {
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("kineticcore/beacon.toml");
+    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/beacon.toml");
     private static CommentedFileConfig configData;
 
     public static final Set<String> BEACON_SPAWN_WHITELIST_CACHE = new HashSet<>();

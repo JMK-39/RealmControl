@@ -1,5 +1,7 @@
 package dev.xyat.realmcontrol.worldblock.event;
 
+import javax.annotation.Nonnull;
+
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -42,7 +44,7 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag) {
+    public CompoundTag save(@Nonnull CompoundTag tag) {
         tag.putLongArray("fixed", fixedProcessed.toLongArray());
         tag.putLongArray("weighted", weightedProcessed.toLongArray());
         return tag;

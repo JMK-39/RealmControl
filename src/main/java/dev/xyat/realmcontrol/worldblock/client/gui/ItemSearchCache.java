@@ -1,17 +1,16 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
-import dev.xyat.kineticcore.api.client.search.ItemSearchIndex;
+import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
+import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
-import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.tags.ITagManager;
+import dev.xyat.kineticcore.api.registry.KineticRegistries;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,10 +35,10 @@ public final class ItemSearchCache {
     private static final Object SNAPSHOT_LOCK = new Object();
     private static volatile Snapshot snapshot = Snapshot.empty();
     private static volatile long bannedSourceVersion = -1L;
-    private static volatile List<ItemSearchIndex.CachedItem> bannedSourceCache = Collections.emptyList();
+    private static volatile List<KineticItemSearch.CachedItem> bannedSourceCache = Collections.emptyList();
 
     private static final AtomicLong RULES_VERSION = new AtomicLong(0L);
-    private static final ConcurrentHashMap<SearchKey, CacheEntry<List<ItemSearchIndex.CachedItem>>> ITEM_SEARCH_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<SearchKey, CacheEntry<List<KineticItemSearch.CachedItem>>> ITEM_SEARCH_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<SearchKey, CacheEntry<List<String>>> STRING_SEARCH_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, String> ID_SEARCH_DATA_CACHE = new ConcurrentHashMap<>();
 
@@ -47,13 +46,13 @@ public final class ItemSearchCache {
     }
 
     public static void prepareCache(Runnable afterReady) {
-        ItemSearchIndex.prepareCache(() -> {
+        KineticItemSearch.prepare(() -> {
             buildIfNeeded();
             if (afterReady != null) afterReady.run();
         });
     }
 
-    public static List<ItemSearchIndex.CachedItem> getAllItems() {
+    public static List<KineticItemSearch.CachedItem> getAllItems() {
         return buildIfNeeded().allItems();
     }
 
@@ -133,9 +132,9 @@ public final class ItemSearchCache {
         return ID_SEARCH_DATA_CACHE.computeIfAbsent(idStr, ItemSearchCache::buildSearchDataForUnknownId);
     }
 
-    public static List<ItemSearchIndex.CachedItem> getInventoryItems() {
-        List<ItemSearchIndex.CachedItem> list = new ArrayList<>();
-        Player player = Minecraft.getInstance().player;
+    public static List<KineticItemSearch.CachedItem> getInventoryItems() {
+        List<KineticItemSearch.CachedItem> list = new ArrayList<>();
+        Player player = KineticClientRuntime.localPlayer();
         if (player != null) {
             ItemBanControl.withSkip(() -> {
                 Set<String> seen = new HashSet<>();
@@ -143,7 +142,7 @@ public final class ItemSearchCache {
                     ItemStack stack = player.getInventory().getItem(i);
                     if (!stack.isEmpty()) {
                         String id = WorldBlockConfig.getItemIdentifier(stack);
-                        if (seen.add(id)) list.add(ItemSearchIndex.CachedItem.custom(stack.copy(), id));
+                        if (seen.add(id)) list.add(KineticItemSearch.customSnapshot(stack.copy(), id));
                     }
                 }
                 return null;
@@ -152,34 +151,34 @@ public final class ItemSearchCache {
         return list;
     }
 
-    public static List<ItemSearchIndex.CachedItem> getBannedSourceList() {
+    public static List<KineticItemSearch.CachedItem> getBannedSourceList() {
         long version = RULES_VERSION.get();
-        List<ItemSearchIndex.CachedItem> current = bannedSourceCache;
+        List<KineticItemSearch.CachedItem> current = bannedSourceCache;
         if (bannedSourceVersion == version) return current;
 
         synchronized (SNAPSHOT_LOCK) {
             if (bannedSourceVersion == version) return bannedSourceCache;
 
-            List<ItemSearchIndex.CachedItem> result = new ArrayList<>();
+            List<KineticItemSearch.CachedItem> result = new ArrayList<>();
             Set<String> addedRules = new HashSet<>();
 
             for (String rule : WorldBlockConfig.data.bannedItems) {
                 if (rule == null || rule.isBlank()) continue;
                 if (rule.startsWith("@")) {
-                    result.add(ItemSearchIndex.CachedItem.custom(new ItemStack(Items.COMMAND_BLOCK), rule));
+                    result.add(KineticItemSearch.customSnapshot(new ItemStack(Items.COMMAND_BLOCK), rule));
                     addedRules.add(rule);
                 } else if (rule.startsWith("#")) {
-                    result.add(ItemSearchIndex.CachedItem.custom(new ItemStack(Items.NAME_TAG), rule));
+                    result.add(KineticItemSearch.customSnapshot(new ItemStack(Items.NAME_TAG), rule));
                     addedRules.add(rule);
                 } else if (addedRules.add(rule)) {
-                    ItemSearchIndex.CachedItem cached = buildBannedRuleCachedItem(rule);
+                    KineticItemSearch.CachedItem cached = buildBannedRuleCachedItem(rule);
                     result.add(cached);
                 }
             }
 
-            for (ItemSearchIndex.CachedItem c : buildIfNeeded().allItems()) {
+            for (KineticItemSearch.CachedItem c : buildIfNeeded().allItems()) {
                 String identifier = cachedIdentifier(c);
-                if (!identifier.isBlank() && WorldBlockConfig.isBanned(c.stack) && addedRules.add(identifier)) {
+                if (!identifier.isBlank() && WorldBlockConfig.isBanned(c.stack()) && addedRules.add(identifier)) {
                     result.add(c);
                 }
             }
@@ -190,33 +189,33 @@ public final class ItemSearchCache {
         }
     }
 
-    public static List<ItemSearchIndex.CachedItem> searchItems(String scope, List<ItemSearchIndex.CachedItem> source, String query, int sourceHash) {
+    public static List<KineticItemSearch.CachedItem> searchItems(String scope, List<KineticItemSearch.CachedItem> source, String query, int sourceHash) {
         return searchItems(scope, source, query, c -> true, sourceHash);
     }
 
-    public static List<ItemSearchIndex.CachedItem> searchItems(String scope, List<ItemSearchIndex.CachedItem> source, String query, Predicate<ItemSearchIndex.CachedItem> filter, int sourceHash) {
+    public static List<KineticItemSearch.CachedItem> searchItems(String scope, List<KineticItemSearch.CachedItem> source, String query, Predicate<KineticItemSearch.CachedItem> filter, int sourceHash) {
         if (source == null || source.isEmpty()) return Collections.emptyList();
         String q = normalize(query);
         long version = RULES_VERSION.get();
         SearchKey key = new SearchKey(scope, q, sourceHash, version);
         long now = System.currentTimeMillis();
-        CacheEntry<List<ItemSearchIndex.CachedItem>> cached = ITEM_SEARCH_CACHE.get(key);
+        CacheEntry<List<KineticItemSearch.CachedItem>> cached = ITEM_SEARCH_CACHE.get(key);
         if (cached != null && cached.isAlive(now)) {
             cached.touch(now);
             return cached.value;
         }
 
-        List<ItemSearchIndex.CachedItem> result = new ArrayList<>();
+        List<KineticItemSearch.CachedItem> result = new ArrayList<>();
         if (q.isEmpty()) {
-            for (ItemSearchIndex.CachedItem item : source) {
+            for (KineticItemSearch.CachedItem item : source) {
                 if (filter.test(item)) result.add(item);
             }
         } else {
-            for (ItemSearchIndex.CachedItem item : source) {
-                if (filter.test(item) && KineticSearch.match(item.searchData, q)) result.add(item);
+            for (KineticItemSearch.CachedItem item : source) {
+                if (filter.test(item) && KineticSearch.match(item.searchText(), q)) result.add(item);
             }
         }
-        List<ItemSearchIndex.CachedItem> safe = Collections.unmodifiableList(result);
+        List<KineticItemSearch.CachedItem> safe = Collections.unmodifiableList(result);
         ITEM_SEARCH_CACHE.put(key, new CacheEntry<>(safe, now));
         trimItemSearchCache(now);
         return safe;
@@ -245,12 +244,12 @@ public final class ItemSearchCache {
         return safe;
     }
 
-    public static int hashCachedItems(List<ItemSearchIndex.CachedItem> items) {
+    public static int hashCachedItems(List<KineticItemSearch.CachedItem> items) {
         if (items == null || items.isEmpty()) return 0;
         Snapshot current = snapshot;
         if (items == current.allItems()) return current.allItemsHash();
         int hash = 1;
-        for (ItemSearchIndex.CachedItem item : items) {
+        for (KineticItemSearch.CachedItem item : items) {
             hash = 31 * hash + cachedIdentifier(item).hashCode();
         }
         return hash;
@@ -299,20 +298,20 @@ public final class ItemSearchCache {
             current = snapshot;
             if (current.isAlive(now)) return current;
 
-            List<ItemSearchIndex.CachedItem> items = buildRawItemSnapshot();
+            List<KineticItemSearch.CachedItem> items = buildRawItemSnapshot();
             Map<String, String> searchDataById = new HashMap<>();
             Map<String, Set<String>> tagsById = new HashMap<>();
-            for (ItemSearchIndex.CachedItem item : items) {
-                searchDataById.putIfAbsent(cachedIdentifier(item), item.searchData);
-                searchDataById.putIfAbsent(item.idStr, item.searchData);
-                tagsById.putIfAbsent(cachedIdentifier(item), getRegistryTagIdsForStack(item.stack));
-                tagsById.putIfAbsent(item.idStr, getRegistryTagIdsForStack(item.stack));
+            for (KineticItemSearch.CachedItem item : items) {
+                searchDataById.putIfAbsent(cachedIdentifier(item), item.searchText());
+                searchDataById.putIfAbsent(item.id(), item.searchText());
+                tagsById.putIfAbsent(cachedIdentifier(item), getRegistryTagIdsForStack(item.stack()));
+                tagsById.putIfAbsent(item.id(), getRegistryTagIdsForStack(item.stack()));
             }
 
             List<String> mods = new ArrayList<>();
             Set<String> modSeen = new HashSet<>();
-            for (Item item : ForgeRegistries.ITEMS.getValues()) {
-                ResourceLocation rl = ForgeRegistries.ITEMS.getKey(item);
+            for (Item item : KineticRegistries.items().values()) {
+                ResourceLocation rl = KineticRegistries.items().id(item);
                 if (rl != null && !rl.getNamespace().equals("realmcontrol")) {
                     String mod = "@" + rl.getNamespace();
                     if (modSeen.add(mod)) mods.add(mod);
@@ -321,14 +320,10 @@ public final class ItemSearchCache {
             mods.sort(String::compareTo);
 
             List<String> tags = new ArrayList<>();
-            ITagManager<Item> tagManager = ForgeRegistries.ITEMS.tags();
-            if (tagManager != null) {
-                tagManager.stream().forEach(tag -> {
-                    ResourceLocation loc = tag.getKey().location();
-                    if (!loc.getNamespace().equals("realmcontrol")) {
-                        tags.add("#" + loc.toString().toLowerCase(Locale.ROOT));
-                    }
-                });
+            for (ResourceLocation loc : KineticRegistries.items().tagIds()) {
+                if (!loc.getNamespace().equals("realmcontrol")) {
+                    tags.add("#" + loc.toString().toLowerCase(Locale.ROOT));
+                }
             }
             tags.sort(String::compareTo);
 
@@ -347,24 +342,24 @@ public final class ItemSearchCache {
         }
     }
 
-    private static List<ItemSearchIndex.CachedItem> buildRawItemSnapshot() {
-        List<ItemSearchIndex.CachedItem> cached = ItemSearchIndex.getItems();
+    private static List<KineticItemSearch.CachedItem> buildRawItemSnapshot() {
+        List<KineticItemSearch.CachedItem> cached = KineticItemSearch.items();
         if (cached != null && !cached.isEmpty()) {
-            List<ItemSearchIndex.CachedItem> result = new ArrayList<>(cached.size());
-            for (ItemSearchIndex.CachedItem item : cached) {
-                if (item == null || WorldBlockConfig.VOID_ID.equals(item.idStr)) continue;
+            List<KineticItemSearch.CachedItem> result = new ArrayList<>(cached.size());
+            for (KineticItemSearch.CachedItem item : cached) {
+                if (item == null || WorldBlockConfig.VOID_ID.equals(item.id())) continue;
                 result.add(item);
             }
             return result;
         }
 
-        List<ItemSearchIndex.CachedItem> result = new ArrayList<>();
+        List<KineticItemSearch.CachedItem> result = new ArrayList<>();
         ItemBanControl.withSkip(() -> {
-            for (Item item : ForgeRegistries.ITEMS.getValues()) {
-                ResourceLocation rl = ForgeRegistries.ITEMS.getKey(item);
+            for (Item item : KineticRegistries.items().values()) {
+                ResourceLocation rl = KineticRegistries.items().id(item);
                 if (rl != null && !rl.getNamespace().equals("realmcontrol")) {
                     ItemStack stack = new ItemStack(item);
-                    result.add(new ItemSearchIndex.CachedItem(stack));
+                    result.add(KineticItemSearch.snapshot(stack));
                 }
             }
             return null;
@@ -373,27 +368,27 @@ public final class ItemSearchCache {
     }
 
     private static String buildSearchDataForUnknownId(String idStr) {
-        ItemSearchIndex.CachedItem cached = buildBannedRuleCachedItem(idStr);
-        if (cached.stack.isEmpty()) return idStr.toLowerCase(Locale.ROOT);
-        return cached.searchData;
+        KineticItemSearch.CachedItem cached = buildBannedRuleCachedItem(idStr);
+        if (cached.stack().isEmpty()) return idStr.toLowerCase(Locale.ROOT);
+        return cached.searchText();
     }
 
-    private static ItemSearchIndex.CachedItem buildBannedRuleCachedItem(String idStr) {
-        ItemSearchIndex.CachedItem cached = buildOriginalCachedItem(idStr);
-        if (cached != null && !cached.stack.isEmpty()) return cached;
+    private static KineticItemSearch.CachedItem buildBannedRuleCachedItem(String idStr) {
+        KineticItemSearch.CachedItem cached = buildOriginalCachedItem(idStr);
+        if (cached != null && !cached.stack().isEmpty()) return cached;
 
         ItemStack fallback = buildBaseStackForIdentifier(idStr);
-        if (!fallback.isEmpty()) return ItemSearchIndex.CachedItem.custom(fallback, idStr);
-        return ItemSearchIndex.CachedItem.custom(new ItemStack(Items.BARRIER), idStr);
+        if (!fallback.isEmpty()) return KineticItemSearch.customSnapshot(fallback, idStr);
+        return KineticItemSearch.customSnapshot(new ItemStack(Items.BARRIER), idStr);
     }
 
-    private static ItemSearchIndex.CachedItem buildOriginalCachedItem(String idStr) {
+    private static KineticItemSearch.CachedItem buildOriginalCachedItem(String idStr) {
         if (idStr == null || idStr.isEmpty()) return null;
-        final ItemSearchIndex.CachedItem[] result = new ItemSearchIndex.CachedItem[1];
+        final KineticItemSearch.CachedItem[] result = new KineticItemSearch.CachedItem[1];
         ItemBanControl.withSkip(() -> {
             ItemStack stack = WorldBlockConfig.parseItemStack(idStr);
             if (stack != null && !stack.isEmpty()) {
-                result[0] = ItemSearchIndex.CachedItem.custom(stack, idStr);
+                result[0] = KineticItemSearch.customSnapshot(stack, idStr);
             }
             return null;
         });
@@ -405,7 +400,7 @@ public final class ItemSearchCache {
         try {
             String baseId = getBaseIdentifier(idStr);
             if (baseId.isBlank()) return ItemStack.EMPTY;
-            Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(baseId));
+            Item item = KineticRegistries.items().get(new ResourceLocation(baseId));
             if (item == null || item == Items.AIR) return ItemStack.EMPTY;
             return new ItemStack(item);
         } catch (Throwable ignored) {
@@ -417,27 +412,27 @@ public final class ItemSearchCache {
         return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static int hashCachedItemIds(List<ItemSearchIndex.CachedItem> items) {
+    private static int hashCachedItemIds(List<KineticItemSearch.CachedItem> items) {
         int hash = 1;
-        for (ItemSearchIndex.CachedItem item : items) {
+        for (KineticItemSearch.CachedItem item : items) {
             hash = 31 * hash + cachedIdentifier(item).hashCode();
         }
         return hash;
     }
 
-    private static String cachedIdentifier(ItemSearchIndex.CachedItem item) {
+    private static String cachedIdentifier(KineticItemSearch.CachedItem item) {
         if (item == null) return "";
-        if (item.idStr != null && (item.idStr.startsWith("@") || item.idStr.startsWith("#") || item.idStr.contains("{"))) {
-            return item.idStr;
+        if (item.id() != null && (item.id().startsWith("@") || item.id().startsWith("#") || item.id().contains("{"))) {
+            return item.id();
         }
-        ItemStack stack = item.stack;
+        ItemStack stack = item.stack();
         if (stack != null && !stack.isEmpty() && stack.hasTag()) {
             try {
                 return WorldBlockConfig.getItemIdentifier(stack);
             } catch (Throwable ignored) {
             }
         }
-        return item.idStr == null ? "" : item.idStr;
+        return item.id() == null ? "" : item.id();
     }
 
     private static void trimExpired(long now) {
@@ -466,7 +461,7 @@ public final class ItemSearchCache {
         }
     }
 
-    private record Snapshot(List<ItemSearchIndex.CachedItem> allItems, Map<String, String> searchDataById, Map<String, Set<String>> tagsById, List<String> allMods, List<String> allTags, int allItemsHash, long createdAt) {
+    private record Snapshot(List<KineticItemSearch.CachedItem> allItems, Map<String, String> searchDataById, Map<String, Set<String>> tagsById, List<String> allMods, List<String> allTags, int allItemsHash, long createdAt) {
         boolean isAlive(long now) {
             return !allItems.isEmpty() && now - createdAt <= TTL_MS;
         }

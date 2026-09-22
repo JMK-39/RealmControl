@@ -1,8 +1,15 @@
 package dev.xyat.realmcontrol.worldgen.network;
 
 import com.mojang.datafixers.util.Pair;
-import dev.xyat.kineticcore.api.KTNetworkProtocol;
-import dev.xyat.kineticcore.api.NetworkCompressUtil;
+import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.network.KineticCompression;
+import dev.xyat.kineticcore.api.network.NetworkBuffer;
+import dev.xyat.kineticcore.api.network.NetworkBuffers;
+import dev.xyat.kineticcore.api.network.NetworkCodec;
+import dev.xyat.kineticcore.api.network.NetworkVersionPolicy;
+import dev.xyat.kineticcore.api.network.PacketChannel;
+import dev.xyat.kineticcore.api.network.ServerPacketContext;
+import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.realmcontrol.worldgen.WorldGenModule;
 import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import dev.xyat.realmcontrol.worldgen.config.StructureEntryRule;
@@ -10,14 +17,12 @@ import dev.xyat.realmcontrol.worldgen.config.StructureGenerationControl;
 import dev.xyat.realmcontrol.worldgen.config.StructurePlacementRule;
 import dev.xyat.realmcontrol.worldgen.config.WorldGenConfig;
 import dev.xyat.realmcontrol.worldgen.data.StructureRuleDescriptor;
-import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -30,15 +35,6 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.server.ServerAboutToStartEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,10 +45,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@Mod.EventBusSubscriber(modid = WorldGenModule.MODID)
 public class WorldGenNetwork {
     private static final String PROTOCOL_VERSION = "6";
     private static final int MAX_COMPRESSED_PAYLOAD_BYTES = 8 * 1024 * 1024;
@@ -60,55 +55,78 @@ public class WorldGenNetwork {
     private static final int MAX_STRING_LIST_SIZE = 65536;
     private static final int MAX_RULE_LIST_SIZE = 32768;
     private static final int LOCATE_RADIUS_CHUNKS = 100;
-    public static SimpleChannel CHANNEL;
+    private static boolean eventsInstalled;
+    public static final PacketChannel CHANNEL = PacketChannel.create(
+            new ResourceLocation(WorldGenModule.MODID, "worldgen"),
+            PROTOCOL_VERSION,
+            NetworkVersionPolicy.ANY
+    );
 
     public static void register() {
-        CHANNEL = NetworkRegistry.newSimpleChannel(
-                new ResourceLocation(WorldGenModule.MODID, "worldgen"),
-                () -> PROTOCOL_VERSION,
-                KTNetworkProtocol::acceptsAnyVersion,
-                KTNetworkProtocol::acceptsAnyVersion
-        );
-
-        int id = 0;
-        CHANNEL.registerMessage(id++, OpenWorldGenGuiPacket.class, OpenWorldGenGuiPacket::toBytes, OpenWorldGenGuiPacket::decode, OpenWorldGenGuiPacket::handle);
-        CHANNEL.registerMessage(id++, SaveWorldGenPacket.class, SaveWorldGenPacket::toBytes, SaveWorldGenPacket::decode, SaveWorldGenPacket::handle);
-        CHANNEL.registerMessage(id++, SaveWorldGenResultPacket.class, SaveWorldGenResultPacket::toBytes, SaveWorldGenResultPacket::new, SaveWorldGenResultPacket::handle);
-        CHANNEL.registerMessage(id++, RequestOpenWorldGenGuiPacket.class, RequestOpenWorldGenGuiPacket::toBytes, RequestOpenWorldGenGuiPacket::new, RequestOpenWorldGenGuiPacket::handle);
-        CHANNEL.registerMessage(id++, RequestStructureRegistryPacket.class, RequestStructureRegistryPacket::toBytes, RequestStructureRegistryPacket::new, RequestStructureRegistryPacket::handle);
-        CHANNEL.registerMessage(id++, StructureRegistryPacket.class, StructureRegistryPacket::toBytes, StructureRegistryPacket::decode, StructureRegistryPacket::handle);
-        CHANNEL.registerMessage(id++, LocateStructurePacket.class, LocateStructurePacket::toBytes, LocateStructurePacket::new, LocateStructurePacket::handle);
-        CHANNEL.registerMessage(id++, TeleportStructureDimensionPacket.class, TeleportStructureDimensionPacket::toBytes, TeleportStructureDimensionPacket::new, TeleportStructureDimensionPacket::handle);
-        CHANNEL.registerMessage(id++, StructureActionResultPacket.class, StructureActionResultPacket::toBytes, StructureActionResultPacket::new, StructureActionResultPacket::handle);
-        CHANNEL.registerMessage(id++, RequestOpenBiomeControlPacket.class, RequestOpenBiomeControlPacket::toBytes, RequestOpenBiomeControlPacket::new, RequestOpenBiomeControlPacket::handle);
-        CHANNEL.registerMessage(id++, OpenBiomeControlPacket.class, OpenBiomeControlPacket::toBytes, OpenBiomeControlPacket::decode, OpenBiomeControlPacket::handle);
-        CHANNEL.registerMessage(id, SaveBiomeControlPacket.class, SaveBiomeControlPacket::toBytes, SaveBiomeControlPacket::decode, SaveBiomeControlPacket::handle);
+        CHANNEL.registerClientbound(0, OpenWorldGenGuiPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), OpenWorldGenGuiPacket::decode),
+                OpenWorldGenGuiPacket::handleClient);
+        CHANNEL.registerServerbound(1, SaveWorldGenPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), SaveWorldGenPacket::decode),
+                SaveWorldGenPacket::handle);
+        CHANNEL.registerClientbound(2, SaveWorldGenResultPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), SaveWorldGenResultPacket::new),
+                SaveWorldGenResultPacket::handleClient);
+        CHANNEL.registerServerbound(3, RequestOpenWorldGenGuiPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), RequestOpenWorldGenGuiPacket::new),
+                RequestOpenWorldGenGuiPacket::handle);
+        CHANNEL.registerServerbound(4, RequestStructureRegistryPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), RequestStructureRegistryPacket::new),
+                RequestStructureRegistryPacket::handle);
+        CHANNEL.registerClientbound(5, StructureRegistryPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructureRegistryPacket::decode),
+                StructureRegistryPacket::handleClient);
+        CHANNEL.registerServerbound(6, LocateStructurePacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), LocateStructurePacket::new),
+                LocateStructurePacket::handle);
+        CHANNEL.registerServerbound(7, TeleportStructureDimensionPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), TeleportStructureDimensionPacket::new),
+                TeleportStructureDimensionPacket::handle);
+        CHANNEL.registerClientbound(8, StructureActionResultPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructureActionResultPacket::new),
+                StructureActionResultPacket::handleClient);
+        CHANNEL.registerServerbound(9, RequestOpenBiomeControlPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), RequestOpenBiomeControlPacket::new),
+                RequestOpenBiomeControlPacket::handle);
+        CHANNEL.registerClientbound(10, OpenBiomeControlPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), OpenBiomeControlPacket::decode),
+                OpenBiomeControlPacket::handleClient);
+        CHANNEL.registerServerbound(11, SaveBiomeControlPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), SaveBiomeControlPacket::decode),
+                SaveBiomeControlPacket::handle);
+        installEvents();
     }
 
-    @SubscribeEvent
-    public static void onServerAboutToStart(ServerAboutToStartEvent event) {
-        WorldGenConfig.load();
+    private static void installEvents() {
+        if (eventsInstalled) return;
+        eventsInstalled = true;
+        KineticServerEvents.onAboutToStart(KineticEventPriority.NORMAL, server -> WorldGenConfig.load());
     }
 
-    private static void writeCompressedPayload(FriendlyByteBuf target, Consumer<FriendlyByteBuf> writer) {
-        FriendlyByteBuf payload = new FriendlyByteBuf(Unpooled.buffer());
-        try {
-            writer.accept(payload);
-            byte[] raw = new byte[payload.readableBytes()];
-            payload.getBytes(payload.readerIndex(), raw);
-            target.writeByteArray(NetworkCompressUtil.compressBytes(raw));
-        } finally {
-            payload.release();
+
+    private static void writeCompressedPayload(NetworkBuffer target, Consumer<NetworkBuffer> writer) {
+        byte[] raw = NetworkBuffers.encode(writer);
+        if (raw.length > MAX_DECOMPRESSED_PAYLOAD_BYTES) {
+            throw new IllegalArgumentException("Network payload exceeds decompressed size limit");
         }
+        target.writeByteArray(
+                KineticCompression.compressBytes(raw, MAX_COMPRESSED_PAYLOAD_BYTES),
+                MAX_COMPRESSED_PAYLOAD_BYTES
+        );
     }
 
-    private static FriendlyByteBuf readCompressedPayload(FriendlyByteBuf source) {
+    private static <T> T readCompressedPayload(NetworkBuffer source, Function<NetworkBuffer, T> reader) {
         byte[] compressed = source.readByteArray(MAX_COMPRESSED_PAYLOAD_BYTES);
-        byte[] raw = NetworkCompressUtil.decompressBytes(compressed, MAX_DECOMPRESSED_PAYLOAD_BYTES);
-        return new FriendlyByteBuf(Unpooled.wrappedBuffer(raw));
+        byte[] raw = KineticCompression.decompressBytes(compressed, MAX_DECOMPRESSED_PAYLOAD_BYTES);
+        return NetworkBuffers.decode(raw, reader);
     }
 
-    private static void writeStringList(FriendlyByteBuf buf, List<String> values) {
+    private static void writeStringList(NetworkBuffer buf, List<String> values) {
         List<String> safeValues = values == null ? List.of() : values;
         if (safeValues.size() > MAX_STRING_LIST_SIZE) {
             throw new IllegalArgumentException("Too many string values");
@@ -119,7 +137,7 @@ public class WorldGenNetwork {
         }
     }
 
-    private static List<String> readStringList(FriendlyByteBuf buf) {
+    private static List<String> readStringList(NetworkBuffer buf) {
         int size = buf.readVarInt();
         if (size < 0 || size > MAX_STRING_LIST_SIZE) {
             throw new IllegalArgumentException("Invalid string list size");
@@ -132,7 +150,7 @@ public class WorldGenNetwork {
     }
 
 
-    private static void writeBiomeRuleList(FriendlyByteBuf buf, List<BiomeReplacementRule> rules) {
+    private static void writeBiomeRuleList(NetworkBuffer buf, List<BiomeReplacementRule> rules) {
         List<BiomeReplacementRule> safeRules = rules == null ? List.of() : rules;
         if (safeRules.size() > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Too many biome rules");
@@ -145,7 +163,7 @@ public class WorldGenNetwork {
         }
     }
 
-    private static List<BiomeReplacementRule> readBiomeRuleList(FriendlyByteBuf buf) {
+    private static List<BiomeReplacementRule> readBiomeRuleList(NetworkBuffer buf) {
         int size = buf.readVarInt();
         if (size < 0 || size > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Invalid biome rule list size");
@@ -193,9 +211,7 @@ public class WorldGenNetwork {
         }
         WorldGenConfig.load();
         MinecraftServer server = player.server;
-        CHANNEL.send(
-                PacketDistributor.PLAYER.with(() -> player),
-                new OpenWorldGenGuiPacket(
+        CHANNEL.sendToPlayer(player, new OpenWorldGenGuiPacket(
                         WorldGenConfig.enableStructureBlocking,
                         getAllStructureIds(server),
                         StructureGenerationControl.getDescriptors(server)
@@ -211,60 +227,44 @@ public class WorldGenNetwork {
     }
 
     public record LocateStructurePacket(String structureId) {
-        public LocateStructurePacket(FriendlyByteBuf buf) {
+        public LocateStructurePacket(NetworkBuffer buf) {
             this(buf.readUtf(32767));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             buf.writeUtf(structureId == null ? "" : structureId);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player != null) {
-                    handleLocateStructure(player, structureId);
-                }
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            handleLocateStructure(context.sender(), structureId);
         }
     }
 
     public record TeleportStructureDimensionPacket(String structureId) {
-        public TeleportStructureDimensionPacket(FriendlyByteBuf buf) {
+        public TeleportStructureDimensionPacket(NetworkBuffer buf) {
             this(buf.readUtf(32767));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             buf.writeUtf(structureId == null ? "" : structureId);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player != null) {
-                    handleTeleportStructureDimension(player, structureId);
-                }
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            handleTeleportStructureDimension(context.sender(), structureId);
         }
     }
 
     public record StructureActionResultPacket(Component message) {
-        public StructureActionResultPacket(FriendlyByteBuf buf) {
+        public StructureActionResultPacket(NetworkBuffer buf) {
             this(buf.readComponent());
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             buf.writeComponent(message);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> WorldGenNetworkClient.handleStructureActionResult(message)
-            ));
-            ctx.get().setPacketHandled(true);
+        public void handleClient() {
+            WorldGenNetworkClient.handleStructureActionResult(message);
         }
     }
 
@@ -461,77 +461,60 @@ public class WorldGenNetwork {
     }
 
     private static void sendStructureActionResult(ServerPlayer player, Component message) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new StructureActionResultPacket(message));
+        CHANNEL.sendToPlayer(player, new StructureActionResultPacket(message));
     }
 
     public record RequestOpenWorldGenGuiPacket() {
-        public RequestOpenWorldGenGuiPacket(FriendlyByteBuf buf) {
+        public RequestOpenWorldGenGuiPacket(NetworkBuffer buf) {
             this();
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player != null && player.hasPermissions(2)) {
-                    openEditorForPlayer(player);
-                }
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
+            if (player.hasPermissions(2)) {
+                openEditorForPlayer(player);
+            }
         }
     }
 
     public record RequestStructureRegistryPacket() {
-        public RequestStructureRegistryPacket(FriendlyByteBuf buf) {
+        public RequestStructureRegistryPacket(NetworkBuffer buf) {
             this();
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player == null || !player.hasPermissions(2)) {
-                    return;
-                }
-                CHANNEL.send(
-                        PacketDistributor.PLAYER.with(() -> player),
-                        new StructureRegistryPacket(
-                                getAllStructureIds(player.server),
-                                StructureGenerationControl.getDescriptors(player.server)
-                        )
-                );
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
+            if (!player.hasPermissions(2)) {
+                return;
+            }
+            CHANNEL.sendToPlayer(player, new StructureRegistryPacket(
+                    getAllStructureIds(player.server),
+                    StructureGenerationControl.getDescriptors(player.server)
+            ));
         }
     }
 
     public record StructureRegistryPacket(List<String> structures, List<StructureRuleDescriptor> descriptors) {
-        public static StructureRegistryPacket decode(FriendlyByteBuf buf) {
-            FriendlyByteBuf payload = readCompressedPayload(buf);
-            try {
-                return new StructureRegistryPacket(readStringList(payload), readDescriptorList(payload));
-            } finally {
-                payload.release();
-            }
+        public static StructureRegistryPacket decode(NetworkBuffer buf) {
+            return readCompressedPayload(buf, payload ->
+                    new StructureRegistryPacket(readStringList(payload), readDescriptorList(payload)));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             writeCompressedPayload(buf, payload -> {
                 writeStringList(payload, structures);
                 writeDescriptorList(payload, descriptors);
             });
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> WorldGenNetworkClient.handleStructureRegistry(structures, descriptors)
-            ));
-            ctx.get().setPacketHandled(true);
+        public void handleClient() {
+            WorldGenNetworkClient.handleStructureRegistry(structures, descriptors);
         }
     }
 
@@ -540,20 +523,15 @@ public class WorldGenNetwork {
             List<String> allStructs,
             List<StructureRuleDescriptor> structureDescriptors
     ) {
-        public static OpenWorldGenGuiPacket decode(FriendlyByteBuf buf) {
-            FriendlyByteBuf payload = readCompressedPayload(buf);
-            try {
-                return new OpenWorldGenGuiPacket(
-                        payload.readBoolean(),
-                        readStringList(payload),
-                        readDescriptorList(payload)
-                );
-            } finally {
-                payload.release();
-            }
+        public static OpenWorldGenGuiPacket decode(NetworkBuffer buf) {
+            return readCompressedPayload(buf, payload -> new OpenWorldGenGuiPacket(
+                    payload.readBoolean(),
+                    readStringList(payload),
+                    readDescriptorList(payload)
+            ));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             writeCompressedPayload(buf, payload -> {
                 payload.writeBoolean(structureBlockingEnable);
                 writeStringList(payload, allStructs);
@@ -561,30 +539,22 @@ public class WorldGenNetwork {
             });
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> WorldGenNetworkClient.handleOpenGui(this)
-            ));
-            ctx.get().setPacketHandled(true);
+        public void handleClient() {
+            WorldGenNetworkClient.handleOpenGui(this);
         }
     }
 
     public record SaveWorldGenResultPacket(boolean success) {
-        public SaveWorldGenResultPacket(FriendlyByteBuf buf) {
+        public SaveWorldGenResultPacket(NetworkBuffer buf) {
             this(buf.readBoolean());
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             buf.writeBoolean(success);
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> WorldGenNetworkClient.handleSaveResult(success)
-            ));
-            ctx.get().setPacketHandled(true);
+        public void handleClient() {
+            WorldGenNetworkClient.handleSaveResult(success);
         }
     }
 
@@ -593,20 +563,15 @@ public class WorldGenNetwork {
             List<StructureEntryRule> entryRules,
             List<StructurePlacementRule> placementRules
     ) {
-        public static SaveWorldGenPacket decode(FriendlyByteBuf buf) {
-            FriendlyByteBuf payload = readCompressedPayload(buf);
-            try {
-                return new SaveWorldGenPacket(
-                        payload.readBoolean(),
-                        readEntryRuleList(payload),
-                        readPlacementRuleList(payload)
-                );
-            } finally {
-                payload.release();
-            }
+        public static SaveWorldGenPacket decode(NetworkBuffer buf) {
+            return readCompressedPayload(buf, payload -> new SaveWorldGenPacket(
+                    payload.readBoolean(),
+                    readEntryRuleList(payload),
+                    readPlacementRuleList(payload)
+            ));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             writeCompressedPayload(buf, payload -> {
                 payload.writeBoolean(structureBlockingEnable);
                 writeEntryRuleList(payload, entryRules);
@@ -614,62 +579,53 @@ public class WorldGenNetwork {
             });
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player == null) {
-                    return;
-                }
-                if (!player.hasPermissions(2)) {
-                    sendSaveResult(player, false);
-                    return;
-                }
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
+            if (!player.hasPermissions(2)) {
+                sendSaveResult(player, false);
+                return;
+            }
 
-                Set<String> allowedStructures = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE).keySet().stream()
-                        .map(ResourceLocation::toString)
-                        .collect(Collectors.toSet());
-                Set<String> allowedStructureSets = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE_SET).keySet().stream()
-                        .map(ResourceLocation::toString)
-                        .collect(Collectors.toSet());
+            Set<String> allowedStructures = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE).keySet().stream()
+                    .map(ResourceLocation::toString)
+                    .collect(Collectors.toSet());
+            Set<String> allowedStructureSets = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE_SET).keySet().stream()
+                    .map(ResourceLocation::toString)
+                    .collect(Collectors.toSet());
 
-                if (!validateEntryRules(entryRules, allowedStructures)
-                        || !validatePlacementRules(placementRules, allowedStructureSets, StructureGenerationControl.getDescriptors(player.server))) {
-                    sendSaveResult(player, false);
-                    return;
-                }
+            if (hasInvalidEntryRules(entryRules, allowedStructures)
+                    || !validatePlacementRules(placementRules, allowedStructureSets, StructureGenerationControl.getDescriptors(player.server))) {
+                sendSaveResult(player, false);
+                return;
+            }
 
-                try {
-                    WorldGenConfig.enableStructureBlocking = structureBlockingEnable;
-                    WorldGenConfig.structureEntryRules = sanitizeEntryRules(entryRules, allowedStructures);
-                    WorldGenConfig.structurePlacementRules = sanitizePlacementRules(placementRules, allowedStructureSets);
-                    WorldGenConfig.save();
-                    sendSaveResult(player, true);
-                } catch (Throwable throwable) {
-                    WorldGenModule.LOGGER.error("Failed to save structure generation config", throwable);
-                    sendSaveResult(player, false);
-                }
-            });
-            ctx.get().setPacketHandled(true);
+            try {
+                WorldGenConfig.enableStructureBlocking = structureBlockingEnable;
+                WorldGenConfig.structureEntryRules = sanitizeEntryRules(entryRules, allowedStructures);
+                WorldGenConfig.structurePlacementRules = sanitizePlacementRules(placementRules, allowedStructureSets);
+                WorldGenConfig.save();
+                sendSaveResult(player, true);
+            } catch (Throwable throwable) {
+                WorldGenModule.LOGGER.error("Failed to save structure generation config", throwable);
+                sendSaveResult(player, false);
+            }
         }
     }
 
     public record RequestOpenBiomeControlPacket() {
-        public RequestOpenBiomeControlPacket(FriendlyByteBuf ignored) {
+        public RequestOpenBiomeControlPacket(NetworkBuffer ignored) {
             this();
         }
 
-        public void toBytes(FriendlyByteBuf ignored) {
+        public void toBytes(NetworkBuffer ignored) {
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player == null || !player.hasPermissions(2)) {
-                    return;
-                }
-                sendBiomeControlEditor(player);
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
+            if (!player.hasPermissions(2)) {
+                return;
+            }
+            sendBiomeControlEditor(player);
         }
     }
 
@@ -680,22 +636,17 @@ public class WorldGenNetwork {
             List<String> biomeTags,
             List<String> dimensions
     ) {
-        public static OpenBiomeControlPacket decode(FriendlyByteBuf buf) {
-            FriendlyByteBuf payload = readCompressedPayload(buf);
-            try {
-                return new OpenBiomeControlPacket(
-                        payload.readBoolean(),
-                        readBiomeRuleList(payload),
-                        readStringList(payload),
-                        readStringList(payload),
-                        readStringList(payload)
-                );
-            } finally {
-                payload.release();
-            }
+        public static OpenBiomeControlPacket decode(NetworkBuffer buf) {
+            return readCompressedPayload(buf, payload -> new OpenBiomeControlPacket(
+                    payload.readBoolean(),
+                    readBiomeRuleList(payload),
+                    readStringList(payload),
+                    readStringList(payload),
+                    readStringList(payload)
+            ));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             writeCompressedPayload(buf, payload -> {
                 payload.writeBoolean(enabled);
                 writeBiomeRuleList(payload, rules);
@@ -705,54 +656,43 @@ public class WorldGenNetwork {
             });
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
-                    Dist.CLIENT,
-                    () -> () -> WorldGenNetworkClient.handleOpenBiomeControl(this)
-            ));
-            ctx.get().setPacketHandled(true);
+        public void handleClient() {
+            WorldGenNetworkClient.handleOpenBiomeControl(this);
         }
     }
 
     public record SaveBiomeControlPacket(boolean enabled, List<BiomeReplacementRule> rules) {
-        public static SaveBiomeControlPacket decode(FriendlyByteBuf buf) {
-            FriendlyByteBuf payload = readCompressedPayload(buf);
-            try {
-                return new SaveBiomeControlPacket(payload.readBoolean(), readBiomeRuleList(payload));
-            } finally {
-                payload.release();
-            }
+        public static SaveBiomeControlPacket decode(NetworkBuffer buf) {
+            return readCompressedPayload(buf, payload ->
+                    new SaveBiomeControlPacket(payload.readBoolean(), readBiomeRuleList(payload)));
         }
 
-        public void toBytes(FriendlyByteBuf buf) {
+        public void toBytes(NetworkBuffer buf) {
             writeCompressedPayload(buf, payload -> {
                 payload.writeBoolean(enabled);
                 writeBiomeRuleList(payload, rules);
             });
         }
 
-        public void handle(Supplier<NetworkEvent.Context> ctx) {
-            ctx.get().enqueueWork(() -> {
-                ServerPlayer player = ctx.get().getSender();
-                if (player == null || !player.hasPermissions(2)) {
-                    if (player != null) sendSaveResult(player, false);
-                    return;
-                }
-                if (!validateBiomeRules(player.server, rules)) {
-                    sendSaveResult(player, false);
-                    return;
-                }
-                try {
-                    WorldGenConfig.enableBiomeControl = enabled;
-                    WorldGenConfig.biomeReplacementRules = new ArrayList<>(rules);
-                    WorldGenConfig.save();
-                    sendSaveResult(player, true);
-                } catch (Throwable throwable) {
-                    WorldGenModule.LOGGER.error("Failed to save biome generation config", throwable);
-                    sendSaveResult(player, false);
-                }
-            });
-            ctx.get().setPacketHandled(true);
+        public void handle(ServerPacketContext context) {
+            ServerPlayer player = context.sender();
+            if (!player.hasPermissions(2)) {
+                sendSaveResult(player, false);
+                return;
+            }
+            if (!validateBiomeRules(player.server, rules)) {
+                sendSaveResult(player, false);
+                return;
+            }
+            try {
+                WorldGenConfig.enableBiomeControl = enabled;
+                WorldGenConfig.biomeReplacementRules = new ArrayList<>(rules);
+                WorldGenConfig.save();
+                sendSaveResult(player, true);
+            } catch (Throwable throwable) {
+                WorldGenModule.LOGGER.error("Failed to save biome generation config", throwable);
+                sendSaveResult(player, false);
+            }
         }
     }
 
@@ -762,7 +702,7 @@ public class WorldGenNetwork {
         List<String> biomes = biomeRegistry.keySet().stream().map(ResourceLocation::toString).sorted().toList();
         List<String> tags = biomeRegistry.getTagNames().map(tag -> "#" + tag.location()).sorted().toList();
         List<String> dimensions = getSupportedBiomeControlDimensions(player.server);
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenBiomeControlPacket(
+        CHANNEL.sendToPlayer(player, new OpenBiomeControlPacket(
                 WorldGenConfig.enableBiomeControl,
                 new ArrayList<>(WorldGenConfig.biomeReplacementRules),
                 biomes,
@@ -803,17 +743,17 @@ public class WorldGenNetwork {
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean success) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SaveWorldGenResultPacket(success));
+        CHANNEL.sendToPlayer(player, new SaveWorldGenResultPacket(success));
     }
 
-    private static boolean validateEntryRules(List<StructureEntryRule> rules, Set<String> allowedStructures) {
-        if (rules == null) return false;
+    private static boolean hasInvalidEntryRules(List<StructureEntryRule> rules, Set<String> allowedStructures) {
+        if (rules == null) return true;
         Set<String> seen = new HashSet<>();
         for (StructureEntryRule rule : rules) {
-            if (rule == null || !allowedStructures.contains(rule.structureId()) || !seen.add(rule.structureId())) return false;
-            if (rule.weight() != null && rule.weight() <= 0) return false;
+            if (rule == null || !allowedStructures.contains(rule.structureId()) || !seen.add(rule.structureId())) return true;
+            if (rule.weight() != null && rule.weight() <= 0) return true;
         }
-        return true;
+        return false;
     }
 
     private static boolean validatePlacementRules(
@@ -871,7 +811,7 @@ public class WorldGenNetwork {
         return result;
     }
 
-    private static void writeEntryRuleList(FriendlyByteBuf buf, List<StructureEntryRule> rules) {
+    private static void writeEntryRuleList(NetworkBuffer buf, List<StructureEntryRule> rules) {
         List<StructureEntryRule> safeRules = rules == null ? List.of() : rules;
         if (safeRules.size() > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Too many structure entry rules");
@@ -880,7 +820,7 @@ public class WorldGenNetwork {
         for (StructureEntryRule rule : safeRules) writeEntryRule(buf, rule);
     }
 
-    private static List<StructureEntryRule> readEntryRuleList(FriendlyByteBuf buf) {
+    private static List<StructureEntryRule> readEntryRuleList(NetworkBuffer buf) {
         int size = buf.readVarInt();
         if (size < 0 || size > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Invalid structure entry rule count");
@@ -890,17 +830,17 @@ public class WorldGenNetwork {
         return result;
     }
 
-    private static void writeEntryRule(FriendlyByteBuf buf, StructureEntryRule rule) {
+    private static void writeEntryRule(NetworkBuffer buf, StructureEntryRule rule) {
         buf.writeUtf(rule.structureId());
         buf.writeBoolean(rule.disabled());
         writeNullableInt(buf, rule.weight());
     }
 
-    private static StructureEntryRule readEntryRule(FriendlyByteBuf buf) {
+    private static StructureEntryRule readEntryRule(NetworkBuffer buf) {
         return new StructureEntryRule(buf.readUtf(), buf.readBoolean(), readNullableInt(buf));
     }
 
-    private static void writePlacementRuleList(FriendlyByteBuf buf, List<StructurePlacementRule> rules) {
+    private static void writePlacementRuleList(NetworkBuffer buf, List<StructurePlacementRule> rules) {
         List<StructurePlacementRule> safeRules = rules == null ? List.of() : rules;
         if (safeRules.size() > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Too many structure placement rules");
@@ -909,7 +849,7 @@ public class WorldGenNetwork {
         for (StructurePlacementRule rule : safeRules) writePlacementRule(buf, rule);
     }
 
-    private static List<StructurePlacementRule> readPlacementRuleList(FriendlyByteBuf buf) {
+    private static List<StructurePlacementRule> readPlacementRuleList(NetworkBuffer buf) {
         int size = buf.readVarInt();
         if (size < 0 || size > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Invalid structure placement rule count");
@@ -919,7 +859,7 @@ public class WorldGenNetwork {
         return result;
     }
 
-    private static void writePlacementRule(FriendlyByteBuf buf, StructurePlacementRule rule) {
+    private static void writePlacementRule(NetworkBuffer buf, StructurePlacementRule rule) {
         buf.writeUtf(rule.structureSetId());
         writeNullableFloat(buf, rule.frequency());
         writeNullableInt(buf, rule.salt());
@@ -931,7 +871,7 @@ public class WorldGenNetwork {
         writeNullableInt(buf, rule.count());
     }
 
-    private static StructurePlacementRule readPlacementRule(FriendlyByteBuf buf) {
+    private static StructurePlacementRule readPlacementRule(NetworkBuffer buf) {
         return new StructurePlacementRule(
                 buf.readUtf(),
                 readNullableFloat(buf),
@@ -945,7 +885,7 @@ public class WorldGenNetwork {
         );
     }
 
-    private static void writeDescriptorList(FriendlyByteBuf buf, List<StructureRuleDescriptor> descriptors) {
+    private static void writeDescriptorList(NetworkBuffer buf, List<StructureRuleDescriptor> descriptors) {
         List<StructureRuleDescriptor> safeDescriptors = descriptors == null ? List.of() : descriptors;
         if (safeDescriptors.size() > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Too many structure descriptors");
@@ -954,7 +894,7 @@ public class WorldGenNetwork {
         for (StructureRuleDescriptor descriptor : safeDescriptors) writeDescriptor(buf, descriptor);
     }
 
-    private static List<StructureRuleDescriptor> readDescriptorList(FriendlyByteBuf buf) {
+    private static List<StructureRuleDescriptor> readDescriptorList(NetworkBuffer buf) {
         int size = buf.readVarInt();
         if (size < 0 || size > MAX_RULE_LIST_SIZE) {
             throw new IllegalArgumentException("Invalid structure descriptor count");
@@ -964,7 +904,7 @@ public class WorldGenNetwork {
         return result;
     }
 
-    private static void writeDescriptor(FriendlyByteBuf buf, StructureRuleDescriptor descriptor) {
+    private static void writeDescriptor(NetworkBuffer buf, StructureRuleDescriptor descriptor) {
         buf.writeUtf(descriptor.structureId());
         buf.writeUtf(descriptor.structureSetId());
         buf.writeUtf(descriptor.placementType());
@@ -984,7 +924,7 @@ public class WorldGenNetwork {
         if (descriptor.placementRule() != null) writePlacementRule(buf, descriptor.placementRule());
     }
 
-    private static StructureRuleDescriptor readDescriptor(FriendlyByteBuf buf) {
+    private static StructureRuleDescriptor readDescriptor(NetworkBuffer buf) {
         String structureId = buf.readUtf();
         String structureSetId = buf.readUtf();
         String placementType = buf.readUtf();
@@ -1008,30 +948,30 @@ public class WorldGenNetwork {
         );
     }
 
-    private static void writeNullableInt(FriendlyByteBuf buf, Integer value) {
+    private static void writeNullableInt(NetworkBuffer buf, Integer value) {
         buf.writeBoolean(value != null);
         if (value != null) buf.writeInt(value);
     }
 
-    private static Integer readNullableInt(FriendlyByteBuf buf) {
+    private static Integer readNullableInt(NetworkBuffer buf) {
         return buf.readBoolean() ? buf.readInt() : null;
     }
 
-    private static void writeNullableFloat(FriendlyByteBuf buf, Float value) {
+    private static void writeNullableFloat(NetworkBuffer buf, Float value) {
         buf.writeBoolean(value != null);
         if (value != null) buf.writeFloat(value);
     }
 
-    private static Float readNullableFloat(FriendlyByteBuf buf) {
+    private static Float readNullableFloat(NetworkBuffer buf) {
         return buf.readBoolean() ? buf.readFloat() : null;
     }
 
-    private static void writeNullableString(FriendlyByteBuf buf, String value) {
+    private static void writeNullableString(NetworkBuffer buf, String value) {
         buf.writeBoolean(value != null);
         if (value != null) buf.writeUtf(value);
     }
 
-    private static String readNullableString(FriendlyByteBuf buf) {
+    private static String readNullableString(NetworkBuffer buf) {
         return buf.readBoolean() ? buf.readUtf() : null;
     }
 }

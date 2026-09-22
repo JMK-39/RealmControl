@@ -14,7 +14,7 @@ World generation, world rules, beacon area control, and teleport permission tool
 [[dependencies.realmcontrol]]
 modId="forge"
 mandatory=true
-versionRange="[47.4.0,)"
+versionRange="[47.4.2,)"
 ordering="NONE"
 side="BOTH"
 
@@ -28,7 +28,7 @@ side="BOTH"
 [[dependencies.realmcontrol]]
 modId="kineticcore"
 mandatory=true
-versionRange="[26.9.8,)"
+versionRange="[26.9.20,)"
 ordering="AFTER"
 side="BOTH"
 

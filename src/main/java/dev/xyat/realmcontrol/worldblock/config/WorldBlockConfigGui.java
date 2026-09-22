@@ -1,8 +1,8 @@
 package dev.xyat.realmcontrol.worldblock.config;
 
-import dev.xyat.kineticcore.config.client.KTConfigApi;
-import dev.xyat.kineticcore.config.client.KTConfigPage;
-import dev.xyat.kineticcore.config.client.KTConfigScope;
+import dev.xyat.kineticcore.api.config.client.KTConfigApi;
+import dev.xyat.kineticcore.api.config.client.KTConfigPage;
+import dev.xyat.kineticcore.api.config.client.KTConfigScope;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -21,7 +21,7 @@ public final class WorldBlockConfigGui {
                 .scope(KTConfigScope.SERVER_AUTHORITATIVE)
                 .serverManaged()
                 .applyTiming(KTConfigPage.ApplyTiming.MIXED)
-                .section(Component.translatable("cfg.realmcontrol.worldblock.editors.title"))
+                .divider()
                 .description(Component.translatable("cfg.realmcontrol.worldblock.editors.description"))
                 .action(
                         "open_mergeore_editor",

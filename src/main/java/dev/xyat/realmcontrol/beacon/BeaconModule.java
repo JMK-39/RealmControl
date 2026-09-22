@@ -1,26 +1,29 @@
 package dev.xyat.realmcontrol.beacon;
 
+import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import com.mojang.logging.LogUtils;
+import dev.xyat.realmcontrol.beacon.client.BeaconGuiHandler;
+import dev.xyat.realmcontrol.beacon.client.BeaconRenderEventHandler;
+import dev.xyat.realmcontrol.beacon.client.BeaconTooltipHandler;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfigGui;
+import dev.xyat.realmcontrol.beacon.event.ChunkLoaderHandler;
+import dev.xyat.realmcontrol.beacon.event.SpawnPreventionHandler;
+import dev.xyat.realmcontrol.beacon.util.BeaconStateManager;
 import dev.xyat.realmcontrol.beacon.network.BeaconNetwork;
-import dev.xyat.kineticcore.config.server.KTServerConfigApi;
-import dev.xyat.kineticcore.config.server.KTServerConfigSpec;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import dev.xyat.kineticcore.api.config.server.KTServerConfigApi;
+import dev.xyat.kineticcore.api.config.server.KTServerConfigSpec;
 import org.slf4j.Logger;
 
 public final class BeaconModule {
     public static final String MODID = "realmcontrol";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public BeaconModule(FMLJavaModLoadingContext context) {
+    public BeaconModule() {
         BeaconConfig.load();
         KTServerConfigApi.register(KTServerConfigSpec.builder("realmcontrol:beacon")
                 .booleanValue("enable_chunk_loading", () -> BeaconConfig.enableBeaconChunkLoading, value -> BeaconConfig.enableBeaconChunkLoading = value)
-                .integerList("level_radii", () -> BeaconConfig.beaconLevelRadii, value -> BeaconConfig.beaconLevelRadii = value)
+                .intList("level_radii", () -> BeaconConfig.beaconLevelRadii, value -> BeaconConfig.beaconLevelRadii = value)
                 .booleanValue("enable_spawn_prevention", () -> BeaconConfig.enableBeaconSpawnPrevention, value -> BeaconConfig.enableBeaconSpawnPrevention = value)
                 .stringList("spawn_whitelist", () -> BeaconConfig.beaconSpawnWhitelist, value -> BeaconConfig.beaconSpawnWhitelist = value)
                 .stringList("spawn_blacklist", () -> BeaconConfig.beaconSpawnBlacklist, value -> BeaconConfig.beaconSpawnBlacklist = value)
@@ -35,6 +38,12 @@ public final class BeaconModule {
                 .onSave(BeaconConfig::save)
                 .build());
         BeaconNetwork.register();
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> BeaconConfigGui::load);
+        BeaconStateManager.install();
+        ChunkLoaderHandler.install();
+        SpawnPreventionHandler.install();
+        KineticPlatform.runOnClient(() -> BeaconConfigGui::load);
+        KineticPlatform.runOnClient(() -> BeaconGuiHandler::install);
+        KineticPlatform.runOnClient(() -> BeaconRenderEventHandler::install);
+        KineticPlatform.runOnClient(() -> BeaconTooltipHandler::install);
     }
 }

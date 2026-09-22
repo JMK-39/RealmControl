@@ -3,7 +3,7 @@ package dev.xyat.realmcontrol.worldgen.config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import dev.xyat.realmcontrol.worldgen.WorldGenModule;
-import net.minecraftforge.fml.loading.FMLPaths;
+import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 public class WorldGenConfig {
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("kineticcore/worldgen.toml");
+    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldgen.toml");
     private static CommentedFileConfig configData;
 
     public static boolean enableStructureBlocking = true;
