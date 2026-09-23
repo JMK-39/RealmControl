@@ -14,6 +14,7 @@ import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import dev.xyat.realmcontrol.worldgen.network.WorldGenNetwork;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -29,10 +30,13 @@ public final class BiomeControlScreen extends KineticScreen {
     private final List<String> biomes;
     private final List<String> biomeTags;
     private final List<String> dimensions;
-    private KineticEditBox searchBox;
     private RuleListWidget ruleList;
     private String search = "";
     private double scroll;
+
+    public Screen getParent() {
+        return parent;
+    }
 
     private record Snapshot(boolean enabled, List<BiomeReplacementRule> rules) {
     }
@@ -59,7 +63,7 @@ public final class BiomeControlScreen extends KineticScreen {
 
     @Override
     protected void buildUi() {
-        searchBox = null;
+        KineticEditBox searchBox;
         ruleList = null;
         int startX = 20;
         int panelW = canvasWidth() - 40;
@@ -86,7 +90,7 @@ public final class BiomeControlScreen extends KineticScreen {
                 () -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveBiomeControlPacket(enabled, new ArrayList<>(rules))));
         addButton(backX, topY, backW,
                 Component.translatable("gui.realmcontrol.worldgen.config.back"), null,
-                () -> onClose());
+                this::onClose);
 
         searchBox = addTextField(startX, 47, panelW, Component.empty(), Component.translatable("gui.realmcontrol.worldgen.biome.search"), null, null);
         searchBox.setValue(search);
@@ -118,13 +122,16 @@ public final class BiomeControlScreen extends KineticScreen {
         }
     }
 
-    void applyRule(int index, BiomeReplacementRule rule) {
+    int applyRule(int index, BiomeReplacementRule rule) {
+        int appliedIndex = index;
         if (index >= 0 && index < rules.size()) {
             rules.set(index, rule);
         } else {
             rules.add(rule);
+            appliedIndex = rules.size() - 1;
         }
         if (ruleList != null) ruleList.refresh();
+        return appliedIndex;
     }
 
     List<dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete.Suggestion> dimensionSuggestions() {

@@ -26,7 +26,6 @@ public final class StructureRuleEditScreen extends KineticScreen {
 
     private boolean disabled;
     private String spreadType;
-    private StateButton disabledButton;
     private StateButton spreadTypeButton;
 
     private KineticEditBox weightBox;
@@ -61,10 +60,10 @@ public final class StructureRuleEditScreen extends KineticScreen {
         int rowY = 84;
         int rowGap = 26;
 
-        disabledButton = addButtonWithHandler(360, 48, 125, disabledMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip"), button -> {
-                    disabled = !disabled;
-                    button.setText(disabledMessage());
-                });
+        StateButton disabledButton = addButtonWithHandler(360, 48, 125, disabledMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip"), button -> {
+            disabled = !disabled;
+            button.setText(disabledMessage());
+        });
 StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
         int currentWeight = entryRule != null && entryRule.weight() != null ? entryRule.weight() : descriptor.originalWeight();
         weightBox = addField("gui.realmcontrol.worldgen.structure_edit.weight", fieldX, rowY, fieldW, Integer.toString(currentWeight), Integer.toString(descriptor.originalWeight()));
@@ -109,9 +108,9 @@ rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", nu
         if (weightBox != null) weightBox.setTextEditable(assigned);
 
         int buttonY = this.canvasHeight() - 34;
-        addButton(158, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.save_current"), null, () -> saveCurrent());
-        addButton(263, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default"), Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip"), () -> resetDefault());
-        addButton(368, buttonY, 72, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, () -> back());
+        addButton(158, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.save_current"), null, this::saveCurrent);
+        addButton(263, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default"), Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip"), this::resetDefault);
+        addButton(368, buttonY, 72, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, this::back);
     }
 
     private KineticEditBox addField(String labelKey, int x, int y, int width, String value, String original) {
@@ -173,7 +172,6 @@ rows.add(new FieldRow(labelKey, box, original, y));
 
             parent.saveLocalStructureRules(descriptor, entryRule, placementRule);
             KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.structure_edit.staged_toast"));
-            back();
         } catch (RuntimeException ignored) {
             KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.structure_edit.invalid_toast"));
         }
@@ -289,6 +287,10 @@ rows.add(new FieldRow(labelKey, box, original, y));
 
     private String formatFloat(float value) {
         return String.format(Locale.ROOT, "%.6f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
+    }
+
+    public StateButton getSpreadTypeButton() {
+        return spreadTypeButton;
     }
 
     private record FieldRow(String labelKey, KineticEditBox box, String original, int y) {

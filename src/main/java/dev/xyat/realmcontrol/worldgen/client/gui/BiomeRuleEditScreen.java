@@ -4,9 +4,7 @@ import dev.xyat.kineticcore.api.client.text.KineticText;
 import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.screen.KineticScreen;
 import dev.xyat.kineticcore.api.client.theme.GuiTheme;
-import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete;
 import dev.xyat.kineticcore.api.client.widget.input.KineticAutoComplete.AutoCompleteBox;
-import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -16,7 +14,7 @@ import dev.xyat.kineticcore.api.client.widget.KineticControl;
 
 public final class BiomeRuleEditScreen extends KineticScreen {
     private final BiomeControlScreen parent;
-    private final int ruleIndex;
+    private int ruleIndex;
     private final BiomeReplacementRule original;
     private AutoCompleteBox dimensionBox;
     private AutoCompleteBox sourceBox;
@@ -58,8 +56,8 @@ public final class BiomeRuleEditScreen extends KineticScreen {
                     if (removeTarget) blurControl(targetBox);
                 });
 
-        addButton(x + 240, y + 202, 80, Component.translatable("gui.realmcontrol.worldgen.biome.editor.save"), null, () -> saveRule());
-        addButton(x + 325, y + 202, 75, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, () -> onClose());
+        addButton(x + 240, y + 202, 80, Component.translatable("gui.realmcontrol.worldgen.biome.editor.save"), null, this::saveRule);
+        addButton(x + 325, y + 202, 75, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, this::onClose);
     }
 
     private void saveRule() {
@@ -78,8 +76,7 @@ public final class BiomeRuleEditScreen extends KineticScreen {
             KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.biome.invalid_target"));
             return;
         }
-        parent.applyRule(ruleIndex, new BiomeReplacementRule(dimension, source, target));
-        onClose();
+        ruleIndex = parent.applyRule(ruleIndex, new BiomeReplacementRule(dimension, source, target));
     }
 
     @Override

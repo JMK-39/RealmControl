@@ -36,7 +36,7 @@
   "gui.realmcontrol.worldblock.banitem.block.merge.filter_state.group": "§eGroup",
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_source": "§aTarget: %s Available sources: %s §bFilter: %s",
   "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_target": "§eChoose the final replacement target. Available: %s",
-  "gui.realmcontrol.worldblock.banitem.block.merge.save": "§aSave & Apply",
+  "gui.realmcontrol.worldblock.banitem.block.merge.save": "§aSave",
   "gui.realmcontrol.worldblock.banitem.block.merge.save_success": "§aBlock merge rules saved. New-chunk rules update immediately; the Loaded Chunks switch takes effect only after a full game restart.",
   "gui.realmcontrol.worldblock.banitem.block.merge.search": "Search blocks",
   "gui.realmcontrol.worldblock.banitem.block.merge.title": "§bOre / Block Merge",
