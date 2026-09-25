@@ -24,7 +24,7 @@ apply plugin: 'org.spongepowered.mixin'
 
 configurations.configureEach {
     resolutionStrategy.cacheDynamicVersionsFor 99999, 'days'
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy.cacheChangingModulesFor 99999, 'days'
 }
 
 def getDynamicVersion() {
