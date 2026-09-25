@@ -120,10 +120,6 @@ For example, `/kt tpd allow count Alex 3` adds three uses, and `/kt tpd allow ti
 
 World data stores beacon chunk-loading state and one-time chunk rewrite markers. Teleport grants are player data. `/kt reload` reloads registered block, worldgen, and teleport configuration; it does not re-create an already running world's generation setup or replace a full restart for loaded-chunk mode.
 
-### Project
-
-Mod ID: `realmcontrol`. Author: **XYAT**. License: [LGPLv3](LICENSE.txt). Implementation: [source](src/main/java/dev/xyat/realmcontrol). Declared dependencies: [mods.toml](src/main/resources/META-INF/mods.toml).
-
 <a id="chinese"></a>
 
 ## 简体中文
@@ -241,7 +237,3 @@ Realm Control 提供世界方块、结构与群系生成、信标区域和传送
 | `teleport.toml` | 传送模式、绕过、总开关与拒绝消息 |
 
 信标强加载状态与旧区块一次性处理标记随世界保存，传送授权属于玩家数据。`/kt reload` 可重载已注册的方块、世界生成和传送配置，但不会重建运行中世界的生成设置，也不能代替旧区块模式所需的完整重启。
-
-### 项目信息
-
-模组 ID：`realmcontrol`。作者：**XYAT**。许可证：[LGPLv3](LICENSE.txt)。实现见[源码](src/main/java/dev/xyat/realmcontrol)，依赖声明见 [mods.toml](src/main/resources/META-INF/mods.toml)。
