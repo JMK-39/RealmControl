@@ -1,6 +1,6 @@
 # Realm Control
 
-[English](#english) | [简体中文](#chinese)
+[English](#english) | [简体中文](#chinese) | [CurseForge](https://www.curseforge.com/minecraft/mc-mods/realmcontrol)
 
 <a id="english"></a>
 
