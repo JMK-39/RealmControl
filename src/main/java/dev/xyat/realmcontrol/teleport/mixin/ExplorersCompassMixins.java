@@ -10,6 +10,7 @@ import dev.xyat.realmcontrol.teleport.api.ITeleportAuth;
 import dev.xyat.realmcontrol.teleport.config.TpdConfig;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -21,6 +22,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.function.Supplier;
@@ -34,7 +36,7 @@ public final class ExplorersCompassMixins {
         @Inject(method = "canTeleport", at = @At("HEAD"), cancellable = true)
         private static void realmcontrol_tpd$alwaysAllowExplorersTeleport(MinecraftServer server, Player player, CallbackInfoReturnable<Boolean> cir) {
             if (TpdConfig.enableTpModify) {
-                cir.setReturnValue(true);
+                cir.setReturnValue(player.hasPermissions(2) || player instanceof ITeleportAuth auth && auth.hasTpAuth());
             }
         }
     }
@@ -80,6 +82,48 @@ public final class ExplorersCompassMixins {
                 }
             });
             ctx.get().setPacketHandled(true);
+        }
+
+        @Unique
+        private void realmcontrol_tpd$sendTpFeedback(ServerPlayer player, ITeleportAuth auth) {
+            long now = System.currentTimeMillis();
+            Component message;
+            if (auth.realmcontrol_tpd$getTpExpiry() > now) {
+                long left = (auth.realmcontrol_tpd$getTpExpiry() - now) / 1000;
+                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.time", left);
+            } else {
+                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
+            }
+            player.displayClientMessage(message, true);
+        }
+    }
+
+    @Mixin(value = TeleportPacket.class, remap = false)
+    public static abstract class EnhancedLogic {
+        @Redirect(
+                method = "*",
+                require = 1,
+                at = @At(
+                        value = "INVOKE",
+                        target = "Lnet/minecraft/server/level/ServerPlayer;teleportTo(Lnet/minecraft/server/level/ServerLevel;DDDFF)V",
+                        remap = true
+                )
+        )
+        private void realmcontrol_tpd$authorizeEnhancedTeleport(ServerPlayer player, ServerLevel level, double x, double y, double z, float yRot, float xRot) {
+            if (!TpdConfig.enableTpModify || player.hasPermissions(2)) {
+                player.teleportTo(level, x, y, z, yRot, xRot);
+                return;
+            }
+
+            ITeleportAuth auth = (ITeleportAuth) player;
+            if (!auth.hasTpAuth()) {
+                player.sendSystemMessage(Component.translatable("cmd.realmcontrol.teleport.tpd.no_auth"));
+                return;
+            }
+
+            auth.consumeTpAuth();
+            player.teleportTo(level, x, y, z, yRot, xRot);
+            realmcontrol_tpd$sendTpFeedback(player, auth);
         }
 
         @Unique
