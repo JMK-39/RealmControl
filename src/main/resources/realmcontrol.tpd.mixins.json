@@ -3,12 +3,14 @@
   "package": "dev.xyat.realmcontrol.teleport.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "realmcontrol.mixins.refmap.json",
+  "plugin": "dev.xyat.realmcontrol.teleport.util.TeleportMixinPlugin",
   "mixins": [
     "TeleportCommandMixin",
     "PlayerTeleportDataMixin",
     "CommandsMixin",
     "EntitySelectorMixin",
     "ExplorersCompassMixins$Logic",
+    "ExplorersCompassMixins$EnhancedLogic",
     "ExplorersCompassMixins$Permission",
     "NaturesCompassMixins$Logic",
     "NaturesCompassMixins$Permission"
