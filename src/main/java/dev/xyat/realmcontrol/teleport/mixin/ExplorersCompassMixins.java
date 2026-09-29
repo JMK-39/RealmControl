@@ -145,47 +145,4 @@ public final class ExplorersCompassMixins {
         }
     }
 
-    @Mixin(value = TeleportPacket.class, remap = false)
-    public static abstract class EnhancedLogic {
-        @Redirect(
-                method = "*",
-                require = 1,
-                at = @At(
-                        value = "INVOKE",
-                        target = "Lnet/minecraft/server/level/ServerPlayer;teleportTo(Lnet/minecraft/server/level/ServerLevel;DDDLjava/util/Set;FF)Z",
-                        remap = true
-                )
-        )
-        private boolean realmcontrol_tpd$authorizeEnhancedTeleport(ServerPlayer player, ServerLevel level, double x, double y, double z, Set<RelativeMovement> relative, float yRot, float xRot) {
-            if (!TpdConfig.enableTpModify || player.hasPermissions(2)) {
-                return player.teleportTo(level, x, y, z, relative, yRot, xRot);
-            }
-
-            ITeleportAuth auth = (ITeleportAuth) player;
-            if (!auth.hasTpAuth()) {
-                player.sendSystemMessage(Component.translatable("cmd.realmcontrol.teleport.tpd.no_auth"));
-                return false;
-            }
-
-            boolean teleported = player.teleportTo(level, x, y, z, relative, yRot, xRot);
-            if (teleported) {
-                auth.consumeTpAuth();
-                realmcontrol_tpd$sendTpFeedback(player, auth);
-            }
-            return teleported;
-        }
-
-        @Unique
-        private void realmcontrol_tpd$sendTpFeedback(ServerPlayer player, ITeleportAuth auth) {
-            long now = System.currentTimeMillis();
-            Component message;
-            if (auth.realmcontrol_tpd$getTpExpiry() > now) {
-                long left = (auth.realmcontrol_tpd$getTpExpiry() - now) / 1000;
-                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.time", left);
-            } else {
-                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
-            }
-            player.displayClientMessage(message, true);
-        }
-    }
 }
