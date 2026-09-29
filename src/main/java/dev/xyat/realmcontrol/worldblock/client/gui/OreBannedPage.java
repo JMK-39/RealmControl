@@ -1,21 +1,23 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
-import dev.xyat.kineticcore.api.client.widget.input.KineticTextFields.KineticEditBox;
-import dev.xyat.kineticcore.api.client.widget.KineticControl;
-import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
+import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.kineticcore.api.client.gui.input.ScrollInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseDragInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseInput;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
+import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
+import dev.xyat.kineticcore.api.client.gui.scroll.KineticScrollController;
+import dev.xyat.kineticcore.api.client.gui.theme.KineticTheme;
+import dev.xyat.kineticcore.api.client.gui.ui.KineticUi;
+import dev.xyat.kineticcore.api.client.gui.widget.*;
+import dev.xyat.kineticcore.api.client.gui.widget.list.*;
+
 import dev.xyat.kineticcore.api.client.input.KineticMouseButtons;
-import dev.xyat.kineticcore.api.client.text.KineticText;
-import dev.xyat.kineticcore.api.client.theme.GuiTheme;
-import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
-import dev.xyat.kineticcore.api.client.screen.KineticScreen;
-import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.GridScrollController;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
@@ -23,7 +25,6 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import dev.xyat.kineticcore.api.registry.KineticRegistries;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,20 +33,18 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 
-public class OreBannedScreen extends KineticScreen {
+public class OreBannedPage extends KineticPage {
     private static final int SLOT_SIZE = 18;
 
     private static int viewMode = 0;
     private static int rememberedScrollOffset = 0;
     private static String lastSearchQuery = "";
 
-    private final Screen parent;
-
-    private KineticEditBox searchBox;
-    private StateButton ruleBtn;
-    private StateButton saveBtn;
-    private StateButton viewBtn;
-    private StateButton closeBtn;
+    private KineticTextField searchBox;
+    private KineticButton ruleBtn;
+    private KineticButton saveBtn;
+    private KineticButton viewBtn;
+    private KineticButton closeBtn;
 
     private final List<KineticItemSearch.CachedItem> allOreItems = new ArrayList<>();
     private final List<String> oreTags = new ArrayList<>();
@@ -61,15 +60,13 @@ public class OreBannedScreen extends KineticScreen {
     private int contentW;
     private boolean compactToolbar;
     private int infoY;
-    private final GridScrollController gridScroll = new GridScrollController();
+    private final KineticScrollController gridScroll = new KineticScrollController();
     private int contentH;
     private int totalH;
 
-    public OreBannedScreen(Screen parent) {
-        super(Component.translatable("gui.realmcontrol.worldblock.banblock.title"));
-        this.parent = parent;
-        setParentScreen(parent);
-        useCanvas(640f, 360f, 4);
+    public OreBannedPage() {
+        super(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.title"));
+        useCanvas(640, 360, 4);
         buildOreSources();
         configureStandaloneDraft(
                 WorldBlockConfig::getNetworkJson,
@@ -78,9 +75,9 @@ public class OreBannedScreen extends KineticScreen {
     }
 
     @Override
-    protected void buildUi() {
+    protected void build(KineticUi ui) {
         int sidePadding =
-                switch (layoutLevel()) {
+                switch (layoutMetrics().level()) {
                     case LARGE -> 14;
                     case NORMAL -> 10;
                     case SMALL -> 8;
@@ -90,7 +87,7 @@ public class OreBannedScreen extends KineticScreen {
         compactToolbar =
                 isPortraitLayout()
                         || isCompactLayout()
-                        || canvasWidth() < 520;
+                        || width() < 520;
 
         int searchY = 5;
         int spacing = 5;
@@ -104,7 +101,7 @@ public class OreBannedScreen extends KineticScreen {
         int availableWidth =
                 Math.max(
                         SLOT_SIZE,
-                        canvasWidth()
+                        width()
                                 - sidePadding * 2
                                 - 12
                 );
@@ -122,7 +119,7 @@ public class OreBannedScreen extends KineticScreen {
                 Math.max(
                         sidePadding,
                         (
-                                canvasWidth()
+                                width()
                                         - contentW
                                         - 8
                         ) / 2
@@ -134,7 +131,7 @@ public class OreBannedScreen extends KineticScreen {
                         (
                                 Math.max(
                                         SLOT_SIZE,
-                                        canvasHeight()
+                                        height()
                                                 - gridY
                                                 - 8
                                 ) / SLOT_SIZE
@@ -166,15 +163,16 @@ public class OreBannedScreen extends KineticScreen {
                         : 120;
 
         searchBox =
-                addTextField(gridX, searchY, searchW, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banblock.search.hint"), null, null);
+                ui().textField(gridX, searchY, searchW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.search.hint")).build();
 
-        searchBox.setValue(lastSearchQuery);
-        searchBox.setResponder(this::updateSearch);
+        searchBox.setTextValue(lastSearchQuery);
+        searchBox.setDefaultText(lastSearchQuery);
+        searchBox.onTextChange(this::updateSearch);
 ruleBtn =
-                addButton(searchBox.getX()
-                                        + searchBox.getWidth()
-                                        + 2, searchY, ruleBtnW, Component.empty(), null, () ->
-                                        toggleRuleFromSearch());
+                ui().button(searchBox.controlX()
+                                        + searchBox.controlWidth()
+                                        + 2, searchY, ruleBtnW).text(Component.empty()).onClick(() ->
+                                        toggleRuleFromSearch()).build();
         setControlVisible(ruleBtn, false);
 int buttonY =
                 compactToolbar
@@ -195,11 +193,11 @@ int buttonY =
             saveX = viewX - spacing - btnW;
         }
         saveBtn =
-                addButton(saveX, buttonY, btnW, Component.translatable(
+                ui().button(saveX, buttonY, btnW).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.save"
-                                ), null, () -> save());
+                                )).onClick(() -> save()).build();
 viewBtn =
-                addButtonWithHandler(viewX, buttonY, btnW, getViewModeText(), null, button -> {
+                ui().button(viewX, buttonY, btnW).text(getViewModeText()).onClick(button -> {
                                     viewMode =
                                             (viewMode + 1) % 2;
 
@@ -208,13 +206,13 @@ viewBtn =
                                     );
 
                                     updateSearch(
-                                            searchBox.getValue()
+                                            searchBox.textValue()
                                     );
-                                });
+                                }).build();
 closeBtn =
-                addButton(closeX, buttonY, btnW, Component.translatable(
+                ui().button(closeX, buttonY, btnW).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.back"
-                                ), null, () -> onClose());
+                                )).onClick(() -> close()).build();
 infoY =
                 compactToolbar
                         ? 57
@@ -223,7 +221,7 @@ infoY =
         updateSearch(lastSearchQuery);
         ItemSearchCache.prepareCache(() -> {
             buildOreSources();
-            updateSearch(searchBox == null ? lastSearchQuery : searchBox.getValue());
+            updateSearch(searchBox == null ? lastSearchQuery : searchBox.textValue());
         });
     }
 
@@ -256,12 +254,12 @@ infoY =
     }
 
     private Component getViewModeText() {
-        return Component.translatable(viewMode == 0 ? "gui.realmcontrol.worldblock.banblock.view.all" : "gui.realmcontrol.worldblock.banblock.view.banned");
+        return KineticI18n.translatable(viewMode == 0 ? "gui.realmcontrol.worldblock.banblock.view.all" : "gui.realmcontrol.worldblock.banblock.view.banned");
     }
 
     private void toggleRuleFromSearch() {
         if (searchBox == null) return;
-        String q = searchBox.getValue().trim().toLowerCase(Locale.ROOT);
+        String q = searchBox.textValue().trim().toLowerCase(Locale.ROOT);
         if (q.isEmpty() || WorldBlockConfig.isProtected(q)) return;
         if (!q.startsWith("@") && !q.startsWith("#")) return;
         toggleOreRule(q);
@@ -276,12 +274,12 @@ infoY =
         }
         WorldBlockConfig.rebuildCache();
         ItemSearchCache.markRulesChanged();
-        updateSearch(searchBox == null ? "" : searchBox.getValue());
+        updateSearch(searchBox == null ? "" : searchBox.textValue());
     }
 
     private boolean rejectOreBanRule(String id) {
         if (!WorldBlockConfig.wouldOreGenerationRuleBanWorldgenMergeTarget(id)) return false;
-        KineticOverlays.toast("banore_conflict_merge_target", Component.translatable("gui.realmcontrol.worldblock.banblock.conflict.merge_target"));
+        KineticOverlays.toast("banore_conflict_merge_target", KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.conflict.merge_target"));
         return true;
     }
 
@@ -300,7 +298,7 @@ infoY =
             if (oreMods.contains(query) && !query.equals("@")) {
                 isAutoCompleteMode = false;
                 setControlVisible(ruleBtn, true);
-                ruleBtn.setText(Component.translatable(WorldBlockConfig.data.bannedOreGenerations.contains(query) ? "gui.realmcontrol.worldblock.banitem.rule.unban" : "gui.realmcontrol.worldblock.banitem.rule.ban"));
+                ruleBtn.setText(KineticI18n.translatable(WorldBlockConfig.data.bannedOreGenerations.contains(query) ? "gui.realmcontrol.worldblock.banitem.rule.unban" : "gui.realmcontrol.worldblock.banitem.rule.ban"));
                 updateDisplayList(query);
             } else {
                 isAutoCompleteMode = true;
@@ -312,7 +310,7 @@ infoY =
             if (oreTags.contains(query) && !query.equals("#")) {
                 isAutoCompleteMode = false;
                 setControlVisible(ruleBtn, true);
-                ruleBtn.setText(Component.translatable(WorldBlockConfig.data.bannedOreGenerations.contains(query) ? "gui.realmcontrol.worldblock.banitem.rule.unban" : "gui.realmcontrol.worldblock.banitem.rule.ban"));
+                ruleBtn.setText(KineticI18n.translatable(WorldBlockConfig.data.bannedOreGenerations.contains(query) ? "gui.realmcontrol.worldblock.banitem.rule.unban" : "gui.realmcontrol.worldblock.banitem.rule.ban"));
                 updateDisplayList(query);
             } else {
                 isAutoCompleteMode = true;
@@ -418,33 +416,22 @@ infoY =
     }
 
     @Override
-    protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        GuiTheme.canvasBackground(g, canvasWidth(), canvasHeight());
-        GuiTheme.panelAlt(g, gridX - 3, gridY - 3, contentW + 12, contentH + 6);
+    protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
+        KineticTheme.canvasBackground(g, width(), height());
+        KineticTheme.panelAlt(g, gridX - 3, gridY - 3, contentW + 12, contentH + 6);
     }
 
     @Override
-    protected void renderCanvasForeground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        int countX = searchBox.getX() + searchBox.getWidth() + 10;
-        if (ruleBtn != null && isControlVisible(ruleBtn)) countX = ruleBtn.getX() + ruleBtn.getWidth() + 10;
+    protected void renderForeground(KineticGraphics g, int smx, int smy, float pt) {
+        int countX = searchBox.controlX() + searchBox.controlWidth() + 10;
+        if (ruleBtn != null && isControlVisible(ruleBtn)) countX = ruleBtn.controlX() + ruleBtn.controlWidth() + 10;
 
         if (isAutoCompleteMode) {
-            KineticText.drawScrollingLeft(
-                    g,
-                    font,
-                    Component.translatable(
+            g.scrollingText(KineticTheme.muted(KineticI18n.translatable(
                             "gui.realmcontrol.worldblock.banitem.autocomplete.matches_count",
-                            Component.literal(String.valueOf(autoCompleteList.size())).withStyle(ChatFormatting.YELLOW)
-                    ).withStyle(ChatFormatting.GRAY),
-                    countX,
-                    11,
-                    Math.max(1, canvasWidth() - countX - 10),
-                    0xFFFFFF,
-                    false
-            );
-            enableCanvasScissor(
-                    g,
-                    gridX,
+                            Component.literal(String.valueOf(autoCompleteList.size()))
+                    )), countX, 11, Math.max(1, width() - countX - 10), 0xFFFFFF, false);
+            g.scissor(gridX,
                     gridY,
                     gridX + contentW,
                     gridY + contentH
@@ -454,36 +441,24 @@ infoY =
                 int y = gridY + i * SLOT_SIZE - (int) Math.round(gridScroll.smoothOffset());
                 if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
                     boolean hovered = smx >= gridX && smx < gridX + contentW && smy >= y && smy < y + SLOT_SIZE;
-                    GuiTheme.stateSurface(
+                    KineticTheme.stateSurface(
                             g,
                             gridX,
                             y,
                             contentW,
                             SLOT_SIZE,
-                            i % 2 == 0 ? GuiTheme.Surface.PANEL : GuiTheme.Surface.PANEL_ALT,
+                            i % 2 == 0 ? KineticTheme.Surface.PANEL : KineticTheme.Surface.PANEL_ALT,
                             false,
                             hovered,
                             false
                     );
-                    KineticText.drawScrollingLeft(g, font, entry, gridX + 5, y + 6, Math.max(1, contentW - 10), 0xFFFFFF, false);
+                    g.scrollingText(Component.literal(entry), gridX + 5, y + 6, Math.max(1, contentW - 10), 0xFFFFFF, false);
                 }
             }
         } else {
-            KineticText.drawScrollingLeft(
-                    g,
-                    font,
-                    Component.literal(String.valueOf(displayList.size())).withStyle(ChatFormatting.GREEN)
-                            .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
-                            .append(Component.literal(String.valueOf(currentSourceList.size())).withStyle(ChatFormatting.YELLOW)),
-                    countX,
-                    11,
-                    Math.max(1, canvasWidth() - countX - 10),
-                    0xFFFFFF,
-                    false
-            );
-            enableCanvasScissor(
-                    g,
-                    gridX,
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.count", displayList.size(), currentSourceList.size()),
+                    countX, 11, Math.max(1, width() - countX - 10), KineticTheme.current().mutedText(), false);
+            g.scissor(gridX,
                     gridY,
                     gridX + contentW,
                     gridY + contentH
@@ -497,23 +472,23 @@ infoY =
                 if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
                     boolean hovered = smx >= x && smx < x + SLOT_SIZE
                             && smy >= y && smy < y + SLOT_SIZE;
-                    GuiTheme.itemSlot(g, x, y, SLOT_SIZE, 4, hovered);
+                    KineticTheme.itemSlot(g, x, y, SLOT_SIZE, 4, hovered);
                     ItemBanControl.withSkip(() -> {
-                        GuiTheme.item(g, font, item.stack(), x, y, SLOT_SIZE, 1.0F, true);
+                        KineticTheme.item(g, item.stack(), x, y, SLOT_SIZE, 1.0F, true);
                         return null;
                     });
                     if (item.id().startsWith("@") || item.id().startsWith("#") || WorldBlockConfig.isOreGenerationBanned(item.stack())) {
-                        GuiTheme.indicatorFill(g, x + 2, y + SLOT_SIZE - 3, SLOT_SIZE - 3, 2, GuiTheme.Indicator.DANGER);
+                        KineticTheme.indicatorFill(g, x + 2, y + SLOT_SIZE - 3, SLOT_SIZE - 3, 2, KineticTheme.Indicator.DANGER);
                     }
                 }
             }
         }
-        disableCanvasScissor(g);
+        g.endScissor();
         renderScrollbar(g, smx, smy);
 
     }
 
-    private void renderScrollbar(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderScrollbar(KineticGraphics g, int mouseX, int mouseY) {
         gridScroll.render(
                 g,
                 mouseX,
@@ -526,33 +501,32 @@ infoY =
         );
     }
 
-    private boolean isHoveringButton(StateButton button, double mx, double my) {
-        return button != null && isControlVisible(button) && mx >= button.getX() && mx < button.getX() + button.getWidth() && my >= button.getY() && my < button.getY() + button.getHeight();
+    private boolean isHoveringButton(KineticButton button, double mx, double my) {
+        return button != null && isControlVisible(button) && button.contains(mx, my);
     }
 
     @Override
-    protected void renderTooltips(GuiGraphics g, int smx, int smy, int mx, int my) {
-        int tooltipY = smy < 30 ? my + 15 : my;
+    protected void renderTooltips(int smx, int smy) {
         if (isHoveringButton(saveBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.save"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.save"));
             return;
         }
         if (isHoveringButton(viewBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.view"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.view"));
             return;
         }
         if (isHoveringButton(closeBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.close"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.close"));
             return;
         }
         if (isHoveringButton(ruleBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.rule_desc"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.btn.rule_desc"));
             return;
         }
-        renderGridTooltip(g, smx, smy, mx, my);
+        renderGridTooltip(smx, smy);
     }
 
-    private void renderGridTooltip(GuiGraphics g, int smx, int smy, int mx, int my) {
+    private void renderGridTooltip(int smx, int smy) {
         if (isAutoCompleteMode) return;
         if (smx < gridX || smx >= gridX + contentW || smy < gridY || smy >= gridY + contentH) return;
         int col = (smx - gridX) / SLOT_SIZE;
@@ -564,24 +538,27 @@ infoY =
             List<Component> tooltip = new ArrayList<>();
             if (item.id().startsWith("@") || item.id().startsWith("#")) {
                 tooltip.add(Component.literal(item.id()));
-                tooltip.add(Component.translatable(item.id().startsWith("@") ? "gui.realmcontrol.worldblock.banblock.tooltip.mod_rule" : "gui.realmcontrol.worldblock.banblock.tooltip.tag_rule"));
-                tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban_rule"));
+                tooltip.add(KineticI18n.translatable(item.id().startsWith("@") ? "gui.realmcontrol.worldblock.banblock.tooltip.mod_rule" : "gui.realmcontrol.worldblock.banblock.tooltip.tag_rule"));
+                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban_rule"));
             } else {
                 tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
                 tooltip.add(Component.literal(item.id()));
-                tooltip.add(WorldBlockConfig.isOreGenerationBanned(item.stack()) ? Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban") : Component.translatable("gui.realmcontrol.worldblock.banblock.tooltip.left_ban"));
+                tooltip.add(WorldBlockConfig.isOreGenerationBanned(item.stack()) ? KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban") : KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.left_ban"));
             }
-            showTooltip(tooltip, null);
+            showTooltip(tooltip);
             return null;
         });
     }
 
     @Override
-    protected boolean canvasMouseClicked(double smx, double smy, int btn) {
-        if (KineticMouseButtons.isPrimary(btn)
-                && gridScroll.beginDrag(
+    protected boolean onMouseClickCapture(MouseInput input) {
+        // 原 canvasMouseClicked 全部在控件之前处理 / The old canvasMouseClicked handled all of this before controls.
+        double smx = input.x();
+        double smy = input.y();
+        if (gridScroll.beginDrag(
                         smx,
                         smy,
+                        input.button(),
                         gridX + contentW + 2,
                         gridY,
                         4,
@@ -596,7 +573,7 @@ infoY =
             if (isAutoCompleteMode) {
                 int idx = (int) ((smy - gridY + gridScroll.smoothOffset()) / SLOT_SIZE);
                 if (idx >= 0 && idx < autoCompleteList.size()) {
-                    searchBox.setValue(autoCompleteList.get(idx));
+                    searchBox.setTextValue(autoCompleteList.get(idx));
                     return true;
                 }
             } else {
@@ -606,41 +583,42 @@ infoY =
                 if (col >= 0 && col < gridCols && idx >= 0 && idx < displayList.size()) {
                     KineticItemSearch.CachedItem item = displayList.get(idx);
                     if (item.id().startsWith("@") || item.id().startsWith("#")) {
-                        if (KineticMouseButtons.isSecondary(btn)) toggleOreRule(item.id());
+                        if (input.isRight()) toggleOreRule(item.id());
                         return true;
                     }
                     if (WorldBlockConfig.isProtected(item.id())) return true;
-                    if (KineticMouseButtons.isPrimary(btn) && !WorldBlockConfig.isOreGenerationBanned(item.stack())) {
+                    if (input.isLeft() && !WorldBlockConfig.isOreGenerationBanned(item.stack())) {
                         if (rejectOreBanRule(item.id())) return true;
                         WorldBlockConfig.data.bannedOreGenerations.add(item.id());
                         WorldBlockConfig.rebuildCache();
                         ItemSearchCache.markRulesChanged();
-                        updateSearch(searchBox.getValue());
-                    } else if (KineticMouseButtons.isSecondary(btn) && WorldBlockConfig.data.bannedOreGenerations.contains(item.id())) {
+                        updateSearch(searchBox.textValue());
+                    } else if (input.isRight() && WorldBlockConfig.data.bannedOreGenerations.contains(item.id())) {
                         WorldBlockConfig.data.bannedOreGenerations.remove(item.id());
                         WorldBlockConfig.rebuildCache();
                         ItemSearchCache.markRulesChanged();
-                        updateSearch(searchBox.getValue());
+                        updateSearch(searchBox.textValue());
                     }
                     return true;
                 }
             }
         }
-        return super.canvasMouseClicked(smx, smy, btn);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseReleased(double smx, double smy, int btn) {
-        if (gridScroll.release(btn)) {
+    protected boolean onMouseRelease(MouseInput input) {
+        if (gridScroll.release(input.button())) {
             rememberedScrollOffset = gridScroll.offset();
             return true;
         }
 
-        return super.canvasMouseReleased(smx, smy, btn);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseDragged(double smx, double smy, int btn, double dx, double dy) {
+    protected boolean onMouseDrag(MouseDragInput input) {
+        double smy = input.y();
         if (gridScroll.drag(
                 smy,
                 gridY,
@@ -651,22 +629,23 @@ infoY =
             return true;
         }
 
-        return super.canvasMouseDragged(smx, smy, btn, dx, dy);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseScrolled(double smx, double smy, double d) {
+    protected boolean onMouseScroll(ScrollInput input) {
+        double d = input.deltaY();
         if (gridScroll.scroll(d, SLOT_SIZE)) {
             rememberedScrollOffset = gridScroll.offset();
             return true;
         }
 
-        return super.canvasMouseScrolled(smx, smy, d);
+        return false;
     }
 
 
     private static boolean isControlVisible(KineticControl control) {
-        return control != null && control.isVisible();
+        return control != null && control.controlVisible();
     }
 
     private static boolean isControlEnabled(KineticControl control) {
@@ -674,7 +653,7 @@ infoY =
     }
 
     private static void setControlVisible(KineticControl control, boolean visible) {
-        if (control != null) control.setVisible(visible);
+        if (control != null) control.setControlVisible(visible);
     }
 
     private static void setControlEnabled(KineticControl control, boolean enabled) {

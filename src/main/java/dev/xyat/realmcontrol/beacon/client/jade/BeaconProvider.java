@@ -1,6 +1,6 @@
 package dev.xyat.realmcontrol.beacon.client.jade;
 
-import dev.xyat.realmcontrol.beacon.util.ColorText;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import dev.xyat.realmcontrol.beacon.mixin.LevelAccess;
 import dev.xyat.realmcontrol.beacon.util.BeaconStateManager;
@@ -71,8 +71,8 @@ public class BeaconProvider {
             String codes = data.getString("BeaconModuleJadeSpawnCodes");
 
             Component loadText = actLoad >= 0
-                    ? ColorText.translatable("jade.realmcontrol.beacon.cl.on", actLoad * 2 + 1, actLoad * 2 + 1, maxRad * 2 + 1, maxRad * 2 + 1)
-                    : ColorText.translatable("jade.realmcontrol.beacon.cl.off");
+                    ? KineticI18n.translatable("jade.realmcontrol.beacon.cl.on", actLoad * 2 + 1, actLoad * 2 + 1, maxRad * 2 + 1, maxRad * 2 + 1)
+                    : KineticI18n.translatable("jade.realmcontrol.beacon.cl.off");
             tooltip.add(loadText);
 
             if (actLoad >= 0 && data.contains("BeaconModuleGlobalMax")) {
@@ -83,21 +83,21 @@ public class BeaconProvider {
                     int pUsed = data.getInt("BeaconModulePersonalUsed");
                     int pMax = data.getInt("BeaconModulePersonalMax");
                     int remain = Math.max(0, pMax - pUsed);
-                    tooltip.add(ColorText.translatable("tip.realmcontrol.beacon.beacon.quota_both", pUsed, remain, globalMax));
+                    tooltip.add(KineticI18n.translatable("tip.realmcontrol.beacon.beacon.quota_both", pUsed, remain, globalMax));
                 } else {
                     int gUsed = data.getInt("BeaconModuleGlobalUsed");
                     int remain = Math.max(0, globalMax - gUsed);
-                    Component typeTx = ColorText.translatable("msg.realmcontrol.beacon.beacon.quota_global");
-                    tooltip.add(ColorText.translatable("tip.realmcontrol.beacon.beacon.quota_single", typeTx.getString(), gUsed, remain));
+                    Component typeTx = KineticI18n.translatable("msg.realmcontrol.beacon.beacon.quota_global");
+                    tooltip.add(KineticI18n.translatable("tip.realmcontrol.beacon.beacon.quota_single", typeTx.getString(), gUsed, remain));
                 }
             }
 
-            Component spTypeTx = ColorText.translatable("gui.realmcontrol.beacon.beacon.type." + spType);
-            Component spCodeTx = codes.isEmpty() ? ColorText.translatable("gui.realmcontrol.beacon.beacon.type.global") : Component.literal(codes.toUpperCase());
+            Component spTypeTx = KineticI18n.translatable("gui.realmcontrol.beacon.beacon.type." + spType);
+            Component spCodeTx = codes.isEmpty() ? KineticI18n.translatable("gui.realmcontrol.beacon.beacon.type.global") : Component.literal(codes.toUpperCase());
 
             Component prevText = actPrev >= 0
-                    ? ColorText.translatable("jade.realmcontrol.beacon.sp.on", actPrev * 2 + 1, actPrev * 2 + 1, maxPreventRad * 2 + 1, maxPreventRad * 2 + 1, spTypeTx, spCodeTx)
-                    : ColorText.translatable("jade.realmcontrol.beacon.sp.off");
+                    ? KineticI18n.translatable("jade.realmcontrol.beacon.sp.on", actPrev * 2 + 1, actPrev * 2 + 1, maxPreventRad * 2 + 1, maxPreventRad * 2 + 1, spTypeTx, spCodeTx)
+                    : KineticI18n.translatable("jade.realmcontrol.beacon.sp.off");
             tooltip.add(prevText);
         }
 

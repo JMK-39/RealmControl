@@ -10,7 +10,7 @@ Realm Control provides visual administration for world blocks, structure and bio
 
 ### Installation and access
 
-- Current build target: **Minecraft 1.20.1**, **Forge 47.4.2+**, and **KineticCore 26.9.20+**.
+- Current build target: **Minecraft 1.20.1**, **Forge 47.4.2+**, and **26.9.28+**.
 - Install Realm Control and KineticCore on the client and server for multiplayer use.
 - Optional: **Jade 11.0.0+** for beacon information.
 - Enter a world, press **F6**, and choose **Realm Control** in KineticCore. The key is configurable in Controls.
@@ -128,7 +128,7 @@ Realm Control 提供世界方块、结构与群系生成、信标区域和传送
 
 ### 安装与入口
 
-- 当前构建目标：**Minecraft 1.20.1**、**Forge 47.4.2+**、**KineticCore 26.9.20+**。
+- 当前构建目标：**Minecraft 1.20.1**、**Forge 47.4.2+**、**26.9.28+**。
 - 多人游戏时，客户端和服务端均安装 Realm Control 与 KineticCore。
 - 可选：**Jade 11.0.0+** 显示信标信息。
 - 进入世界后按 **F6**，在 KineticCore 中选择 **Realm Control**；可在按键设置中修改快捷键。

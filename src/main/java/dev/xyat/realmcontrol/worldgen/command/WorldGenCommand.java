@@ -2,14 +2,12 @@ package dev.xyat.realmcontrol.worldgen.command;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.xyat.kineticcore.api.command.CommandText;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.worldgen.util.StructureUtils;
-import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -45,21 +43,18 @@ public class WorldGenCommand {
             List<String> structures = StructureUtils.getStructuresAt(player.serverLevel(), player.blockPosition());
 
             if (structures.isEmpty()) {
-                source.sendSuccess(() -> Component.translatable("msg.realmcontrol.worldgen.structure.not_found"), false);
+                source.sendSuccess(() -> KineticI18n.translatable("msg.realmcontrol.worldgen.structure.not_found"), false);
                 return 1;
             }
 
-            MutableComponent msg = Component.translatable("msg.realmcontrol.worldgen.structure.found_simple");
+            MutableComponent msg = KineticI18n.translatable("msg.realmcontrol.worldgen.structure.found_simple");
             for (String id : structures) {
-                msg.append(Component.translatable("msg.realmcontrol.worldgen.structure.entry", Component.literal(id).withStyle(ChatFormatting.AQUA))
-                        .withStyle(style -> style
-                                .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, id))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("msg.realmcontrol.worldgen.click_to_copy").withStyle(ChatFormatting.GOLD)))
-                        ));
+                msg.append(CommandText.clickToCopy(KineticI18n.translatable("msg.realmcontrol.worldgen.structure.entry", id),
+                        id, KineticI18n.translatable("msg.realmcontrol.worldgen.click_to_copy")));
             }
             source.sendSuccess(() -> msg, false);
         } catch (Exception e) {
-            source.sendFailure(Component.translatable("msg.realmcontrol.worldgen.structure.check_failed", Component.literal(String.valueOf(e.getMessage())).withStyle(ChatFormatting.RED)));
+            source.sendFailure(KineticI18n.translatable("msg.realmcontrol.worldgen.structure.check_failed", String.valueOf(e.getMessage())));
         }
         return 1;
     }
@@ -72,20 +67,16 @@ public class WorldGenCommand {
                     .collect(Collectors.toList());
 
             String allIdsStr = String.join("\n", ids);
-            MutableComponent msg = Component.translatable("msg.realmcontrol.worldgen.list.structures", Component.literal(String.valueOf(ids.size())).withStyle(ChatFormatting.GREEN));
+            MutableComponent msg = KineticI18n.translatable("msg.realmcontrol.worldgen.list.structures", ids.size());
             if (!ids.isEmpty()) {
                 msg.append(Component.literal("  "));
-                msg.append(Component.translatable("msg.realmcontrol.worldgen.click_to_copy_all").withStyle(ChatFormatting.GOLD)
-                        .withStyle(style -> style
-                                .withBold(true)
-                                .withUnderlined(true)
-                                .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, allIdsStr))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("cmd.realmcontrol.worldgen.copy.too_long")))
-                        ));
+                msg.append(CommandText.clickToCopy(KineticI18n.translatable("msg.realmcontrol.worldgen.click_to_copy_all")
+                                .withStyle(style -> style.withBold(true).withUnderlined(true)),
+                        allIdsStr, KineticI18n.translatable("cmd.realmcontrol.worldgen.copy.too_long")));
             }
             source.sendSuccess(() -> msg, false);
         } catch (Exception e) {
-            source.sendFailure(Component.translatable("msg.realmcontrol.worldgen.structure.list_failed"));
+            source.sendFailure(KineticI18n.translatable("msg.realmcontrol.worldgen.structure.list_failed"));
         }
         return 1;
     }

@@ -1,48 +1,46 @@
 package dev.xyat.realmcontrol.worldgen.client.gui;
 
-import dev.xyat.kineticcore.api.client.widget.input.KineticTextFields.KineticEditBox;
-import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
-import dev.xyat.kineticcore.api.client.text.KineticText;
-import dev.xyat.kineticcore.api.client.theme.GuiTheme;
-import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
-import dev.xyat.kineticcore.api.client.screen.KineticScreen;
+import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
+import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
+import dev.xyat.kineticcore.api.client.gui.theme.KineticTheme;
+import dev.xyat.kineticcore.api.client.gui.ui.KineticUi;
+import dev.xyat.kineticcore.api.client.gui.widget.*;
+import dev.xyat.kineticcore.api.client.gui.widget.list.*;
+
 import dev.xyat.realmcontrol.worldgen.config.StructureEntryRule;
 import dev.xyat.realmcontrol.worldgen.config.StructurePlacementRule;
 import dev.xyat.realmcontrol.worldgen.data.StructureRuleDescriptor;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.NotNull;
-import dev.xyat.kineticcore.api.client.widget.KineticControl;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public final class StructureRuleEditScreen extends KineticScreen {
-    private final WorldGenScreen parent;
+public final class StructureRuleEditPage extends KineticPage {
+    private final WorldGenPage parent;
     private final StructureRuleDescriptor descriptor;
     private final List<FieldRow> rows = new ArrayList<>();
 
     private boolean disabled;
     private String spreadType;
-    private StateButton spreadTypeButton;
+    private KineticButton spreadTypeButton;
 
-    private KineticEditBox weightBox;
-    private KineticEditBox frequencyBox;
-    private KineticEditBox saltBox;
-    private KineticEditBox spacingBox;
-    private KineticEditBox separationBox;
-    private KineticEditBox distanceBox;
-    private KineticEditBox spreadBox;
-    private KineticEditBox countBox;
+    private KineticTextField weightBox;
+    private KineticTextField frequencyBox;
+    private KineticTextField saltBox;
+    private KineticTextField spacingBox;
+    private KineticTextField separationBox;
+    private KineticTextField distanceBox;
+    private KineticTextField spreadBox;
+    private KineticTextField countBox;
 
-    public StructureRuleEditScreen(WorldGenScreen parent, StructureRuleDescriptor descriptor) {
-        super(Component.translatable("gui.realmcontrol.worldgen.structure_edit.title"));
+    public StructureRuleEditPage(WorldGenPage parent, StructureRuleDescriptor descriptor) {
+        super(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.title"));
         this.parent = parent;
-        setParentScreen(parent);
         this.descriptor = descriptor;
-        useCanvas(520f, 360f, 6);
+        useCanvas(520, 360, 6);
 
         StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
         StructurePlacementRule placementRule = descriptor.structureSetId().isBlank() ? null : parent.getPlacementRule(descriptor.structureSetId());
@@ -53,17 +51,17 @@ public final class StructureRuleEditScreen extends KineticScreen {
     }
 
     @Override
-    protected void buildUi() {
+    protected void build(KineticUi ui) {
         rows.clear();
         int fieldX = 230;
         int fieldW = 100;
         int rowY = 84;
         int rowGap = 26;
 
-        StateButton disabledButton = addButtonWithHandler(360, 48, 125, disabledMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip"), button -> {
+        KineticButton disabledButton = ui().button(360, 48, 125).text(disabledMessage()).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.disabled.tooltip")).onClick(button -> {
             disabled = !disabled;
             button.setText(disabledMessage());
-        });
+        }).build();
 StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
         int currentWeight = entryRule != null && entryRule.weight() != null ? entryRule.weight() : descriptor.originalWeight();
         weightBox = addField("gui.realmcontrol.worldgen.structure_edit.weight", fieldX, rowY, fieldW, Integer.toString(currentWeight), Integer.toString(descriptor.originalWeight()));
@@ -86,10 +84,10 @@ StructureEntryRule entryRule = parent.getEntryRule(descriptor.structureId());
                 separationBox = addField("gui.realmcontrol.worldgen.structure_edit.separation", fieldX, rowY, fieldW, Integer.toString(separation), Integer.toString(descriptor.originalSeparation()));
                 rowY += rowGap;
 
-                spreadTypeButton = addButtonWithHandler(fieldX, rowY, fieldW, spreadTypeMessage(), Component.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type.tooltip"), button -> {
+                spreadTypeButton = ui().button(fieldX, rowY, fieldW).text(spreadTypeMessage()).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type.tooltip")).onClick(button -> {
                             spreadType = "triangular".equals(spreadType) ? "linear" : "triangular";
                             button.setText(spreadTypeMessage());
-                        });
+                        }).build();
 rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", null, descriptor.originalSpreadType(), rowY));
             } else if ("concentric_rings".equals(descriptor.placementType())) {
                 int distance = rule != null && rule.distance() != null ? rule.distance() : descriptor.originalDistance();
@@ -107,16 +105,17 @@ rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", nu
         setControlEnabled(disabledButton, assigned);
         if (weightBox != null) weightBox.setTextEditable(assigned);
 
-        int buttonY = this.canvasHeight() - 34;
-        addButton(158, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.save_current"), null, this::saveCurrent);
-        addButton(263, buttonY, 100, Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default"), Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip"), this::resetDefault);
-        addButton(368, buttonY, 72, Component.translatable("gui.realmcontrol.worldgen.config.back"), null, this::back);
+        int buttonY = this.height() - 34;
+        ui().button(158, buttonY, 100).text(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.save_current")).onClick(this::saveCurrent).build();
+        ui().button(263, buttonY, 100).text(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip")).onClick(this::resetDefault).build();
+        ui().button(368, buttonY, 72).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::back).build();
     }
 
-    private KineticEditBox addField(String labelKey, int x, int y, int width, String value, String original) {
-        KineticEditBox box = addTextField(x, y, width, Component.translatable(labelKey));
-        box.setMaxLength(32);
-        box.setValue(value);
+    private KineticTextField addField(String labelKey, int x, int y, int width, String value, String original) {
+        KineticTextField box = ui().textField(x, y, width).label(KineticI18n.translatable(labelKey)).build();
+        box.limitTextLength(32);
+        box.setTextValue(value);
+        box.setDefaultText(value);
 rows.add(new FieldRow(labelKey, box, original, y));
         return box;
     }
@@ -171,112 +170,94 @@ rows.add(new FieldRow(labelKey, box, original, y));
             }
 
             parent.saveLocalStructureRules(descriptor, entryRule, placementRule);
-            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.structure_edit.staged_toast"));
+            KineticOverlays.toast(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.staged_toast"));
         } catch (RuntimeException ignored) {
-            KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.structure_edit.invalid_toast"));
+            KineticOverlays.toast(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.invalid_toast"));
         }
     }
 
     private void resetDefault() {
         parent.resetStructureRule(descriptor);
-        KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldgen.structure_edit.reset_toast"));
+        KineticOverlays.toast(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.reset_toast"));
         back();
     }
 
     private void back() {
-        if (this.minecraft != null) this.navigateBack();
+        if (isAttached()) this.navigateBack();
     }
 
 
     @Override
-    protected void renderCanvasBackground(@NotNull GuiGraphics g, int mx, int my, float pt) {
-        GuiTheme.shadow(g, this.canvasWidth(), this.canvasHeight());
-        GuiTheme.panel(g, 10, 8, this.canvasWidth() - 20, this.canvasHeight() - 16);
-        GuiTheme.panelAlt(g, 20, 76, this.canvasWidth() - 40, this.canvasHeight() - 124);
+    protected void renderBackground(KineticGraphics g, int mx, int my, float pt) {
+        KineticTheme.shadow(g, this.width(), this.height());
+        KineticTheme.panel(g, 10, 8, this.width() - 20, this.height() - 16);
+        KineticTheme.panelAlt(g, 20, 76, this.width() - 40, this.height() - 124);
     }
 
     @Override
-    protected void renderCanvasForeground(@NotNull GuiGraphics g, int mx, int my, float pt) {
-        Component title = Component.translatable("gui.realmcontrol.worldgen.structure_edit.title");
-        KineticText.drawScrollingLeft(g, this.font, title, 26, 20, Math.max(1, canvasWidth() - 52), 0xFFFFAA00, false);
+    protected void renderForeground(KineticGraphics g, int mx, int my, float pt) {
+        Component title = KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.title");
+        g.scrollingText(title, 26, 20, Math.max(1, width() - 52), 0xFFFFAA00, false);
 
-        Component structureLine = Component.translatable(
+        Component structureLine = KineticI18n.translatable(
                 "gui.realmcontrol.worldgen.structure_edit.structure",
-                Component.literal(parent.toDisplayEntry(descriptor.structureId())).withStyle(ChatFormatting.GOLD)
+                Component.literal(parent.toDisplayEntry(descriptor.structureId()))
         );
-        KineticText.drawScrollingLeft(g, this.font, structureLine, 26, 36, Math.max(1, canvasWidth() - 52), 0xFFFFFFFF, false);
+        g.scrollingText(structureLine, 26, 36, Math.max(1, width() - 52), 0xFFFFFFFF, false);
 
         Component setValue = descriptor.structureSetId().isBlank()
-                ? Component.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned").withStyle(ChatFormatting.RED)
-                : Component.literal(descriptor.structureSetId()).withStyle(ChatFormatting.AQUA);
-        KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, Math.max(1, canvasWidth() - 52), 0xFFFFFFFF, false);
+                ? KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned")
+                : Component.literal(descriptor.structureSetId());
+        g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, Math.max(1, width() - 52), 0xFFFFFFFF, false);
 
         if (descriptor.supportsPlacementEditing()) {
-            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFFCC55, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFFCC55, false);
         } else if ("other".equals(descriptor.placementType())) {
-            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFFCC55, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFFCC55, false);
         } else {
-            KineticText.drawScrollingLeft(g, this.font, Component.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 68, Math.max(1, canvasWidth() - 52), 0xFFFF5555, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFF5555, false);
         }
 
         for (FieldRow row : rows) {
             int y = row.y() + 5;
-            KineticText.drawScrollingLeft(
-                    g,
-                    this.font,
-                    Component.translatable(row.labelKey()),
-                    32,
-                    y,
-                    190,
-                    0xFFFFFFFF,
-                    false
-            );
-            Component original = Component.translatable(
+            g.scrollingText(KineticI18n.translatable(row.labelKey()), 32, y, 190, 0xFFFFFFFF, false);
+            Component original = KineticI18n.translatable(
                     "gui.realmcontrol.worldgen.structure_edit.original",
-                    Component.literal(row.original()).withStyle(ChatFormatting.AQUA)
+                    Component.literal(row.original())
             );
-            KineticText.drawScrollingLeft(
-                    g,
-                    this.font,
-                    original,
-                    340,
-                    y,
-                    Math.max(1, canvasWidth() - 366),
-                    0xFFCCCCCC,
-                    false
-            );
+            g.scrollingText(original, 340, y, Math.max(1, width() - 366), 0xFFCCCCCC, false);
         }
     }
 
     private Component disabledMessage() {
-        return Component.translatable(
+        return KineticI18n.translatable(
                 disabled ? "gui.realmcontrol.worldgen.structure_edit.disabled" : "gui.realmcontrol.worldgen.structure_edit.enabled"
-        ).withStyle(disabled ? ChatFormatting.RED : ChatFormatting.GREEN);
+        );
     }
 
     private Component spreadTypeMessage() {
         String type = "triangular".equals(spreadType) ? "triangular" : "linear";
-        return Component.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type." + type);
+        return KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.spread_type." + type);
     }
 
-    private int parseInt(KineticEditBox box) {
-        return Integer.parseInt(box.getValue().trim());
+    private int parseInt(KineticTextField box) {
+        return Integer.parseInt(box.textValue().trim());
     }
 
-    private int parsePositiveInt(KineticEditBox box) {
+    private int parsePositiveInt(KineticTextField box) {
         int value = parseInt(box);
         if (value <= 0) throw new IllegalArgumentException();
         return value;
     }
 
-    private int parseNonNegativeInt(KineticEditBox box) {
+    private int parseNonNegativeInt(KineticTextField box) {
         int value = parseInt(box);
         if (value < 0) throw new IllegalArgumentException();
         return value;
     }
 
-    private float parseFrequency(KineticEditBox box) {
-        float value = Float.parseFloat(box.getValue().trim());
+    private float parseFrequency(KineticTextField box) {
+        float value = Float.parseFloat(box.textValue().trim());
         if (!Float.isFinite(value) || value < 0.0F || value > 1.0F) throw new IllegalArgumentException();
         return value;
     }
@@ -289,14 +270,14 @@ rows.add(new FieldRow(labelKey, box, original, y));
         return String.format(Locale.ROOT, "%.6f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
     }
 
-    public StateButton getSpreadTypeButton() {
+    public KineticButton getSpreadTypeButton() {
         return spreadTypeButton;
     }
 
-    private record FieldRow(String labelKey, KineticEditBox box, String original, int y) {
+    private record FieldRow(String labelKey, KineticTextField box, String original, int y) {
     }
     private static boolean isControlVisible(KineticControl control) {
-        return control != null && control.isVisible();
+        return control != null && control.controlVisible();
     }
 
     private static boolean isControlEnabled(KineticControl control) {
@@ -304,7 +285,7 @@ rows.add(new FieldRow(labelKey, box, original, y));
     }
 
     private static void setControlVisible(KineticControl control, boolean visible) {
-        if (control != null) control.setVisible(visible);
+        if (control != null) control.setControlVisible(visible);
     }
 
     private static void setControlEnabled(KineticControl control, boolean enabled) {

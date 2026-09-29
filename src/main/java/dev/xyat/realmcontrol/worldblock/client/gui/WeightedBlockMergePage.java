@@ -1,21 +1,24 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
-import dev.xyat.kineticcore.api.client.widget.input.KineticTextFields.KineticEditBox;
-import dev.xyat.kineticcore.api.client.widget.KineticControl;
-import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
-import dev.xyat.kineticcore.api.client.input.KineticMouseButtons;
-import dev.xyat.kineticcore.api.client.text.KineticText;
-import dev.xyat.kineticcore.api.client.theme.GuiTheme;
+import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.kineticcore.api.client.gui.input.ScrollInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseDragInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseInput;
+import dev.xyat.kineticcore.api.client.gui.text.KineticText;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
+import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
+import dev.xyat.kineticcore.api.client.gui.scroll.KineticScrollController;
+import dev.xyat.kineticcore.api.client.gui.theme.KineticTheme;
+import dev.xyat.kineticcore.api.client.gui.ui.KineticUi;
+import dev.xyat.kineticcore.api.client.gui.widget.*;
+import dev.xyat.kineticcore.api.client.gui.widget.list.*;
+
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
-import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
-import dev.xyat.kineticcore.api.client.screen.KineticScreen;
-import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.GridScrollController;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
 import org.jetbrains.annotations.NotNull;
@@ -29,7 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-public final class WeightedBlockMergeScreen extends KineticScreen {
+public final class WeightedBlockMergePage extends KineticPage {
     private enum Mode {
         BROWSE,
         SELECT_SOURCE,
@@ -46,12 +49,11 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     private static final int MAX_WEIGHT = 1_000_000;
     private static final int MAX_TARGETS = 1024;
 
-    private final Screen parent;
     private final Map<String, List<WorldBlockConfig.WeightedBlockTarget>> rules;
     private final Map<String, Integer> replacementChances = new LinkedHashMap<>();
     private final List<KineticItemSearch.CachedItem> allItems;
-    private final GridScrollController leftScroll = new GridScrollController();
-    private final GridScrollController rightScroll = new GridScrollController();
+    private final KineticScrollController leftScroll = new KineticScrollController();
+    private final KineticScrollController rightScroll = new KineticScrollController();
     private final LinkedHashMap<String, Integer> selectedTargets = new LinkedHashMap<>();
     private final List<String> visibleSources = new ArrayList<>();
     private List<KineticItemSearch.CachedItem> visibleItems = new ArrayList<>();
@@ -59,17 +61,17 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
     private Mode mode = Mode.BROWSE;
     private String selectedSource;
     private String activeTarget;
-    private KineticEditBox leftSearch;
-    private KineticEditBox rightSearch;
-    private KineticEditBox weightBox;
-    private KineticEditBox chanceBox;
-    private StateButton newButton;
-    private StateButton doneButton;
-    private StateButton minusButton;
-    private StateButton plusButton;
-    private StateButton saveButton;
-    private StateButton backButton;
-    private StateButton loadedChunksToggleBtn;
+    private KineticTextField leftSearch;
+    private KineticTextField rightSearch;
+    private KineticTextField weightBox;
+    private KineticTextField chanceBox;
+    private KineticButton newButton;
+    private KineticButton doneButton;
+    private KineticButton minusButton;
+    private KineticButton plusButton;
+    private KineticButton saveButton;
+    private KineticButton backButton;
+    private KineticButton loadedChunksToggleBtn;
     private int leftX;
     private int leftY;
     private int leftW;
@@ -147,31 +149,29 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         if (loadedChunksToggleBtn != null) loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
     }
 
-    public WeightedBlockMergeScreen(Screen parent) {
-        super(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.title"));
-        this.parent = parent;
-        setParentScreen(parent);
+    public WeightedBlockMergePage() {
+        super(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.title"));
         this.rules = WorldBlockConfig.copyWeightedBlockReplacements();
         if (WorldBlockConfig.data != null && WorldBlockConfig.data.weightedBlockReplacementChances != null) {
             replacementChances.putAll(WorldBlockConfig.data.weightedBlockReplacementChances);
         }
         this.applyWeightedToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyWeightedBlockReplacementToLoadedChunksOnce;
         this.allItems = new ArrayList<>(ItemSearchCache.getAllItems());
-        useCanvas(STANDARD_CANVAS_WIDTH, STANDARD_CANVAS_HEIGHT, STANDARD_SAFE_MARGIN);
+        useCanvas(CANVAS_WIDTH, CANVAS_HEIGHT, SAFE_MARGIN);
         configureStandaloneDraft(this::captureWeightedSnapshot, this::restoreWeightedSnapshot);
     }
 
     @Override
-    protected void buildUi() {
+    protected void build(KineticUi ui) {
         int pad = 8;
         int gap = 6;
-        leftW = Math.max(150, Math.min(190, canvasWidth() / 3));
+        leftW = Math.max(150, Math.min(190, width() / 3));
         leftX = pad;
         rightX = leftX + leftW + gap;
-        rightW = Math.max(180, canvasWidth() - rightX - pad);
+        rightW = Math.max(180, width() - rightX - pad);
         leftY = 58;
         rightY = 58;
-        leftH = Math.max(100, canvasHeight() - leftY - 10);
+        leftH = Math.max(100, height() - leftY - 10);
         rightH = leftH;
 
         leftContentX = leftX + PANEL_INSET;
@@ -184,8 +184,8 @@ public final class WeightedBlockMergeScreen extends KineticScreen {
         rightContentH = Math.max(1, rightH - PANEL_INSET * 2);
         cols = Math.max(1, rightContentW / SLOT_PITCH);
 
-        leftSearch = addTextField(leftX, 5, leftW, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint"), null, null);
-        leftSearch.setResponder(ignored -> refreshLeft());
+        leftSearch = ui().textField(leftX, 5, leftW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.search.hint")).build();
+        leftSearch.onTextChange(ignored -> refreshLeft());
 int buttonWidth = 62;
         int closeX = rightX + rightW - buttonWidth;
         int saveX = closeX - gap - buttonWidth;
@@ -193,33 +193,33 @@ int buttonWidth = 62;
         int newX = doneX - gap - buttonWidth;
         int searchWidth = Math.max(80, newX - rightX - gap);
 
-        rightSearch = addTextField(rightX, 5, searchWidth, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search"), null, null);
-        rightSearch.setResponder(ignored -> refreshRight());
-newButton = addButton(newX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new"), null, () -> startNewRule());
-doneButton = addButton(doneX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done"), null, () -> finishTargets());
-saveButton = addButton(saveX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save"), null, () -> save());
-backButton = addButton(closeX, 5, buttonWidth, Component.translatable("gui.realmcontrol.worldblock.config.back"), null, () -> onClose());
-Component weightLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight");
-        int weightBoxX = rightX + font.width(weightLabel) + 6;
-        weightBox = addTextField(weightBoxX, 31, 72, Component.empty());
-        weightBox.setMaxLength(7);
+        rightSearch = ui().textField(rightX, 5, searchWidth).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")).build();
+        rightSearch.onTextChange(ignored -> refreshRight());
+newButton = ui().button(newX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new")).onClick(() -> startNewRule()).build();
+doneButton = ui().button(doneX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done")).onClick(() -> finishTargets()).build();
+saveButton = ui().button(saveX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save")).onClick(() -> save()).build();
+backButton = ui().button(closeX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
+Component weightLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight");
+        int weightBoxX = rightX + KineticText.width(weightLabel) + 6;
+        weightBox = ui().textField(weightBoxX, 31, 72).build();
+        weightBox.limitTextLength(7);
         weightBox.setValidator(value -> value.isEmpty() || value.matches("\\d{1,7}"));
-        weightBox.setResponder(this::updateActiveWeightFromText);
-int minusX = weightBoxX + weightBox.getWidth() + 4;
-        minusButton = addButton(minusX, 31, 42, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus"), null, () -> adjustWeight(-10));
-plusButton = addButton(minusX + 46, 31, 42, Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus"), null, () -> adjustWeight(10));
+        weightBox.onTextChange(this::updateActiveWeightFromText);
+int minusX = weightBoxX + weightBox.controlWidth() + 4;
+        minusButton = ui().button(minusX, 31, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus")).onClick(() -> adjustWeight(-10)).build();
+plusButton = ui().button(minusX + 46, 31, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus")).onClick(() -> adjustWeight(10)).build();
 int chanceBoxX = rightX + rightW - 48;
-        chanceBox = addTextField(chanceBoxX, 31, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
-        chanceBox.setMaxLength(3);
+        chanceBox = ui().textField(chanceBoxX, 31, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
+        chanceBox.limitTextLength(3);
         chanceBox.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
-        chanceBox.setResponder(this::updateReplacementChance);
+        chanceBox.onTextChange(this::updateReplacementChance);
 int loadedToggleWidth = 80;
-        int chanceLabelWidth = font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+        int chanceLabelWidth = KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         int loadedToggleX = chanceBoxX - chanceLabelWidth - loadedToggleWidth - 10;
-        loadedChunksToggleBtn = addButton(loadedToggleX, 31, loadedToggleWidth, getLoadedChunksToggleText(), null, () -> {
+        loadedChunksToggleBtn = ui().button(loadedToggleX, 31, loadedToggleWidth).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyWeightedToLoadedChunksOnce = !applyWeightedToLoadedChunksOnce;
                     loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
-                });
+                }).build();
 refreshLeft();
         refreshRight();
         updateControls();
@@ -233,7 +233,7 @@ refreshLeft();
     }
 
     private Component getLoadedChunksToggleText() {
-        return Component.translatable(
+        return KineticI18n.translatable(
                 applyWeightedToLoadedChunksOnce
                         ? "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on"
                         : "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off"
@@ -332,7 +332,7 @@ refreshLeft();
 
     private void refreshLeft() {
         visibleSources.clear();
-        String query = leftSearch == null ? "" : leftSearch.getValue().trim().toLowerCase(Locale.ROOT);
+        String query = leftSearch == null ? "" : leftSearch.textValue().trim().toLowerCase(Locale.ROOT);
         for (String source : rules.keySet()) {
             if (query.isEmpty() || KineticSearch.match(ItemSearchCache.getSearchDataForId(source), query)) {
                 visibleSources.add(source);
@@ -352,7 +352,7 @@ refreshLeft();
             return;
         }
 
-        String query = rightSearch.getValue().trim().toLowerCase(Locale.ROOT);
+        String query = rightSearch.textValue().trim().toLowerCase(Locale.ROOT);
         Set<String> simpleSources = simpleSourceIds();
         Set<String> weightedTargets = weightedTargetIds();
         int hash = 31 * ItemSearchCache.getAllItemsHash()
@@ -411,7 +411,7 @@ refreshLeft();
         boolean added = false;
         if (!selectedTargets.containsKey(id)) {
             if (selectedTargets.size() >= MAX_TARGETS) {
-                KineticOverlays.toast(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.too_many_targets"));
+                KineticOverlays.toast(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.too_many_targets"));
                 return;
             }
             selectedTargets.put(id, 100);
@@ -447,8 +447,11 @@ refreshLeft();
 
     private void syncChanceBox() {
         if (chanceBox == null || selectedSource == null) return;
+        String original = String.valueOf(WorldBlockConfig.data == null || WorldBlockConfig.data.weightedBlockReplacementChances == null
+                ? 100 : WorldBlockConfig.data.weightedBlockReplacementChances.getOrDefault(selectedSource, 100));
+        chanceBox.setDefaultText(original);
         String value = String.valueOf(replacementChances.getOrDefault(selectedSource, 100));
-        if (!value.equals(chanceBox.getValue())) chanceBox.setValue(value);
+        if (!value.equals(chanceBox.textValue())) chanceBox.setTextValue(value);
     }
 
     private void updateActiveWeightFromText(String text) {
@@ -487,7 +490,21 @@ refreshLeft();
 
     private void syncWeightBox() {
         if (weightBox == null) return;
-        weightBox.setValue(activeTarget == null ? "" : String.valueOf(selectedTargets.getOrDefault(activeTarget, 100)));
+        int originalWeight = 100;
+        if (activeTarget != null && selectedSource != null && WorldBlockConfig.data != null
+                && WorldBlockConfig.data.weightedBlockReplacements != null) {
+            List<WorldBlockConfig.WeightedBlockTarget> originals = WorldBlockConfig.data.weightedBlockReplacements.get(selectedSource);
+            if (originals != null) {
+                for (WorldBlockConfig.WeightedBlockTarget target : originals) {
+                    if (target != null && activeTarget.equals(target.target)) {
+                        originalWeight = target.weight;
+                        break;
+                    }
+                }
+            }
+        }
+        weightBox.setDefaultText(activeTarget == null ? "" : String.valueOf(originalWeight));
+        weightBox.setTextValue(activeTarget == null ? "" : String.valueOf(selectedTargets.getOrDefault(activeTarget, 100)));
     }
 
     private void updateControls() {
@@ -575,74 +592,54 @@ refreshLeft();
 
 
     @Override
-    protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
-        GuiTheme.panel(g, leftX, leftY, leftW, leftH);
-        GuiTheme.panel(g, rightX, rightY, rightW, rightH);
+    protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
+        g.fillGradient(0, 0, width(), height(), 0xFF222222, 0xFF111111);
+        KineticTheme.panel(g, leftX, leftY, leftW, leftH);
+        KineticTheme.panel(g, rightX, rightY, rightW, rightH);
     }
 
     @Override
-    protected void renderCanvasForeground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
+    protected void renderForeground(KineticGraphics g, int smx, int smy, float pt) {
         renderLeft(g, smx, smy);
         renderRight(g, smx, smy);
         renderHeader(g);
     }
 
-    private void renderHeader(GuiGraphics g) {
+    private void renderHeader(KineticGraphics g) {
         int statusX = leftX;
         Component status = switch (mode) {
-            case BROWSE -> Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.browse");
-            case SELECT_SOURCE -> Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.source");
-            case SELECT_TARGETS -> Component.translatable(
+            case BROWSE -> KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.browse");
+            case SELECT_SOURCE -> KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.source");
+            case SELECT_TARGETS -> KineticI18n.translatable(
                     "gui.realmcontrol.worldblock.banitem.block.weighted.mode.targets",
                     Component.literal(String.valueOf(selectedTargets.size()))
             );
         };
         if (mode == Mode.SELECT_TARGETS && selectedSource != null) {
             var sourceStack = WorldBlockConfig.parseItemStack(selectedSource);
-            GuiTheme.itemSlot(g, leftX, 32, SLOT_SIZE, 4, false);
+            KineticTheme.itemSlot(g, leftX, 32, SLOT_SIZE, 4, false);
             ItemBanControl.withSkip(() -> {
-                GuiTheme.item(g, font, sourceStack, leftX, 32, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, sourceStack, leftX, 32, SLOT_SIZE, 1.0F, false);
                 return null;
             });
             statusX += SLOT_SIZE + 4;
         }
-        int statusRight = canvasWidth() - 8;
+        int statusRight = width() - 8;
         int statusWidth = mode == Mode.SELECT_TARGETS && activeTarget != null
                 ? Math.max(1, leftW - (statusX - leftX))
                 : Math.max(1, statusRight - statusX);
-        KineticText.drawScrollingLeft(g, font, status, statusX, 36, statusWidth, 0xFFFFFFFF, false);
+        g.scrollingText(status, statusX, 36, statusWidth, 0xFFFFFFFF, false);
         if (mode == Mode.SELECT_TARGETS && activeTarget != null) {
-            KineticText.drawScrollingLeft(
-                    g,
-                    font,
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"),
-                    rightX,
-                    37,
-                    Math.max(1, weightBox.getX() - rightX - 3),
-                    0xFFFFFFFF,
-                    false
-            );
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"), rightX, 37, Math.max(1, weightBox.controlX() - rightX - 3), 0xFFFFFFFF, false);
         }
         if (chanceBox != null && isControlVisible(chanceBox)) {
-            Component chanceLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            KineticText.drawScrollingRight(
-                    g,
-                    font,
-                    chanceLabel,
-                    chanceBox.getX() - 3,
-                    37,
-                    Math.max(1, chanceBox.getX() - rightX - 6),
-                    0xFFFFFFFF,
-                    false
-            );
+            Component chanceLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
+            g.scrollingTextRight(chanceLabel, chanceBox.controlX() - 3, 37, Math.max(1, chanceBox.controlX() - rightX - 6), 0xFFFFFFFF, false);
         }
     }
 
-    private void renderLeft(GuiGraphics g, int mx, int my) {
-        enableCanvasScissor(
-                g,
-                leftContentX,
+    private void renderLeft(KineticGraphics g, int mx, int my) {
+        g.scissor(leftContentX,
                 leftContentY,
                 leftContentX + leftContentW,
                 leftContentY + leftContentH
@@ -656,54 +653,35 @@ refreshLeft();
                         && my >= rowY
                         && my < rowY + 24;
                 boolean selected = source.equals(selectedSource);
-                GuiTheme.stateSurface(
+                KineticTheme.stateSurface(
                         g,
                         leftContentX,
                         rowY,
                         leftContentW,
                         24,
-                        GuiTheme.Surface.PANEL_ALT,
+                        KineticTheme.Surface.PANEL_ALT,
                         selected,
                         hovered,
                         false
                 );
                 var stack = WorldBlockConfig.parseItemStack(source);
-                GuiTheme.itemSlot(g, leftContentX + 2, rowY + 2, 20, 20, 4, selected, hovered, false);
+                KineticTheme.itemSlot(g, leftContentX + 2, rowY + 2, 20, 20, 4, selected, hovered, false);
                 ItemBanControl.withSkip(() -> {
-                    GuiTheme.item(g, font, stack, leftContentX + 2, rowY + 2, 20, 1.0F, false);
+                    KineticTheme.item(g, stack, leftContentX + 2, rowY + 2, 20, 1.0F, false);
                     return null;
                 });
                 String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
                 int countWidth = 18;
                 int nameWidth = Math.max(8, leftContentW - 30 - countWidth);
-                KineticText.drawScrollingLeft(
-                        g,
-                        font,
-                        name,
-                        leftContentX + 26,
-                        rowY + 8,
-                        nameWidth,
-                        0xFFFFFFFF,
-                        false
-                );
+                g.scrollingText(Component.literal(name), leftContentX + 26, rowY + 8, nameWidth, 0xFFFFFFFF, false);
                 int count = rules.getOrDefault(source, List.of()).size();
                 Component countText = Component.literal(String.valueOf(count));
-                KineticText.drawScrollingRight(
-                        g,
-                        font,
-                        countText,
-                        leftContentX + leftContentW - 2,
-                        rowY + 8,
-                        24,
-                        0xFFFFFFFF,
-                        false
-                );
+                g.scrollingTextRight(countText, leftContentX + leftContentW - 2, rowY + 8, 24, 0xFFFFFFFF, false);
             }
             y += 25;
         }
-        disableCanvasScissor(g);
-        GuiTheme.scrollbar(
-                leftScroll,
+        g.endScissor();
+        leftScroll.render(
                 g,
                 mx,
                 my,
@@ -715,11 +693,9 @@ refreshLeft();
         );
     }
 
-    private void renderRight(GuiGraphics g, int mx, int my) {
+    private void renderRight(KineticGraphics g, int mx, int my) {
         if (mode == Mode.BROWSE) return;
-        enableCanvasScissor(
-                g,
-                rightContentX,
+        g.scissor(rightContentX,
                 rightContentY,
                 rightContentX + rightContentW,
                 rightContentY + rightContentH
@@ -736,20 +712,19 @@ refreshLeft();
             KineticItemSearch.CachedItem item = visibleItems.get(i);
             boolean hovered = mx >= x && mx < x + SLOT_SIZE && my >= y && my < y + SLOT_SIZE;
             boolean selected = selectedTargets.containsKey(item.id());
-            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
+            KineticTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
             ItemBanControl.withSkip(() -> {
-                GuiTheme.item(g, font, item.stack(), x, y, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, item.stack(), x, y, SLOT_SIZE, 1.0F, false);
                 return null;
             });
             if (selected) {
                 String probability = formatProbability(selectedTargets.get(item.id()), totalWeight);
-                Component badge = Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.probability_badge", probability);
+                Component badge = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.probability_badge", probability);
                 renderProbabilityBadge(g, x, y, badge);
             }
         }
-        disableCanvasScissor(g);
-        GuiTheme.scrollbar(
-                rightScroll,
+        g.endScissor();
+        rightScroll.render(
                 g,
                 mx,
                 my,
@@ -761,26 +736,28 @@ refreshLeft();
         );
     }
 
-    private void renderProbabilityBadge(GuiGraphics g, int x, int y, Component badge) {
-        int scaledWidth = Math.max(1, (int) Math.ceil(font.width(badge) * 0.5F));
+    private void renderProbabilityBadge(KineticGraphics g, int x, int y, Component badge) {
+        int scaledWidth = Math.max(1, (int) Math.ceil(KineticText.width(badge) * 0.5F));
         int drawX = x + SLOT_SIZE - scaledWidth - 1;
         int drawY = y + SLOT_SIZE - 5;
-        GuiTheme.runWithoutDepthTest(() -> {
-            g.pose().pushPose();
-            g.pose().translate(0.0F, 0.0F, 300.0F);
+        // 原 runWithoutDepthTest + translate(z=300)：隔离绘制并抬高一层盖过物品
+        // Former runWithoutDepthTest + translate(z=300): isolated drawing raised one layer above items.
+        g.isolated(() -> {
+            g.push();
+            g.raise(1);
             int badgeX = Math.max(x, drawX - 1);
-            GuiTheme.surface(
+            KineticTheme.surface(
                     g,
                     badgeX,
                     drawY - 1,
                     x + SLOT_SIZE - badgeX,
                     y + SLOT_SIZE - drawY + 1,
-                    GuiTheme.Surface.PANEL_ALT
+                    KineticTheme.Surface.PANEL_ALT
             );
-            g.pose().translate(drawX, drawY, 0.0F);
-            g.pose().scale(0.5F, 0.5F, 1.0F);
-            KineticText.drawScrollingRight(g, font, badge, scaledWidth * 2, 0, scaledWidth * 2, 0xFF55FF55, false);
-            g.pose().popPose();
+            g.translate(drawX, drawY);
+            g.scale(0.5F, 0.5F);
+            g.scrollingTextRight(badge, scaledWidth * 2, 0, scaledWidth * 2, 0xFF55FF55, false);
+            g.pop();
         });
     }
 
@@ -791,41 +768,38 @@ refreshLeft();
         return String.format(Locale.ROOT, "%.1f", value);
     }
 
-    private boolean isHoveringButton(StateButton button, double mx, double my) {
+    private boolean isHoveringButton(KineticButton button, double mx, double my) {
         return button != null
                 && isControlVisible(button)
-                && mx >= button.getX()
-                && mx < button.getX() + button.getWidth()
-                && my >= button.getY()
-                && my < button.getY() + button.getHeight();
+                && button.contains(mx, my);
     }
 
     @Override
-    protected void renderTooltips(@NotNull GuiGraphics g, int smx, int smy, int mx, int my) {
+    protected void renderTooltips(int smx, int smy) {
         if (isHoveringButton(newButton, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new.tooltip"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new.tooltip"));
             return;
         }
         if (isHoveringButton(doneButton, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done.tooltip"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done.tooltip"));
             return;
         }
         if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
             showTooltip(List.of(
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
-            ), null);
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
+            ));
             return;
         }
         if (mode == Mode.SELECT_TARGETS && activeTarget != null) {
-            if ((weightBox != null && weightBox.isMouseOver(smx, smy))
+            if ((weightBox != null && weightBox.contains(smx, smy))
                     || isHoveringButton(minusButton, smx, smy)
                     || isHoveringButton(plusButton, smx, smy)) {
-                showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.tooltip"));
+                showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.tooltip"));
                 return;
             }
         }
@@ -833,7 +807,7 @@ refreshLeft();
                 && smx >= leftX && smx < leftX + SLOT_SIZE
                 && smy >= 32 && smy < 32 + SLOT_SIZE) {
             var sourceStack = WorldBlockConfig.parseItemStack(selectedSource);
-            showTooltip(List.of(ItemCacheHudRenderer.getDisplayNameCustom(sourceStack), Component.literal(selectedSource)), null);
+            showTooltip(List.of(ItemCacheHudRenderer.getDisplayNameCustom(sourceStack), Component.literal(selectedSource)));
             return;
         }
         int leftRuleIndex = leftRuleAt(smx, smy);
@@ -843,8 +817,8 @@ refreshLeft();
             showTooltip(List.of(
                             ItemCacheHudRenderer.getDisplayNameCustom(sourceStack),
                             Component.literal(source),
-                            Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.rule.tooltip")
-                    ), null);
+                            KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.rule.tooltip")
+                    ));
             return;
         }
         int index = rightItemAt(smx, smy);
@@ -854,27 +828,31 @@ refreshLeft();
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
             tooltip.add(Component.literal(item.id()));
             if (mode == Mode.SELECT_SOURCE) {
-                tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.source.tooltip"));
+                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.source.tooltip"));
             } else if (selectedTargets.containsKey(item.id())) {
                 long total = selectedTotalWeight();
-                tooltip.add(Component.translatable(
+                tooltip.add(KineticI18n.translatable(
                         "gui.realmcontrol.worldblock.banitem.block.weighted.target.selected.tooltip",
                         selectedTargets.get(item.id()),
                         formatProbability(selectedTargets.get(item.id()), total)
                 ));
-                tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.remove.tooltip"));
+                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.remove.tooltip"));
             } else {
-                tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip"));
+                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip"));
             }
-            showTooltip(tooltip, null);
+            showTooltip(tooltip);
         }
     }
 
     @Override
-    protected boolean canvasMouseClicked(double mx, double my, int button) {
-        if (KineticMouseButtons.isPrimary(button) && leftScroll.beginDrag(
+    protected boolean onMouseClickCapture(MouseInput input) {
+        // 原 canvasMouseClicked 全部在控件之前处理 / The old canvasMouseClicked handled all of this before controls.
+        double mx = input.x();
+        double my = input.y();
+        if (leftScroll.beginDrag(
                 mx,
                 my,
+                input.button(),
                 leftX + leftW - PANEL_INSET - SCROLLBAR_WIDTH,
                 leftContentY,
                 SCROLLBAR_WIDTH,
@@ -882,9 +860,10 @@ refreshLeft();
                 SCROLLBAR_MIN_THUMB,
                 1
         )) return true;
-        if (KineticMouseButtons.isPrimary(button) && rightScroll.beginDrag(
+        if (rightScroll.beginDrag(
                 mx,
                 my,
+                input.button(),
                 rightX + rightW - PANEL_INSET - SCROLLBAR_WIDTH,
                 rightContentY,
                 SCROLLBAR_WIDTH,
@@ -897,11 +876,11 @@ refreshLeft();
             int row = leftRuleAt(mx, my);
             if (row >= 0) {
                 String source = visibleSources.get(row);
-                if (KineticMouseButtons.isPrimary(button)) {
+                if (input.isLeft()) {
                     switchRule(source);
                     return true;
                 }
-                if (KineticMouseButtons.isSecondary(button)) {
+                if (input.isRight()) {
                     deleteRule(source);
                     return true;
                 }
@@ -911,22 +890,22 @@ refreshLeft();
         int index = rightItemAt(mx, my);
         if (index >= 0) {
             String id = visibleItems.get(index).id();
-            if (mode == Mode.SELECT_SOURCE && KineticMouseButtons.isPrimary(button)) {
+            if (mode == Mode.SELECT_SOURCE && input.isLeft()) {
                 selectSource(id);
                 return true;
             }
             if (mode == Mode.SELECT_TARGETS) {
-                if (KineticMouseButtons.isPrimary(button)) {
+                if (input.isLeft()) {
                     selectTarget(id);
                     return true;
                 }
-                if (KineticMouseButtons.isSecondary(button) && selectedTargets.containsKey(id)) {
+                if (input.isRight() && selectedTargets.containsKey(id)) {
                     removeTarget(id);
                     return true;
                 }
             }
         }
-        return super.canvasMouseClicked(mx, my, button);
+        return false;
     }
 
     private int leftRuleAt(double mx, double my) {
@@ -957,19 +936,23 @@ refreshLeft();
     }
 
     @Override
-    protected boolean canvasMouseReleased(double mx, double my, int button) {
-        return leftScroll.release(button) | rightScroll.release(button) || super.canvasMouseReleased(mx, my, button);
+    protected boolean onMouseRelease(MouseInput input) {
+        return leftScroll.release(input.button()) | rightScroll.release(input.button());
     }
 
     @Override
-    protected boolean canvasMouseDragged(double mx, double my, int button, double dx, double dy) {
+    protected boolean onMouseDrag(MouseDragInput input) {
+        double my = input.y();
         if (leftScroll.drag(my, leftContentY, leftContentH, SCROLLBAR_MIN_THUMB)) return true;
         if (rightScroll.drag(my, rightContentY, rightContentH, SCROLLBAR_MIN_THUMB)) return true;
-        return super.canvasMouseDragged(mx, my, button, dx, dy);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseScrolled(double mx, double my, double delta) {
+    protected boolean onMouseScroll(ScrollInput input) {
+        double mx = input.x();
+        double my = input.y();
+        double delta = input.deltaY();
         if (mx >= leftContentX
                 && mx <= leftX + leftW - PANEL_INSET
                 && my >= leftContentY
@@ -980,10 +963,10 @@ refreshLeft();
                 && my >= rightContentY
                 && my <= rightContentY + rightContentH
                 && rightScroll.scroll(delta, SLOT_PITCH)) return true;
-        return super.canvasMouseScrolled(mx, my, delta);
+        return false;
     }
     private static boolean isControlVisible(KineticControl control) {
-        return control != null && control.isVisible();
+        return control != null && control.controlVisible();
     }
 
     private static boolean isControlEnabled(KineticControl control) {
@@ -991,7 +974,7 @@ refreshLeft();
     }
 
     private static void setControlVisible(KineticControl control, boolean visible) {
-        if (control != null) control.setVisible(visible);
+        if (control != null) control.setControlVisible(visible);
     }
 
     private static void setControlEnabled(KineticControl control, boolean enabled) {

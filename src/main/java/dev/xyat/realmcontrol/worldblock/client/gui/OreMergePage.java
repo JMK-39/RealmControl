@@ -1,22 +1,26 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
-import dev.xyat.kineticcore.api.client.widget.input.KineticTextFields.KineticEditBox;
-import dev.xyat.kineticcore.api.client.widget.KineticControl;
-import dev.xyat.kineticcore.api.client.widget.button.KineticButtons.StateButton;
+import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.kineticcore.api.client.gui.KineticGui;
+import dev.xyat.kineticcore.api.client.gui.input.ScrollInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseDragInput;
+import dev.xyat.kineticcore.api.client.gui.input.MouseInput;
+import dev.xyat.kineticcore.api.client.gui.text.KineticText;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
+import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
+import dev.xyat.kineticcore.api.client.gui.scroll.KineticScrollController;
+import dev.xyat.kineticcore.api.client.gui.theme.KineticTheme;
+import dev.xyat.kineticcore.api.client.gui.ui.KineticUi;
+import dev.xyat.kineticcore.api.client.gui.widget.*;
+import dev.xyat.kineticcore.api.client.gui.widget.list.*;
+
 import dev.xyat.kineticcore.api.client.input.KineticMouseButtons;
-import dev.xyat.kineticcore.api.client.text.KineticText;
-import dev.xyat.kineticcore.api.client.theme.GuiTheme;
 import dev.xyat.kineticcore.api.client.search.KineticSearch;
-import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
-import dev.xyat.kineticcore.api.client.screen.KineticScreen;
-import dev.xyat.kineticcore.api.client.widget.scroll.KineticScroll.GridScrollController;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -34,14 +38,16 @@ import java.util.Set;
 import java.util.Comparator;
 import java.util.TreeSet;
 
-public class OreMergeScreen extends KineticScreen {
+public class OreMergePage extends KineticPage {
     private static final int SLOT_SIZE = 18;
     private static final int SLOT_PITCH = 19;
     private static final int RIGHT_SCROLLBAR_INSET = 7;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
 
-    private final Screen parent;
+    // 原 parent != null：打开时是否存在父界面（决定“返回/关闭”文本）
+    // Former parent != null: whether a parent screen existed when opened (chooses the Back/Close text).
+    private final boolean hasParentScreen;
     private final Map<String, List<String>> tempRules;
     private final Map<String, Integer> replacementChances = new LinkedHashMap<>();
     private final Runnable onChanged;
@@ -49,15 +55,15 @@ public class OreMergeScreen extends KineticScreen {
     private final Set<String> expandedTargets = new HashSet<>();
     private final List<LeftEntry> leftEntries = new ArrayList<>();
 
-    private KineticEditBox leftSearchBox;
-    private KineticEditBox searchBox;
-    private StateButton addBtn;
-    private StateButton filterBtn;
-    private StateButton doneBtn;
-    private StateButton saveBtn;
-    private StateButton closeBtn;
-    private StateButton loadedChunksToggleBtn;
-    private KineticEditBox replacementChanceBox;
+    private KineticTextField leftSearchBox;
+    private KineticTextField searchBox;
+    private KineticButton addBtn;
+    private KineticButton filterBtn;
+    private KineticButton doneBtn;
+    private KineticButton saveBtn;
+    private KineticButton closeBtn;
+    private KineticButton loadedChunksToggleBtn;
+    private KineticTextField replacementChanceBox;
 
     private List<KineticItemSearch.CachedItem> rightDisplayList = new ArrayList<>();
     private String selectedTarget;
@@ -66,8 +72,8 @@ public class OreMergeScreen extends KineticScreen {
     private boolean groupFilterEnabled;
     private boolean applyToLoadedChunksOnce;
     private final LinkedHashSet<String> pendingSources = new LinkedHashSet<>();
-    private final GridScrollController leftScroll = new GridScrollController();
-    private final GridScrollController rightScroll = new GridScrollController();
+    private final KineticScrollController leftScroll = new KineticScrollController();
+    private final KineticScrollController rightScroll = new KineticScrollController();
     private int totalLeftH;
     private int totalRightH;
 
@@ -138,25 +144,25 @@ public class OreMergeScreen extends KineticScreen {
         if (onChanged != null) onChanged.run();
     }
 
-    public OreMergeScreen(Screen parent, Map<String, List<String>> tempRules, Runnable onChanged) {
-        super(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.title"));
-        this.parent = parent;
-        setParentScreen(parent);
+    public OreMergePage(Map<String, List<String>> tempRules, Runnable onChanged) {
+        super(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.title"));
+        // 构造紧接在 KineticGui.openChild 之前，当前界面即父界面 / Constructed right before KineticGui.openChild, so the current screen becomes the parent.
+        this.hasParentScreen = KineticGui.isScreenOpen();
         this.tempRules = tempRules == null ? new LinkedHashMap<>() : tempRules;
         this.onChanged = onChanged;
         if (WorldBlockConfig.data != null && WorldBlockConfig.data.blockReplacementChances != null) {
             replacementChances.putAll(WorldBlockConfig.data.blockReplacementChances);
         }
         this.applyToLoadedChunksOnce = WorldBlockConfig.data != null && WorldBlockConfig.data.applyBlockReplacementToLoadedChunksOnce;
-        useCanvas(640f, 360f, 4);
+        useCanvas(640, 360, 4);
         this.allItemsCache = new ArrayList<>(ItemSearchCache.getAllItems());
         configureStandaloneDraft(this::captureMergeSnapshot, this::restoreMergeSnapshot);
     }
 
     @Override
-    protected void buildUi() {
+    protected void build(KineticUi ui) {
         int sidePadding =
-                switch (layoutLevel()) {
+                switch (layoutMetrics().level()) {
                     case LARGE -> 14;
                     case NORMAL -> 10;
                     case SMALL -> 8;
@@ -168,7 +174,7 @@ public class OreMergeScreen extends KineticScreen {
         compactLayout =
                 isPortraitLayout()
                         || isCompactLayout()
-                        || canvasWidth() < 560;
+                        || width() < 560;
 
         if (compactLayout) {
             initCompactLayout(
@@ -206,7 +212,7 @@ public class OreMergeScreen extends KineticScreen {
                         120,
                         Math.min(
                                 170,
-                                canvasWidth() / 4
+                                width() / 4
                         )
                 );
 
@@ -216,7 +222,7 @@ public class OreMergeScreen extends KineticScreen {
         leftH =
                 Math.max(
                         80,
-                        canvasHeight()
+                        height()
                                 - panelY
                                 - 8
                 );
@@ -231,7 +237,7 @@ public class OreMergeScreen extends KineticScreen {
         rightW =
                 Math.max(
                         SLOT_PITCH * 4,
-                        canvasWidth()
+                        width()
                                 - sidePadding
                                 - rightX
                 );
@@ -338,7 +344,7 @@ public class OreMergeScreen extends KineticScreen {
         int contentW =
                 Math.max(
                         140,
-                        canvasWidth()
+                        width()
                                 - sidePadding * 2
                 );
 
@@ -414,7 +420,7 @@ public class OreMergeScreen extends KineticScreen {
                         + 8;
 
         int availableForLeft =
-                canvasHeight()
+                height()
                         - leftY
                         - reservedForRight;
 
@@ -450,7 +456,7 @@ public class OreMergeScreen extends KineticScreen {
                 Math.max(
                         getRightHeaderHeight()
                                 + SLOT_PITCH * 2,
-                        canvasHeight()
+                        height()
                                 - rightY
                                 - 8
                 );
@@ -466,15 +472,15 @@ public class OreMergeScreen extends KineticScreen {
         fitRightPanelToWholeRows();
     }
 
-    private KineticEditBox createLeftSearchBox(
+    private KineticTextField createLeftSearchBox(
             int x,
             int y,
             int width
     ) {
-        KineticEditBox box =
-                addTextField(x, y, width, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.search.hint"), null, null);
+        KineticTextField box =
+                ui().textField(x, y, width).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.search.hint")).build();
 
-        box.setResponder(
+        box.onTextChange(
                 query -> {
                     rememberedLeftSearch =
                             query == null
@@ -485,21 +491,22 @@ public class OreMergeScreen extends KineticScreen {
                 }
         );
 
-        box.setValue(
+        box.setTextValue(
                 rememberedLeftSearch
         );
+        box.setDefaultText(rememberedLeftSearch);
 return box;
     }
 
-    private KineticEditBox createRightSearchBox(
+    private KineticTextField createRightSearchBox(
             int x,
             int y,
             int width
     ) {
-        KineticEditBox box =
-                addTextField(x, y, width, Component.empty(), Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search"), null, null);
+        KineticTextField box =
+                ui().textField(x, y, width).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")).build();
 
-        box.setResponder(
+        box.onTextChange(
                 query -> {
                     rememberedRightSearch =
                             query == null
@@ -510,38 +517,39 @@ return box;
                 }
         );
 
-        box.setValue(
+        box.setTextValue(
                 rememberedRightSearch
         );
+        box.setDefaultText(rememberedRightSearch);
 return box;
     }
 
-    private StateButton createLoadedChunksToggleButton() {
+    private KineticButton createLoadedChunksToggleButton() {
         int width = 80;
         int chanceBoxX = rightX + rightW - 48;
-        int chanceLabelWidth = font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
+        int chanceLabelWidth = KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
         int x = chanceBoxX - chanceLabelWidth - width - 10;
         int y = rightY + 2;
-        StateButton button = addButton(x, y, width, getLoadedChunksToggleText(), null, () -> {
+        KineticButton button = ui().button(x, y, width).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
                     loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
-                });
+                }).build();
 return button;
     }
 
     private Component getLoadedChunksToggleText() {
-        return Component.translatable(
+        return KineticI18n.translatable(
                 applyToLoadedChunksOnce
                         ? "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.on"
                         : "gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.off"
         );
     }
 
-    private KineticEditBox createReplacementChanceBox() {
-        KineticEditBox box = addTextField(rightX + rightW - 48, rightY + 2, 44, Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
-        box.setMaxLength(3);
+    private KineticTextField createReplacementChanceBox() {
+        KineticTextField box = ui().textField(rightX + rightW - 48, rightY + 2, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
+        box.limitTextLength(3);
         box.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
-        box.setResponder(this::updateReplacementChance);
+        box.onTextChange(this::updateReplacementChance);
 return box;
     }
 
@@ -562,19 +570,23 @@ return box;
         setControlVisible(replacementChanceBox, visible);
         setControlEnabled(replacementChanceBox, visible);
         if (!visible) return;
-        String value = String.valueOf(replacementChances.getOrDefault(getBaseIdentifier(selectedTarget), 100));
-        if (!value.equals(replacementChanceBox.getValue())) replacementChanceBox.setValue(value);
+        String targetId = getBaseIdentifier(selectedTarget);
+        String original = String.valueOf(WorldBlockConfig.data == null || WorldBlockConfig.data.blockReplacementChances == null
+                ? 100 : WorldBlockConfig.data.blockReplacementChances.getOrDefault(targetId, 100));
+        replacementChanceBox.setDefaultText(original);
+        String value = String.valueOf(replacementChances.getOrDefault(targetId, 100));
+        if (!value.equals(replacementChanceBox.textValue())) replacementChanceBox.setTextValue(value);
     }
 
-    private StateButton createAddButton(
+    private KineticButton createAddButton(
             int x,
             int y,
             int width
     ) {
-        StateButton button =
-                addButton(x, y, width, Component.translatable(
+        KineticButton button =
+                ui().button(x, y, width).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.merge_add"
-                                ), null, () -> {
+                                )).onClick(() -> {
                                     isCreatingRule = true;
                                     selectingNewTarget = false;
                                     selectedTarget = null;
@@ -583,71 +595,71 @@ return box;
 
                                     updateLeftEntries();
                                     updateRightPanel();
-                                });
+                                }).build();
 return button;
     }
 
-    private StateButton createDoneButton(
+    private KineticButton createDoneButton(
             int x,
             int y,
             int width
     ) {
-        StateButton button = addButton(x, y, width, Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done"), null, () -> {
+        KineticButton button = ui().button(x, y, width).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done")).onClick(() -> {
                     if (!isCreatingRule || selectingNewTarget || pendingSources.isEmpty()) return;
                     selectingNewTarget = true;
                     groupFilterEnabled = false;
                     updateRightPanel();
-                });
+                }).build();
         setControlVisible(button, false);
 return button;
     }
 
-    private StateButton createFilterButton(
+    private KineticButton createFilterButton(
             int x,
             int y,
             int width
     ) {
-        StateButton button =
-                addButton(x, y, width, Component.translatable(
+        KineticButton button =
+                ui().button(x, y, width).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"
-                                ), null, () -> {
+                                )).onClick(() -> {
                                     groupFilterEnabled =
                                             !groupFilterEnabled;
 
                                     updateRightPanel();
-                                });
+                                }).build();
 return button;
     }
 
-    private StateButton createSaveButton(
+    private KineticButton createSaveButton(
             int x,
             int y,
             int width
     ) {
-        StateButton button =
-                addButton(x, y, width, Component.translatable(
+        KineticButton button =
+                ui().button(x, y, width).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.save"
-                                ), null, () -> saveAndApply());
+                                )).onClick(() -> saveAndApply()).build();
 return button;
     }
 
-    private StateButton createCloseButton(
+    private KineticButton createCloseButton(
             int x,
             int y,
             int width
     ) {
-        StateButton button =
-                addButton(x, y, width, Component.translatable(
-                                        parent == null
+        KineticButton button =
+                ui().button(x, y, width).text(KineticI18n.translatable(
+                                        !hasParentScreen
                                                 ? "gui.realmcontrol.worldblock.banitem.btn.close"
                                                 : "gui.realmcontrol.worldblock.config.back"
-                                ), null, () -> closeScreen());
+                                )).onClick(() -> closeScreen()).build();
 return button;
     }
 
     private void updateLeftEntries() {
         leftEntries.clear();
-        String query = leftSearchBox == null ? "" : leftSearchBox.getValue().toLowerCase(Locale.ROOT).trim();
+        String query = leftSearchBox == null ? "" : leftSearchBox.textValue().toLowerCase(Locale.ROOT).trim();
         for (Map.Entry<String, List<String>> entry : tempRules.entrySet()) {
             String target = entry.getKey();
             List<String> sources = entry.getValue();
@@ -699,7 +711,7 @@ return button;
             return;
         }
 
-        String query = searchBox.getValue().toLowerCase(Locale.ROOT).trim();
+        String query = searchBox.textValue().toLowerCase(Locale.ROOT).trim();
         Set<String> excluded = buildExcludedIdentifiers();
         Set<ItemUnificationHelper.MergeGroup> targetGroups = selectedTarget == null ? Collections.emptySet() : getOreGroupsForId(selectedTarget);
         int creationHash = 31 * pendingSources.hashCode() + (selectingNewTarget ? 1 : 0);
@@ -739,7 +751,7 @@ return button;
         setControlVisible(filterBtn, visible);
         setControlEnabled(filterBtn, visible && !groups.isEmpty());
         if (isControlDisabled(filterBtn)) groupFilterEnabled = false;
-        filterBtn.setText(Component.translatable(groupFilterEnabled ? "gui.realmcontrol.worldblock.banitem.block.merge.filter_group_on" : "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"));
+        filterBtn.setText(KineticI18n.translatable(groupFilterEnabled ? "gui.realmcontrol.worldblock.banitem.block.merge.filter_group_on" : "gui.realmcontrol.worldblock.banitem.block.merge.filter_group"));
     }
 
     private void updateDoneButtonState() {
@@ -826,7 +838,7 @@ return button;
         for (String target : tempRules.keySet()) {
             ItemStack stack = WorldBlockConfig.parseItemStack(target);
             if (WorldBlockConfig.isOreGenerationBanned(stack)) {
-                KineticOverlays.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
+                KineticOverlays.toast("oremerge_target_banned", KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
                 return true;
             }
         }
@@ -849,14 +861,14 @@ return button;
     }
 
     @Override
-    protected boolean handleCloseRequest() {
+    protected boolean onCloseRequested() {
         closeScreen();
         return true;
     }
 
     private void closeScreen() {
         if (onChanged != null) onChanged.run();
-        if (this.minecraft != null) this.navigateBack();
+        this.navigateBack();
     }
 
     private Set<ItemUnificationHelper.MergeGroup> getOreGroupsForId(String idStr) {
@@ -898,22 +910,20 @@ return button;
     }
 
     @Override
-    protected void renderCanvasBackground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, canvasWidth(), canvasHeight(), 0xFF222222, 0xFF111111);
-        GuiTheme.panel(g, leftX, leftY, leftW, leftH);
-        GuiTheme.panel(g, rightX, rightY, rightW, rightH);
+    protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
+        g.fillGradient(0, 0, width(), height(), 0xFF222222, 0xFF111111);
+        KineticTheme.panel(g, leftX, leftY, leftW, leftH);
+        KineticTheme.panel(g, rightX, rightY, rightW, rightH);
     }
 
     @Override
-    protected void renderCanvasForeground(@NotNull GuiGraphics g, int smx, int smy, float pt) {
+    protected void renderForeground(KineticGraphics g, int smx, int smy, float pt) {
         renderLeftPanel(g, smx, smy);
         renderRightPanel(g, smx, smy);
     }
 
-    private void renderLeftPanel(GuiGraphics g, int smx, int smy) {
-        enableCanvasScissor(
-                g,
-                leftX,
+    private void renderLeftPanel(KineticGraphics g, int smx, int smy) {
+        g.scissor(leftX,
                 leftY,
                 leftX + leftW,
                 leftY + leftH
@@ -928,7 +938,7 @@ return button;
             }
             currentY += entry.h + 1;
         }
-        disableCanvasScissor(g);
+        g.endScissor();
         leftScroll.render(
                 g,
                 smx,
@@ -956,76 +966,56 @@ return button;
         return rightY + getRightHeaderHeight();
     }
 
-    private void renderRightStatus(GuiGraphics g) {
+    private void renderRightStatus(KineticGraphics g) {
         Component info;
         if (isCreatingRule && !selectingNewTarget) {
-            info = Component.translatable(
+            info = KineticI18n.translatable(
                     "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_replaced",
-                    Component.literal(String.valueOf(pendingSources.size())).withStyle(ChatFormatting.YELLOW),
-                    Component.literal(String.valueOf(rightDisplayList.size())).withStyle(ChatFormatting.AQUA)
+                    Component.literal(String.valueOf(pendingSources.size())),
+                    Component.literal(String.valueOf(rightDisplayList.size()))
             );
         } else if (isCreatingRule) {
-            info = Component.translatable(
+            info = KineticI18n.translatable(
                     "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_final_target",
-                    Component.literal(String.valueOf(pendingSources.size())).withStyle(ChatFormatting.YELLOW),
-                    Component.literal(String.valueOf(rightDisplayList.size())).withStyle(ChatFormatting.AQUA)
+                    Component.literal(String.valueOf(pendingSources.size())),
+                    Component.literal(String.valueOf(rightDisplayList.size()))
             );
         } else {
             ItemStack targetStack = WorldBlockConfig.parseItemStack(selectedTarget);
-            Component targetName = ItemCacheHudRenderer.getDisplayNameCustom(targetStack).copy().withStyle(ChatFormatting.GOLD);
-            Component filterText = Component.translatable(
+            Component targetName = ItemCacheHudRenderer.getDisplayNameCustom(targetStack);
+            Component filterText = KineticI18n.translatable(
                     groupFilterEnabled
                             ? "gui.realmcontrol.worldblock.banitem.block.merge.filter_state.group"
                             : "gui.realmcontrol.worldblock.banitem.block.merge.filter_state.all"
-            ).withStyle(ChatFormatting.AQUA);
-            info = Component.translatable(
+            );
+            info = KineticI18n.translatable(
                     "gui.realmcontrol.worldblock.banitem.block.merge.mode.select_source",
                     targetName,
-                    Component.literal(String.valueOf(rightDisplayList.size())).withStyle(ChatFormatting.YELLOW),
+                    Component.literal(String.valueOf(rightDisplayList.size())),
                     filterText
             );
         }
         int infoRight = replacementChanceBox != null && isControlVisible(replacementChanceBox)
-                ? replacementChanceBox.getX() - font.width(Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")) - 6
+                ? replacementChanceBox.controlX() - KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")) - 6
                 : rightX + rightW - 4;
         if (loadedChunksToggleBtn != null && isControlVisible(loadedChunksToggleBtn)) {
-            infoRight = Math.min(infoRight, loadedChunksToggleBtn.getX() - 6);
+            infoRight = Math.min(infoRight, loadedChunksToggleBtn.controlX() - 6);
         }
-        KineticText.drawScrollingLeft(
-                g,
-                font,
-                info,
-                rightX + 6,
-                rightY + 8,
-                Math.max(1, infoRight - (rightX + 6)),
-                0xFFFFFFFF,
-                false
-        );
+        g.scrollingText(info, rightX + 6, rightY + 8, Math.max(1, infoRight - (rightX + 6)), 0xFFFFFFFF, false);
         if (replacementChanceBox != null && isControlVisible(replacementChanceBox)) {
-            Component chanceLabel = Component.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            KineticText.drawScrollingRight(
-                    g,
-                    font,
-                    chanceLabel,
-                    replacementChanceBox.getX() - 3,
-                    rightY + 8,
-                    Math.max(1, replacementChanceBox.getX() - rightX - 9),
-                    0xFFFFFFFF,
-                    false
-            );
+            Component chanceLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
+            g.scrollingTextRight(chanceLabel, replacementChanceBox.controlX() - 3, rightY + 8, Math.max(1, replacementChanceBox.controlX() - rightX - 9), 0xFFFFFFFF, false);
         }
     }
 
-    private void renderRightPanel(GuiGraphics g, int smx, int smy) {
+    private void renderRightPanel(KineticGraphics g, int smx, int smy) {
         if (!isCreatingRule && selectedTarget == null) return;
 
         renderRightStatus(g);
 
         int gridX = rightX + 2;
         int gridY = getRightGridY();
-        enableCanvasScissor(
-                g,
-                rightX,
+        g.scissor(rightX,
                 gridY,
                 rightX + rightW,
                 gridY + gridAreaH
@@ -1040,13 +1030,13 @@ return button;
             boolean hovered = smx >= x && smx < x + SLOT_SIZE
                     && smy >= y && smy < y + SLOT_SIZE;
             boolean selected = isCreatingRule && !selectingNewTarget && pendingSources.contains(item.id());
-            GuiTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
+            KineticTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
             ItemBanControl.withSkip(() -> {
-                GuiTheme.item(g, font, item.stack(), x, y, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, item.stack(), x, y, SLOT_SIZE, 1.0F, false);
                 return null;
             });
         }
-        disableCanvasScissor(g);
+        g.endScissor();
         rightScroll.render(
                 g,
                 smx,
@@ -1059,42 +1049,41 @@ return button;
         );
     }
 
-    private boolean isHoveringButton(StateButton button, double mx, double my) {
-        return button != null && isControlVisible(button) && mx >= button.getX() && mx < button.getX() + button.getWidth() && my >= button.getY() && my < button.getY() + button.getHeight();
+    private boolean isHoveringButton(KineticButton button, double mx, double my) {
+        return button != null && isControlVisible(button) && button.contains(mx, my);
     }
 
     @Override
-    protected void renderTooltips(@NotNull GuiGraphics g, int smx, int smy, int mx, int my) {
-        int tooltipY = smy < leftY ? my + 15 : my;
+    protected void renderTooltips(int smx, int smy) {
         if (isHoveringButton(addBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.add"));
             return;
         }
         if (isHoveringButton(doneBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done.tooltip"));
             return;
         }
         if (isHoveringButton(filterBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter"));
             return;
         }
         if (isHoveringButton(loadedChunksToggleBtn, smx, smy)) {
             showTooltip(List.of(
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
-                    Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
-            ), null);
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.title"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.restart"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.off"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.on"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.throttle"),
+                    KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.loaded_chunks.tooltip.scale")
+            ));
             return;
         }
         if (isHoveringButton(saveBtn, smx, smy)) {
-            showTooltipLine(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"));
+            showTooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.tooltip.btn.save"));
             return;
         }
         if (isHoveringButton(closeBtn, smx, smy)) {
-            showTooltipLine(Component.translatable(parent == null ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"));
+            showTooltip(KineticI18n.translatable(!hasParentScreen ? "gui.realmcontrol.worldblock.banitem.tooltip.btn.close" : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back"));
             return;
         }
 
@@ -1102,7 +1091,7 @@ return button;
             int currentY = leftY - (int) Math.round(leftScroll.smoothOffset());
             for (LeftEntry entry : leftEntries) {
                 if (currentY + entry.h >= leftY && currentY <= leftY + leftH && smx >= entry.x && smx < entry.x + entry.w && smy >= currentY && smy < currentY + entry.h) {
-                    entry.requestTooltip(g, mx, my);
+                    entry.requestTooltip();
                     return;
                 }
                 currentY += entry.h + 1;
@@ -1122,8 +1111,8 @@ return button;
                     : pendingSources.contains(item.id())
                     ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.unselect_replaced"
                     : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.select_replaced";
-            tooltip.add(Component.translatable(actionKey));
-            showTooltip(tooltip, null);
+            tooltip.add(KineticI18n.translatable(actionKey));
+            showTooltip(tooltip);
         }
     }
 
@@ -1148,11 +1137,14 @@ return button;
     }
 
     @Override
-    protected boolean canvasMouseClicked(double smx, double smy, int btn) {
-        if (KineticMouseButtons.isPrimary(btn)
-                && leftScroll.beginDrag(
+    protected boolean onMouseClickCapture(MouseInput input) {
+        // 原 canvasMouseClicked 全部在控件之前处理 / The old canvasMouseClicked handled all of this before controls.
+        double smx = input.x();
+        double smy = input.y();
+        if (leftScroll.beginDrag(
                         smx,
                         smy,
+                        input.button(),
                         leftX + leftW + 2,
                         leftY,
                         4,
@@ -1165,10 +1157,10 @@ return button;
 
         int rightGridYForScroll = getRightGridY();
 
-        if (KineticMouseButtons.isPrimary(btn)
-                && rightScroll.beginDrag(
+        if (rightScroll.beginDrag(
                         smx,
                         smy,
+                        input.button(),
                         rightX + rightW - RIGHT_SCROLLBAR_INSET,
                         rightGridYForScroll,
                         4,
@@ -1183,13 +1175,13 @@ return button;
             int currentY = leftY - (int) Math.round(leftScroll.smoothOffset());
             for (LeftEntry entry : leftEntries) {
                 if (currentY + entry.h >= leftY && currentY <= leftY + leftH && smx >= entry.x && smx < entry.x + entry.w && smy >= currentY && smy < currentY + entry.h) {
-                    if (entry.mouseClicked(smx, smy, btn)) return true;
+                    if (entry.mouseClicked(input)) return true;
                 }
                 currentY += entry.h + 1;
             }
         } else {
             int idx = getRightItemIndexAt(smx, smy);
-            if (KineticMouseButtons.isPrimary(btn) && idx >= 0) {
+            if (input.isLeft() && idx >= 0) {
             KineticItemSearch.CachedItem clicked = rightDisplayList.get(idx);
             String id = clicked.id();
             if (isCreatingRule && !selectingNewTarget) {
@@ -1201,7 +1193,7 @@ return button;
                     return true;
                 }
                 if (WorldBlockConfig.isOreGenerationBanned(clicked.stack())) {
-                    KineticOverlays.toast("oremerge_target_banned", Component.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
+                    KineticOverlays.toast("oremerge_target_banned", KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.conflict.target_banned"));
                     return true;
                 }
                 List<String> sources = tempRules.computeIfAbsent(id, key -> new ArrayList<>());
@@ -1223,21 +1215,22 @@ return button;
             return true;
             }
         }
-        return super.canvasMouseClicked(smx, smy, btn);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseReleased(double smx, double smy, int btn) {
+    protected boolean onMouseRelease(MouseInput input) {
         boolean released =
-                leftScroll.release(btn)
-                        | rightScroll.release(btn);
+                leftScroll.release(input.button())
+                        | rightScroll.release(input.button());
 
         return released
-                || super.canvasMouseReleased(smx, smy, btn);
+                || false;
     }
 
     @Override
-    protected boolean canvasMouseDragged(double smx, double smy, int btn, double dx, double dy) {
+    protected boolean onMouseDrag(MouseDragInput input) {
+        double smy = input.y();
         if (leftScroll.drag(
                 smy,
                 leftY,
@@ -1256,11 +1249,14 @@ return button;
             return true;
         }
 
-        return super.canvasMouseDragged(smx, smy, btn, dx, dy);
+        return false;
     }
 
     @Override
-    protected boolean canvasMouseScrolled(double smx, double smy, double delta) {
+    protected boolean onMouseScroll(ScrollInput input) {
+        double smx = input.x();
+        double smy = input.y();
+        double delta = input.deltaY();
         if (smx >= leftX
                 && smx <= leftX + leftW
                 && smy >= leftY
@@ -1279,7 +1275,7 @@ return button;
             return true;
         }
 
-        return super.canvasMouseScrolled(smx, smy, delta);
+        return false;
     }
 
     abstract static class LeftEntry {
@@ -1288,11 +1284,11 @@ return button;
         int w;
         int h;
 
-        abstract void render(GuiGraphics g, int mx, int my);
+        abstract void render(KineticGraphics g, int mx, int my);
 
-        abstract boolean mouseClicked(double mx, double my, int btn);
+        abstract boolean mouseClicked(MouseInput input);
 
-        abstract void requestTooltip(GuiGraphics g, int mx, int my);
+        abstract void requestTooltip();
     }
 
     class TargetEntry extends LeftEntry {
@@ -1307,42 +1303,24 @@ return button;
         }
 
         @Override
-        void render(GuiGraphics g, int mx, int my) {
+        void render(KineticGraphics g, int mx, int my) {
             boolean selected = id.equals(selectedTarget);
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-            GuiTheme.stateSurface(g, x, y, w, h, GuiTheme.Surface.PANEL_ALT, selected, hover, false);
-            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
+            KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, selected, hover, false);
+            KineticTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
             ItemBanControl.withSkip(() -> {
-                GuiTheme.item(g, font, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
                 return null;
             });
             String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
-            KineticText.drawScrollingLeft(g, font, name, x + 24, y + 6, w - 58, 0xFFFFFF, false);
-            KineticText.drawScrollingRight(
-                    g,
-                    font,
-                    Component.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count)).withStyle(ChatFormatting.YELLOW)),
-                    x + w - 4,
-                    y + 6,
-                    22,
-                    0xFFFFFF,
-                    false
-            );
-            KineticText.drawScrollingLeft(
-                    g,
-                    font,
-                    Component.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"),
-                    x + w - 36,
-                    y + 6,
-                    10,
-                    0xFFFFFF,
-                    false
-            );
+            g.scrollingText(Component.literal(name), x + 24, y + 6, w - 58, 0xFFFFFF, false);
+            g.scrollingTextRight(KineticI18n.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count))), x + w - 4, y + 6, 22, 0xFFFFFF, false);
+            g.scrollingText(KineticI18n.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"), x + w - 36, y + 6, 10, 0xFFFFFF, false);
         }
 
         @Override
-        boolean mouseClicked(double mx, double my, int btn) {
-            if (KineticMouseButtons.isPrimary(btn)) {
+        boolean mouseClicked(MouseInput input) {
+            if (input.isLeft()) {
                 if (expandedTargets.contains(id)) expandedTargets.remove(id);
                 else expandedTargets.add(id);
                 selectedTarget = id;
@@ -1354,7 +1332,7 @@ return button;
                 updateRightPanel();
                 return true;
             }
-            if (KineticMouseButtons.isSecondary(btn)) {
+            if (input.isRight()) {
                 tempRules.remove(id);
                 replacementChances.remove(getBaseIdentifier(id));
                 if (id.equals(selectedTarget)) selectedTarget = null;
@@ -1367,12 +1345,12 @@ return button;
         }
 
         @Override
-        void requestTooltip(GuiGraphics g, int mx, int my) {
+        void requestTooltip() {
             List<Component> tooltip = new ArrayList<>();
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(id));
-            tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.target_del"));
-            showTooltip(tooltip, null);
+            tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.tooltip.target_del"));
+            showTooltip(tooltip);
         }
     }
 
@@ -1388,19 +1366,19 @@ return button;
         }
 
         @Override
-        void render(GuiGraphics g, int mx, int my) {
+        void render(KineticGraphics g, int mx, int my) {
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-            GuiTheme.stateSurface(g, x, y, w, h, GuiTheme.Surface.PANEL_ALT, false, hover, false);
-            GuiTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
+            KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, false, hover, false);
+            KineticTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
             ItemBanControl.withSkip(() -> {
-                GuiTheme.item(g, font, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
                 return null;
             });
         }
 
         @Override
-        boolean mouseClicked(double mx, double my, int btn) {
-            if (KineticMouseButtons.isSecondary(btn)) {
+        boolean mouseClicked(MouseInput input) {
+            if (input.isRight()) {
                 List<String> sources = tempRules.get(targetId);
                 if (sources != null) sources.remove(sourceId);
                 updateLeftEntries();
@@ -1411,16 +1389,16 @@ return button;
         }
 
         @Override
-        void requestTooltip(GuiGraphics g, int mx, int my) {
+        void requestTooltip() {
             List<Component> tooltip = new ArrayList<>();
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(sourceId));
-            tooltip.add(Component.translatable("gui.realmcontrol.worldblock.banitem.tooltip.source_del"));
-            showTooltip(tooltip, null);
+            tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.tooltip.source_del"));
+            showTooltip(tooltip);
         }
     }
     private static boolean isControlVisible(KineticControl control) {
-        return control != null && control.isVisible();
+        return control != null && control.controlVisible();
     }
 
     private static boolean isControlDisabled(KineticControl control) {
@@ -1428,7 +1406,7 @@ return button;
     }
 
     private static void setControlVisible(KineticControl control, boolean visible) {
-        if (control != null) control.setVisible(visible);
+        if (control != null) control.setControlVisible(visible);
     }
 
     private static void setControlEnabled(KineticControl control, boolean enabled) {

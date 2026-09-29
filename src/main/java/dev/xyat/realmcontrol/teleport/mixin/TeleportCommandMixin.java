@@ -2,6 +2,7 @@ package dev.xyat.realmcontrol.teleport.mixin;
 
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.teleport.api.ITeleportAuth;
 import dev.xyat.realmcontrol.teleport.config.TpdConfig;
 import net.minecraft.commands.CommandSourceStack;
@@ -76,7 +77,7 @@ public abstract class TeleportCommandMixin {
 
         for (Object target : targets) {
             if (target instanceof Entity entity && entity != player) {
-                player.sendSystemMessage(Component.translatable("cmd.realmcontrol.teleport.tpd.self_only"));
+                player.sendSystemMessage(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.self_only"));
                 return true;
             }
         }
@@ -96,18 +97,18 @@ public abstract class TeleportCommandMixin {
     private static void realmcontrol_tpd$sendFeedback(ServerPlayer player, ITeleportAuth auth) {
         long now = System.currentTimeMillis();
         Component message = auth.realmcontrol_tpd$getTpExpiry() > now
-                ? Component.translatable(
+                ? KineticI18n.translatable(
                         "cmd.realmcontrol.teleport.tpd.remaining.time",
                         (auth.realmcontrol_tpd$getTpExpiry() - now) / 1000L
                 )
-                : Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
+                : KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
         player.displayClientMessage(message, true);
     }
 
     @Unique
     private static Component realmcontrol_tpd$getDeniedMessage(String configuredMessage, String playerName) {
         if (configuredMessage == null || configuredMessage.isEmpty()) {
-            return Component.translatable("cmd.realmcontrol.teleport.tpd.no_auth");
+            return KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.no_auth");
         }
         String formatted = configuredMessage.replace("{player}", playerName);
         return Component.literal(formatted.replace('&', '\u00A7'));

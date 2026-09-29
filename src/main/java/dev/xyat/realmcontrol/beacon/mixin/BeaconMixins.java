@@ -1,5 +1,6 @@
 package dev.xyat.realmcontrol.beacon.mixin;
 
+import dev.xyat.kineticcore.api.event.KineticExternalEvents;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import dev.xyat.realmcontrol.beacon.event.LevelChangedEvent;
 import dev.xyat.realmcontrol.beacon.event.SpawnPreventionHandler;
@@ -12,7 +13,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.common.MinecraftForge;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -124,7 +124,7 @@ public class BeaconMixins {
 
                 int currentLevel = ((LevelAccess) beacon).realmcontrol_beacon$getLevels();
 
-                MinecraftForge.EVENT_BUS.post(new LevelChangedEvent(level, pos, beacon, currentLevel, currentLevel));
+                KineticExternalEvents.post(new LevelChangedEvent(level, pos, beacon, currentLevel, currentLevel));
 
                 if (accessor.realmcontrol_beacon$isSpawnPreventEnabled() && currentLevel > 0) {
                     int max = BeaconConfig.getBeaconRadius(currentLevel);
@@ -150,7 +150,7 @@ public class BeaconMixins {
             ((LevelAccess) beacon).realmcontrol_beacon$setLevels(newLevel);
 
             if (beacon.getLevel() != null && !beacon.getLevel().isClientSide && oldLevel != newLevel) {
-                MinecraftForge.EVENT_BUS.post(new LevelChangedEvent(beacon.getLevel(), beacon.getBlockPos(), beacon, oldLevel, newLevel));
+                KineticExternalEvents.post(new LevelChangedEvent(beacon.getLevel(), beacon.getBlockPos(), beacon, oldLevel, newLevel));
                 IBeaconAccess accessor = (IBeaconAccess) beacon;
                 if (accessor.realmcontrol_beacon$isSpawnPreventEnabled() && newLevel > 0) {
                     int max = BeaconConfig.getBeaconRadius(newLevel);

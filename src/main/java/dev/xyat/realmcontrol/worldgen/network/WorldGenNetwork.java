@@ -10,6 +10,7 @@ import dev.xyat.kineticcore.api.network.NetworkVersionPolicy;
 import dev.xyat.kineticcore.api.network.PacketChannel;
 import dev.xyat.kineticcore.api.network.ServerPacketContext;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.worldgen.WorldGenModule;
 import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 import dev.xyat.realmcontrol.worldgen.config.StructureEntryRule;
@@ -270,26 +271,26 @@ public class WorldGenNetwork {
 
     private static void handleLocateStructure(ServerPlayer player, String structureId) {
         if (!player.hasPermissions(2)) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.no_permission"));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.no_permission"));
             return;
         }
 
         Optional<Holder.Reference<Structure>> structureHolder = getStructureHolder(player.server, structureId);
         if (structureHolder.isEmpty()) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
             return;
         }
 
         List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.server, structureId);
         if (dimensionIds.isEmpty()) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
             return;
         }
 
         String currentDimensionId = player.serverLevel().dimension().location().toString();
         if (!dimensionIds.contains(currentDimensionId)) {
             String targetDimensionId = preferredDimensionId(dimensionIds, currentDimensionId);
-            sendStructureActionResult(player, Component.translatable(
+            sendStructureActionResult(player, KineticI18n.translatable(
                     "msg.realmcontrol.worldgen.structure_action.wrong_dimension",
                     dimensionDisplay(targetDimensionId)
             ));
@@ -305,41 +306,41 @@ public class WorldGenNetwork {
                 false
         );
         if (result == null || result.getFirst() == null) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.not_found", structureId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.not_found", structureId));
             return;
         }
 
         BlockPos safePos = findSafeTeleportPosition(level, result.getFirst());
         if (safePos == null) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.no_safe_position"));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.no_safe_position"));
             return;
         }
 
         player.teleportTo(level, safePos.getX() + 0.5D, safePos.getY(), safePos.getZ() + 0.5D, player.getYRot(), player.getXRot());
-        sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.located", structureId));
+        sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.located", structureId));
     }
 
     private static void handleTeleportStructureDimension(ServerPlayer player, String structureId) {
         if (!player.hasPermissions(2)) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.no_permission"));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.no_permission"));
             return;
         }
 
         if (getStructureHolder(player.server, structureId).isEmpty()) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
             return;
         }
 
         List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.server, structureId);
         if (dimensionIds.isEmpty()) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
             return;
         }
 
         String currentDimensionId = player.serverLevel().dimension().location().toString();
         String targetDimensionId = preferredDimensionId(dimensionIds, currentDimensionId);
         if (dimensionIds.contains(currentDimensionId)) {
-            sendStructureActionResult(player, Component.translatable(
+            sendStructureActionResult(player, KineticI18n.translatable(
                     "msg.realmcontrol.worldgen.structure_action.already_in_dimension",
                     dimensionDisplay(currentDimensionId)
             ));
@@ -348,13 +349,13 @@ public class WorldGenNetwork {
 
         ResourceLocation targetLocation = ResourceLocation.tryParse(targetDimensionId);
         if (targetLocation == null) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.dimension_missing", targetDimensionId));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_missing", targetDimensionId));
             return;
         }
 
         ServerLevel targetLevel = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, targetLocation));
         if (targetLevel == null) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.dimension_missing", dimensionDisplay(targetDimensionId)));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_missing", dimensionDisplay(targetDimensionId)));
             return;
         }
 
@@ -363,12 +364,12 @@ public class WorldGenNetwork {
         int targetZ = clampWorldCoordinate(player.getZ() * scale);
         BlockPos safePos = findSafeTeleportPosition(targetLevel, new BlockPos(targetX, targetLevel.getSeaLevel(), targetZ));
         if (safePos == null) {
-            sendStructureActionResult(player, Component.translatable("msg.realmcontrol.worldgen.structure_action.no_safe_position"));
+            sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.no_safe_position"));
             return;
         }
 
         player.teleportTo(targetLevel, safePos.getX() + 0.5D, safePos.getY(), safePos.getZ() + 0.5D, player.getYRot(), player.getXRot());
-        sendStructureActionResult(player, Component.translatable(
+        sendStructureActionResult(player, KineticI18n.translatable(
                 "msg.realmcontrol.worldgen.structure_action.dimension_teleported",
                 dimensionDisplay(targetDimensionId)
         ));
@@ -392,11 +393,11 @@ public class WorldGenNetwork {
 
     private static Component dimensionDisplay(String dimensionId) {
         return switch (dimensionId) {
-            case "minecraft:overworld" -> Component.translatable("gui.realmcontrol.worldgen.dimension.minecraft.overworld");
-            case "minecraft:the_nether" -> Component.translatable("gui.realmcontrol.worldgen.dimension.minecraft.the_nether");
-            case "minecraft:the_end" -> Component.translatable("gui.realmcontrol.worldgen.dimension.minecraft.the_end");
-            case "twilightforest:twilight_forest" -> Component.translatable("gui.realmcontrol.worldgen.dimension.twilightforest.twilight_forest");
-            default -> Component.translatable("gui.realmcontrol.worldgen.dimension.modded", dimensionId);
+            case "minecraft:overworld" -> KineticI18n.translatable("gui.realmcontrol.worldgen.dimension.minecraft.overworld");
+            case "minecraft:the_nether" -> KineticI18n.translatable("gui.realmcontrol.worldgen.dimension.minecraft.the_nether");
+            case "minecraft:the_end" -> KineticI18n.translatable("gui.realmcontrol.worldgen.dimension.minecraft.the_end");
+            case "twilightforest:twilight_forest" -> KineticI18n.translatable("gui.realmcontrol.worldgen.dimension.twilightforest.twilight_forest");
+            default -> KineticI18n.translatable("gui.realmcontrol.worldgen.dimension.modded", dimensionId);
         };
     }
 

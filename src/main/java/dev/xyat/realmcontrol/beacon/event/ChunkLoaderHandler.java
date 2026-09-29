@@ -1,16 +1,15 @@
 package dev.xyat.realmcontrol.beacon.event;
 
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
+import dev.xyat.kineticcore.api.event.KineticExternalEvents;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.kineticcore.api.world.event.KineticWorldEvents;
-import dev.xyat.realmcontrol.beacon.util.ColorText;
-import dev.xyat.realmcontrol.beacon.BeaconModule;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
 import dev.xyat.realmcontrol.beacon.network.BeaconNetwork;
 import dev.xyat.realmcontrol.beacon.util.BeaconStateManager;
 import dev.xyat.realmcontrol.beacon.util.IBeaconAccess;
 import dev.xyat.realmcontrol.beacon.data.WorldChunkLoaderManager;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -19,15 +18,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-@Mod.EventBusSubscriber(modid = BeaconModule.MODID)
 public class ChunkLoaderHandler {
     private static boolean installed;
 
@@ -37,6 +33,7 @@ public class ChunkLoaderHandler {
         KineticServerEvents.onPlayerLogin(KineticEventPriority.NORMAL, ChunkLoaderHandler::onPlayerLogin);
         KineticWorldEvents.onBlockPlace(KineticEventPriority.NORMAL, ChunkLoaderHandler::onBlockPlace);
         KineticWorldEvents.onBlockBreak(KineticEventPriority.NORMAL, ChunkLoaderHandler::onBlockBreak);
+        KineticExternalEvents.subscribe(LevelChangedEvent.class, ChunkLoaderHandler::onBeaconLevelChanged);
     }
 
     private static List<Long> getChunksInRange(BlockPos pos, int radius) {
@@ -66,8 +63,7 @@ public class ChunkLoaderHandler {
         }
     }
 
-    @SubscribeEvent
-    public static void onBeaconLevelChanged(LevelChangedEvent event) {
+    private static void onBeaconLevelChanged(LevelChangedEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
 
         int newRadius = -1;
@@ -90,7 +86,7 @@ public class ChunkLoaderHandler {
         List<Long> newChunks = getChunksInRange(pos, newRadius);
 
         if (!stateManager.tryUpdateChunks(owner, dimId, oldChunks, newChunks)) {
-            notifyPlayers(level, pos, ColorText.translatable("msg.realmcontrol.beacon.beacon.limit_reached").withStyle(ChatFormatting.RED));
+            notifyPlayers(level, pos, KineticI18n.translatable("msg.realmcontrol.beacon.beacon.limit_reached"));
             return;
         }
 
@@ -100,7 +96,7 @@ public class ChunkLoaderHandler {
         if (storedRadius >= 0) {
             manager.updateChunkForcing(level, chunkPos.x, chunkPos.z, storedRadius, false);
             if (newRadius < 0) {
-                notifyPlayers(level, pos, ColorText.translatable("msg.realmcontrol.beacon.beacon.deactivated").withStyle(ChatFormatting.YELLOW));
+                notifyPlayers(level, pos, KineticI18n.translatable("msg.realmcontrol.beacon.beacon.deactivated"));
             }
         }
 
@@ -110,10 +106,10 @@ public class ChunkLoaderHandler {
 
             int used = stateManager.getUsedQuota(owner);
             int max = BeaconConfig.perPlayerLimitEnabled ? BeaconConfig.perPlayerChunkLoadLimit : BeaconConfig.globalChunkLoadLimit;
-            Component typeTx = ColorText.translatable(BeaconConfig.perPlayerLimitEnabled ? "msg.realmcontrol.beacon.beacon.quota_personal" : "msg.realmcontrol.beacon.beacon.quota_global");
-            Component quotaInfo = ColorText.translatable("msg.realmcontrol.beacon.beacon.quota_info", typeTx, used, max - used);
+            Component typeTx = KineticI18n.translatable(BeaconConfig.perPlayerLimitEnabled ? "msg.realmcontrol.beacon.beacon.quota_personal" : "msg.realmcontrol.beacon.beacon.quota_global");
+            Component quotaInfo = KineticI18n.translatable("msg.realmcontrol.beacon.beacon.quota_info", typeTx, used, max - used);
 
-            notifyPlayers(level, pos, ColorText.translatable("msg.realmcontrol.beacon.beacon.activated", rangeStr).withStyle(ChatFormatting.AQUA).append(quotaInfo));
+            notifyPlayers(level, pos, KineticI18n.translatable("msg.realmcontrol.beacon.beacon.activated", rangeStr).append(quotaInfo));
         }
         manager.setStoredRadius(level, pos, newRadius);
     }
@@ -139,13 +135,13 @@ public class ChunkLoaderHandler {
 
                 manager.updateChunkForcing(level, new ChunkPos(pos).x, new ChunkPos(pos).z, storedRadius, false);
                 manager.setStoredRadius(level, pos, -1);
-                notifyPlayers(level, pos, ColorText.translatable("msg.realmcontrol.beacon.beacon.broken").withStyle(ChatFormatting.GOLD));
+                notifyPlayers(level, pos, KineticI18n.translatable("msg.realmcontrol.beacon.beacon.broken"));
             }
         }
     }
 
     private static void notifyPlayers(ServerLevel level, BlockPos pos, Component msg) {
-        Component fullText = ColorText.translatable("msg.realmcontrol.beacon.beacon.prefix").withStyle(ChatFormatting.GOLD).append(msg);
+        Component fullText = KineticI18n.translatable("msg.realmcontrol.beacon.beacon.prefix").append(msg);
         level.getPlayers(p -> p.distanceToSqr(pos.getX(), pos.getY(), pos.getZ()) < 4096).forEach(p -> p.sendSystemMessage(fullText));
     }
 }

@@ -8,18 +8,18 @@ import dev.xyat.realmcontrol.beacon.mixin.BeaconMenuAccessor;
 import dev.xyat.realmcontrol.beacon.mixin.LevelAccess;
 import dev.xyat.realmcontrol.beacon.util.BeaconStateManager;
 import dev.xyat.realmcontrol.beacon.util.IBeaconAccess;
+import dev.xyat.kineticcore.api.event.KineticExternalEvents;
 import dev.xyat.kineticcore.api.network.NetworkBuffer;
 import dev.xyat.kineticcore.api.network.NetworkCodec;
 import dev.xyat.kineticcore.api.network.NetworkVersionPolicy;
 import dev.xyat.kineticcore.api.network.PacketChannel;
 import dev.xyat.kineticcore.api.network.ServerPacketContext;
-import net.minecraft.network.chat.Component;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.BeaconMenu;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
-import net.minecraftforge.common.MinecraftForge;
 
 import java.util.UUID;
 
@@ -176,7 +176,7 @@ public class BeaconNetwork {
                         if (owner != null
                                 && !owner.equals(player.getUUID())
                                 && !player.hasPermissions(2)) {
-                            player.sendSystemMessage(Component.translatable("commands.generic.permission"));
+                            player.sendSystemMessage(KineticI18n.translatable("commands.generic.permission"));
                             sendSaveResult(player, false);
                             return;
                         }
@@ -209,7 +209,7 @@ public class BeaconNetwork {
                         beacon.setChanged();
                         level.sendBlockUpdated(pos, beacon.getBlockState(), beacon.getBlockState(), 3);
 
-                        MinecraftForge.EVENT_BUS.post(new LevelChangedEvent(level, pos, beacon, currentLevel, currentLevel));
+                        KineticExternalEvents.post(new LevelChangedEvent(level, pos, beacon, currentLevel, currentLevel));
 
                         if (this.spEnabled && currentLevel > 0) {
                             int max = dev.xyat.realmcontrol.beacon.config.BeaconConfig.getBeaconRadius(currentLevel);

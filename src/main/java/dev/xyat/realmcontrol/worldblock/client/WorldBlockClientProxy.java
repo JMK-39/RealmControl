@@ -1,17 +1,16 @@
 package dev.xyat.realmcontrol.worldblock.client;
 
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import com.mojang.logging.LogUtils;
 import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
-import dev.xyat.kineticcore.api.client.overlay.KineticOverlays;
-import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
+import dev.xyat.kineticcore.api.client.gui.KineticGui;
 import dev.xyat.realmcontrol.worldblock.client.gui.ItemCacheHudRenderer;
 import dev.xyat.realmcontrol.worldblock.client.gui.ItemSearchCache;
-import dev.xyat.realmcontrol.worldblock.client.gui.OreBannedScreen;
-import dev.xyat.realmcontrol.worldblock.client.gui.OreMergeScreen;
-import dev.xyat.realmcontrol.worldblock.client.gui.WeightedBlockMergeScreen;
+import dev.xyat.realmcontrol.worldblock.client.gui.OreBannedPage;
+import dev.xyat.realmcontrol.worldblock.client.gui.OreMergePage;
+import dev.xyat.realmcontrol.worldblock.client.gui.WeightedBlockMergePage;
 import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -34,20 +33,18 @@ public final class WorldBlockClientProxy {
         ItemCacheHudRenderer.install();
     }
 
+    // 返回到打开时的当前界面（无界面时回到游戏）/ Back returns to the screen current when the page opens (or the game).
     public static void openOreMergeGui() {
-        Screen parent = KineticClientRuntime.currentScreen();
-        ItemSearchCache.prepareCache(() -> KineticClientRuntime.openScreen(new OreMergeScreen(parent, copyOreMergedRules(), () -> {
+        ItemSearchCache.prepareCache(() -> KineticGui.openChild(new OreMergePage(copyOreMergedRules(), () -> {
         })));
     }
 
     public static void openOreBannedGui() {
-        Screen parent = KineticClientRuntime.currentScreen();
-        ItemSearchCache.prepareCache(() -> KineticClientRuntime.openScreen(new OreBannedScreen(parent)));
+        ItemSearchCache.prepareCache(() -> KineticGui.openChild(new OreBannedPage()));
     }
 
     public static void openWeightedBlockMergeGui() {
-        Screen parent = KineticClientRuntime.currentScreen();
-        ItemSearchCache.prepareCache(() -> KineticClientRuntime.openScreen(new WeightedBlockMergeScreen(parent)));
+        ItemSearchCache.prepareCache(() -> KineticGui.openChild(new WeightedBlockMergePage()));
     }
 
     private static Map<String, List<String>> copyOreMergedRules() {
@@ -81,7 +78,7 @@ public final class WorldBlockClientProxy {
             if (successKey != null && !successKey.isBlank()) {
                 KineticOverlays.toast(
                         "worldblock_save_success_" + successKey,
-                        Component.translatable(successKey)
+                        KineticI18n.translatable(successKey)
                 );
             } else {
                 LOGGER.warn("WorldBlock save succeeded without a matching operation success key");
@@ -90,7 +87,7 @@ public final class WorldBlockClientProxy {
         }
         KineticOverlays.toast(
                 "worldblock_save_failed",
-                Component.translatable("gui.kineticcore.config.save_failed")
+                KineticI18n.translatable("gui.kineticcore.config.save_failed")
         );
     }
 

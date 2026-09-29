@@ -5,6 +5,7 @@ import com.chaosthedude.naturescompass.network.TeleportPacket;
 import com.chaosthedude.naturescompass.util.CompassState;
 import com.chaosthedude.naturescompass.util.ItemUtils;
 import com.chaosthedude.naturescompass.util.PlayerUtils;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.teleport.api.ITeleportAuth;
 import dev.xyat.realmcontrol.teleport.config.TpdConfig;
 import net.minecraft.network.chat.Component;
@@ -62,7 +63,7 @@ public final class NaturesCompassMixins {
                         allowed = true;
                         realmcontrol_tpd$sendTpFeedback(player, auth);
                     } else {
-                        player.sendSystemMessage(Component.translatable("cmd.realmcontrol.teleport.tpd.no_auth"));
+                        player.sendSystemMessage(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.no_auth"));
                     }
                 }
 
@@ -87,9 +88,9 @@ public final class NaturesCompassMixins {
             Component message;
             if (auth.realmcontrol_tpd$getTpExpiry() > now) {
                 long left = (auth.realmcontrol_tpd$getTpExpiry() - now) / 1000;
-                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.time", left);
+                message = KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.remaining.time", left);
             } else {
-                message = Component.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
+                message = KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.remaining.count", auth.realmcontrol_tpd$getTpCount());
             }
             player.displayClientMessage(message, true);
         }

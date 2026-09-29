@@ -3,11 +3,11 @@ package dev.xyat.realmcontrol.teleport;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.xyat.kineticcore.api.command.CommandText;
+import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.teleport.api.ITeleportAuth;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -60,13 +60,13 @@ public final class TpdCommand {
         MutableComponent message = CommandText.header("cmd.realmcontrol.teleport.tpd.desc").append("\n");
         message.append(CommandText.executable("/kt tpd", "cmd.realmcontrol.teleport.tpd.help.self"));
         if (source.hasPermission(2)) {
-            message.append("\n").append(CommandText.createSuggestCommand(
+            message.append("\n").append(CommandText.suggest(
                     "/kt tpd check <player>", "/kt tpd check ", "cmd.realmcontrol.teleport.tpd.help.check"));
-            message.append("\n").append(CommandText.createSuggestCommand(
+            message.append("\n").append(CommandText.suggest(
                     "/kt tpd allow count <player> <num>", "/kt tpd allow count ", "cmd.realmcontrol.teleport.tpd.help.allow_count"));
-            message.append("\n").append(CommandText.createSuggestCommand(
+            message.append("\n").append(CommandText.suggest(
                     "/kt tpd allow time <player> <sec>", "/kt tpd allow time ", "cmd.realmcontrol.teleport.tpd.help.allow_time"));
-            message.append("\n").append(CommandText.createSuggestCommand(
+            message.append("\n").append(CommandText.suggest(
                     "/kt tpd clear <player>", "/kt tpd clear ", "cmd.realmcontrol.teleport.tpd.help.clear"));
         }
         source.sendSuccess(() -> message, false);
@@ -76,7 +76,7 @@ public final class TpdCommand {
     private static int checkSelf(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
         ITeleportAuth auth = (ITeleportAuth) player;
-        MutableComponent message = Component.translatable("cmd.realmcontrol.teleport.tpd.status.prefix");
+        MutableComponent message = KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.status.prefix");
         appendStatus(message, auth);
         source.sendSuccess(() -> message, false);
         return 1;
@@ -84,7 +84,7 @@ public final class TpdCommand {
 
     private static int checkOther(CommandSourceStack source, ServerPlayer target) {
         ITeleportAuth auth = (ITeleportAuth) target;
-        MutableComponent message = Component.translatable(
+        MutableComponent message = KineticI18n.translatable(
                 "cmd.realmcontrol.teleport.tpd.status.other_prefix",
                 target.getName()
         );
@@ -99,18 +99,18 @@ public final class TpdCommand {
 
         if (auth.realmcontrol_tpd$getTpExpiry() > now) {
             long secondsLeft = (auth.realmcontrol_tpd$getTpExpiry() - now) / 1000L;
-            message.append(Component.translatable("cmd.realmcontrol.teleport.tpd.status.time", secondsLeft));
+            message.append(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.status.time", secondsLeft));
             hasAny = true;
         }
 
         if (auth.realmcontrol_tpd$getTpCount() > 0) {
-            if (hasAny) message.append(Component.translatable("cmd.realmcontrol.teleport.tpd.status.separator"));
-            message.append(Component.translatable("cmd.realmcontrol.teleport.tpd.status.count", auth.realmcontrol_tpd$getTpCount()));
+            if (hasAny) message.append(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.status.separator"));
+            message.append(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.status.count", auth.realmcontrol_tpd$getTpCount()));
             hasAny = true;
         }
 
         if (!hasAny) {
-            message.append(Component.translatable("cmd.realmcontrol.teleport.tpd.status.none"));
+            message.append(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.status.none"));
         }
     }
 
@@ -120,10 +120,10 @@ public final class TpdCommand {
             int total = auth.realmcontrol_tpd$getTpCount() + amount;
             auth.realmcontrol_tpd$setTpCount(total);
             source.sendSuccess(
-                    () -> Component.translatable("cmd.realmcontrol.teleport.tpd.grant.count.admin", player.getName(), total),
+                    () -> KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.grant.count.admin", player.getName(), total),
                     true
             );
-            player.sendSystemMessage(Component.translatable("cmd.realmcontrol.teleport.tpd.grant.count.player", amount, total));
+            player.sendSystemMessage(KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.grant.count.player", amount, total));
         }
         return targets.size();
     }
@@ -137,13 +137,13 @@ public final class TpdCommand {
             auth.realmcontrol_tpd$setTpExpiry(newExpiry);
             long secondsLeft = (newExpiry - now) / 1000L;
             source.sendSuccess(
-                    () -> Component.translatable(
+                    () -> KineticI18n.translatable(
                             "cmd.realmcontrol.teleport.tpd.grant.time.admin",
                             player.getName(), seconds, secondsLeft
                     ),
                     true
             );
-            player.sendSystemMessage(Component.translatable(
+            player.sendSystemMessage(KineticI18n.translatable(
                     "cmd.realmcontrol.teleport.tpd.grant.time.player",
                     seconds, secondsLeft
             ));
@@ -157,7 +157,7 @@ public final class TpdCommand {
             auth.realmcontrol_tpd$setTpCount(0);
             auth.realmcontrol_tpd$setTpExpiry(0L);
             source.sendSuccess(
-                    () -> Component.translatable("cmd.realmcontrol.teleport.tpd.clear.success", player.getName()),
+                    () -> KineticI18n.translatable("cmd.realmcontrol.teleport.tpd.clear.success", player.getName()),
                     true
             );
         }
