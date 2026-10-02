@@ -21,7 +21,6 @@ import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
 import dev.xyat.realmcontrol.worldblock.util.ItemBanControl;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Comparator;

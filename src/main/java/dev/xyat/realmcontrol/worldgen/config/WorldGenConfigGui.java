@@ -5,7 +5,6 @@ import dev.xyat.kineticcore.api.config.client.KTConfigPage;
 import dev.xyat.kineticcore.api.config.client.KTConfigScope;
 import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.worldgen.network.WorldGenNetwork;
-import net.minecraft.client.gui.screens.Screen;
 
 public final class WorldGenConfigGui {
     public static final String RULES_PAGE_ID = "realmcontrol:rules";

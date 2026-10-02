@@ -22,6 +22,7 @@ plugins {
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'org.spongepowered.mixin'
 apply from: 'gradle/kinetic-addon-reobf-verification.gradle'
+apply from: 'gradle/kinetic-addon-architecture.gradle'
 
 configurations.configureEach {
     resolutionStrategy.cacheDynamicVersionsFor 99999, 'days'

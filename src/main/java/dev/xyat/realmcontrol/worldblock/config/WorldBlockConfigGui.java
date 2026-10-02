@@ -5,7 +5,6 @@ import dev.xyat.kineticcore.api.config.client.KTConfigPage;
 import dev.xyat.kineticcore.api.config.client.KTConfigScope;
 import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.worldblock.network.WorldBlockNetwork;
-import net.minecraft.client.gui.screens.Screen;
 
 public final class WorldBlockConfigGui {
     public static final String PAGE_ID = "realmcontrol:world_block";

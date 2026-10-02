@@ -4,7 +4,6 @@ import dev.xyat.kineticcore.api.config.client.KTConfigApi;
 import dev.xyat.kineticcore.api.config.client.KTConfigPage;
 import dev.xyat.kineticcore.api.config.client.KTConfigScope;
 import dev.xyat.kineticcore.api.text.KineticI18n;
-import net.minecraft.client.gui.screens.Screen;
 
 import java.util.List;
 

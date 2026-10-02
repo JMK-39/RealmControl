@@ -1,6 +1,5 @@
 package dev.xyat.realmcontrol.worldblock.client.gui;
 
-import dev.xyat.realmcontrol.worldblock.WorldBlockModule;
 import dev.xyat.kineticcore.api.client.search.KineticItemSearch;
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
 import dev.xyat.kineticcore.api.text.KineticI18n;
