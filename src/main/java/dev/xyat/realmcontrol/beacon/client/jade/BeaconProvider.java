@@ -71,8 +71,8 @@ public class BeaconProvider {
             String codes = data.getString("BeaconModuleJadeSpawnCodes");
 
             Component loadText = actLoad >= 0
-                    ? KineticI18n.translatable("jade.realmcontrol.beacon.cl.on", actLoad * 2 + 1, actLoad * 2 + 1, maxRad * 2 + 1, maxRad * 2 + 1)
-                    : KineticI18n.translatable("jade.realmcontrol.beacon.cl.off");
+                    ? KineticI18n.translatable("jade.realmcontrol.beacon.beacon.cl.on", actLoad * 2 + 1, actLoad * 2 + 1, maxRad * 2 + 1, maxRad * 2 + 1)
+                    : KineticI18n.translatable("jade.realmcontrol.beacon.beacon.cl.off");
             tooltip.add(loadText);
 
             if (actLoad >= 0 && data.contains("BeaconModuleGlobalMax")) {
@@ -96,8 +96,8 @@ public class BeaconProvider {
             Component spCodeTx = codes.isEmpty() ? KineticI18n.translatable("gui.realmcontrol.beacon.beacon.type.global") : Component.literal(codes.toUpperCase());
 
             Component prevText = actPrev >= 0
-                    ? KineticI18n.translatable("jade.realmcontrol.beacon.sp.on", actPrev * 2 + 1, actPrev * 2 + 1, maxPreventRad * 2 + 1, maxPreventRad * 2 + 1, spTypeTx, spCodeTx)
-                    : KineticI18n.translatable("jade.realmcontrol.beacon.sp.off");
+                    ? KineticI18n.translatable("jade.realmcontrol.beacon.beacon.sp.on", actPrev * 2 + 1, actPrev * 2 + 1, maxPreventRad * 2 + 1, maxPreventRad * 2 + 1, spTypeTx, spCodeTx)
+                    : KineticI18n.translatable("jade.realmcontrol.beacon.beacon.sp.off");
             tooltip.add(prevText);
         }
 
