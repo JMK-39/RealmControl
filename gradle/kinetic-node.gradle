@@ -274,3 +274,6 @@ if (pLoader == 'neoforge') {
         archiveFileName = 'realmcontrol-validation.jar'
     }
 }
+
+// English and Chinese must expose exactly the same authored translation keys.
+apply from: rootProject.file('gradle/kinetic-language-validation.gradle')
