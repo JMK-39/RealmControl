@@ -7,6 +7,7 @@ import net.minecraft.commands.Commands;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Commands.class)
@@ -15,7 +16,11 @@ public abstract class CommandsMixin {
     private void realmcontrol_tpd$onCommandStart(
             ParseResults<CommandSourceStack> results,
             String command,
+            //? if >=1.21 {
+            /*CallbackInfo callback
+            *///?} else {
             CallbackInfoReturnable<Integer> callback
+            //?}
     ) {
         String clean = command.startsWith("/") ? command.substring(1) : command;
         String trimmed = clean.stripLeading();
@@ -28,7 +33,11 @@ public abstract class CommandsMixin {
     private void realmcontrol_tpd$onCommandEnd(
             ParseResults<CommandSourceStack> results,
             String command,
+            //? if >=1.21 {
+            /*CallbackInfo callback
+            *///?} else {
             CallbackInfoReturnable<Integer> callback
+            //?}
     ) {
         CommandFlag.set(false);
     }

@@ -49,3 +49,10 @@ Modrinth 文件来自对应项目的官方版本 API，已核对 SHA-512；修�
 ## Jade 信标提示修复（15:37 验证）
 
 Jade Provider 的四个状态键缺少语言文件已有的第二段 beacon，导致中英文均显示原始键。Provider 已对齐现有语言键，未修改语言文本或信标逻辑。两个节点 buildAll --offline、发布包检查通过。在 PCL2 的现有 1.21.1 单人世界实测显示强加载已关闭、防刷怪 3x3 区块/上限/全部生物/全局规则，参数与服务器数据对应，日志无该联动加载错误。修复包已替换到该实例，旧包备份在 codex-migration-backup/realmcontrol-jade-20261003。Forge 使用相同修复但本次未重新进行 Jade 游戏内验证。
+## 1.21.1 命令回调适配修复（16:50 验证）
+
+KineticArmory 的世界验证日志发现 CommandsMixin 使用旧 CallbackInfoReturnable<Integer>，而 1.21.1 的 Commands.performCommand(ParseResults,String) 返回 void，导致 InvalidInjectionException 并跳过注入。将开始/结束回调按版本区分：Neo 使用 CallbackInfo，Forge 保留 CallbackInfoReturnable<Integer>；没有修改传送命令分类或标记逻辑。
+
+两个节点 buildAll --offline、发布 JAR 检查、最终核心引用检查通过；Mixin 目标检查仍为 0 problem(s) / 2 note(s)。javap -c -p 对比证实 Forge 的签名和指令内容与修复前一致（源码行号因条件注释发生变化）。只读审查也核对了两个版本的实际方法返回类型。
+
+PCL2 现有 1.21.1 世界于 16:49:17 的 debug 日志确认 Mixing CommandsMixin ... into net.minecraft.commands.Commands，latest.log 不再出现其 InvalidInjectionException。16:50:21 执行 /tp @s ~ ~ ~ 成功，玩家位置保持不变。此测试使用有权限的单人玩家，不代表普通玩家传送额度/权限全场景测试。修复后的 Neo JAR 已安装，测试客户端正常保存退出；Forge 安装包同步为最终产物。本地证据为 .gradle/migration/runtime-evidence/commands-callback-pass.log 与 commands-callback-debug.log，构建日志 commands-callback-build.log。没有推送或发布。
