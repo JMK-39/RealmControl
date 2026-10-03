@@ -30,7 +30,7 @@ public class ItemCacheHudRenderer {
     public static Component getDisplayNameCustom(ItemStack stack) {
         if (stack.getItem() == net.minecraft.world.item.Items.ENCHANTED_BOOK) {
             try {
-                List<Component> lines = stack.getTooltipLines(KineticClientRuntime.localPlayer(), TooltipFlag.Default.NORMAL);
+                List<Component> lines = dev.xyat.kineticcore.api.client.tooltip.KineticItemTooltips.textLines(stack);
                 if (lines.size() > 1) return KineticI18n.translatable("gui.realmcontrol.worldblock.common.tooltip_pair", lines.get(0), lines.get(1));
             } catch (Exception ignored) {}
         }

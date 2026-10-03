@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[47,)"
+loaderVersion="${loader_version_range}"
 license="LGPLv3"
 
 [[mods]]
@@ -14,21 +14,21 @@ World generation, world rules, beacon area control, and teleport permission tool
 [[dependencies.realmcontrol]]
 modId="forge"
 mandatory=true
-versionRange="[47.4.2,)"
+versionRange="${forge_version_range}"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.realmcontrol]]
 modId="minecraft"
 mandatory=true
-versionRange="[1.20.1,1.21)"
+versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.realmcontrol]]
 modId="kineticcore"
 mandatory=true
-versionRange="[26.9.20,)"
+versionRange="${kineticcore_version_range}"
 ordering="AFTER"
 side="BOTH"
 

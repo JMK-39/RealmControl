@@ -8,11 +8,13 @@
 
 Realm Control provides visual administration for world blocks, structure and biome generation, beacon areas, and teleport authorization. Use it to shape a modpack's future terrain, configure beacon infrastructure, and give players controlled access to teleport commands.
 
+Build both supported versions with `gradlew buildAll`. Release names are `realmcontrol-<loader>-<minecraft>-<version>.jar`. The 26.1.2 node is reserved and disabled until a matching KineticCore build and its port are available. See [migration validation](docs/multiversion-migration-report.md).
+
 ### Installation and access
 
-- Current build target: **Minecraft 1.20.1**, **Forge 47.4.2+**, and **26.9.28+**.
+- Supported builds: **Minecraft 1.20.1 / Forge 47.4.2+** and **Minecraft 1.21.1 / NeoForge 21.1+**, with **Java 21** and **KineticCore 26.10.3+** for the matching Minecraft/loader.
 - Install Realm Control and KineticCore on the client and server for multiplayer use.
-- Optional: **Jade 11.0.0+** for beacon information.
+- Optional: **Jade 11.0.0+ (1.20.1)** or **15.0.0+ (1.21.1)** for beacon information.
 - Enter a world, press **F6**, and choose **Realm Control** in KineticCore. The key is configurable in Controls.
 - Global server settings and world-generation editors require **permission level 2**. Individual beacon controls also enforce ownership where applicable.
 
@@ -126,11 +128,13 @@ World data stores beacon chunk-loading state and one-time chunk rewrite markers.
 
 Realm Control 提供世界方块、结构与群系生成、信标区域和传送授权的可视化管理。可用于调整整合包的后续地形、配置信标设施，以及向玩家发放有限的传送权限。
 
+使用 `gradlew buildAll` 一次构建两个受支持版本，产物名为 `realmcontrol-<loader>-<minecraft>-<version>.jar`。26.1.2 节点已预留，需匹配核心产物和代码移植完成后才会启用。详见[迁移验收记录](docs/multiversion-migration-report.md)。
+
 ### 安装与入口
 
-- 当前构建目标：**Minecraft 1.20.1**、**Forge 47.4.2+**、**26.9.28+**。
+- 支持 **Minecraft 1.20.1 / Forge 47.4.2+** 和 **Minecraft 1.21.1 / NeoForge 21.1+**，使用 **Java 21** 和对应 Minecraft/加载器的 **KineticCore 26.10.3+**。
 - 多人游戏时，客户端和服务端均安装 Realm Control 与 KineticCore。
-- 可选：**Jade 11.0.0+** 显示信标信息。
+- 可选：**Jade 11.0.0+（1.20.1）** 或 **15.0.0+（1.21.1）** 显示信标信息。
 - 进入世界后按 **F6**，在 KineticCore 中选择 **Realm Control**；可在按键设置中修改快捷键。
 - 服务端全局设置和世界生成编辑器需要 **2 级权限**；单个信标设置还会在适用情况下检查所有权。
 

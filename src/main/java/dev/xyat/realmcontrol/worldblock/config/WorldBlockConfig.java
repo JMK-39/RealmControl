@@ -192,14 +192,14 @@ public class WorldBlockConfig {
         public ItemRule(String str) {
             String clean = normalizeRuleIdentifier(str);
             this.originalString = clean;
-            int bracket = clean.indexOf('{');
+            int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(clean);
             if (bracket == -1) {
                 this.baseId = clean;
                 this.nbt = null;
                 this.hasNbt = false;
             } else {
                 this.baseId = clean.substring(0, bracket);
-                this.nbt = safeParseTagForRule(clean, clean.substring(bracket));
+                this.nbt = clean.charAt(bracket) == '{' ? safeParseTagForRule(clean, clean.substring(bracket)) : null;
                 this.hasNbt = true;
             }
         }
@@ -223,10 +223,19 @@ public class WorldBlockConfig {
 
             if (!itemId.equals(this.baseId)) return false;
             if (!this.hasNbt) return true;
+            //? if >=1.21 {
+            /*try {
+                return dev.xyat.realmcontrol.worldblock.util.ItemRuleData.matches(this.originalString, stack);
+            } catch (IllegalArgumentException invalid) {
+                logLimitedWarn("Invalid item rule: " + this.originalString, invalid);
+                return false;
+            }
+            *///?} else {
             if (this.nbt != null) {
                 return net.minecraft.nbt.NbtUtils.compareNbt(this.nbt, stack.getTag(), true);
             }
             return false;
+            //?}
         }
 
         public boolean matches(ItemStack stack) {
@@ -276,7 +285,7 @@ public class WorldBlockConfig {
         if (clean.isEmpty() || clean.startsWith("@") || clean.startsWith("#")) return false;
         if (data != null && data.bannedItems != null && data.bannedItems.contains(clean)) return true;
 
-        int bracket = clean.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(clean);
         String baseId = bracket == -1 ? clean : clean.substring(0, bracket);
         if (pureIdBanned.contains(baseId)) return true;
 
@@ -299,7 +308,7 @@ public class WorldBlockConfig {
         Set<TagKey<Item>> result = new HashSet<>();
         for (String id : ids) {
             try {
-                result.add(ItemTags.create(new ResourceLocation(id)));
+                result.add(ItemTags.create(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(id)));
             } catch (Exception ignored) {}
         }
         if (result.isEmpty()) return Collections.emptySet();
@@ -317,7 +326,7 @@ public class WorldBlockConfig {
         String clean = tagId.trim().toLowerCase(Locale.ROOT);
         if (clean.startsWith("#")) clean = clean.substring(1);
         try {
-            return new ResourceLocation(clean).toString();
+            return dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(clean).toString();
         } catch (Exception ignored) {
             return "";
         }
@@ -398,25 +407,28 @@ public class WorldBlockConfig {
         if (raw.startsWith("#")) {
             String tag = normalizePrefixedRuleBody(raw);
             try {
-                return "#" + new ResourceLocation(tag);
+                return "#" + dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(tag);
             } catch (Exception e) {
                 logLimitedWarn("无效标签规则=" + raw, e);
                 return "";
             }
         }
 
-        int bracket = raw.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(raw);
         String idPart = bracket == -1 ? raw : raw.substring(0, bracket);
         String nbtPart = bracket == -1 ? "" : raw.substring(bracket).trim();
         String cleanId = idPart.trim().toLowerCase(Locale.ROOT);
         if (cleanId.isEmpty()) return "";
         try {
-            cleanId = new ResourceLocation(cleanId).toString();
+            cleanId = dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(cleanId).toString();
         } catch (Exception e) {
             logLimitedWarn("无效物品或方块 ID=" + raw, e);
             return "";
         }
         if (!nbtPart.isEmpty()) {
+            //? if >=1.21 {
+            /*if (nbtPart.startsWith("[")) return nbtPart.endsWith("]") ? cleanId + nbtPart : "";
+            *///?}
             CompoundTag parsed = safeParseTagForRule(raw, nbtPart);
             if (parsed == null) return "";
             String compact = compactKnownNbtIdentifier(cleanId, parsed);
@@ -584,13 +596,13 @@ public class WorldBlockConfig {
         String raw = identifier.trim();
         if (raw.isEmpty() || raw.startsWith("@") || raw.startsWith("#")) return "";
 
-        int bracket = raw.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(raw);
         String idPart = bracket == -1 ? raw : raw.substring(0, bracket);
         String cleanId = idPart.trim().toLowerCase(Locale.ROOT);
         if (cleanId.isEmpty()) return "";
 
         try {
-            return new ResourceLocation(cleanId).toString();
+            return dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(cleanId).toString();
         } catch (Exception e) {
             logLimitedWarn("无效方块 ID=" + raw, e);
             return "";
@@ -604,11 +616,11 @@ public class WorldBlockConfig {
     public static String getBaseIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) return "";
         String raw = identifier.trim();
-        int bracket = raw.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(raw);
         String base = bracket == -1 ? raw : raw.substring(0, bracket);
         if (base.startsWith("@") || base.startsWith("#")) return base.toLowerCase(Locale.ROOT);
         try {
-            return new ResourceLocation(base.trim().toLowerCase(Locale.ROOT)).toString();
+            return dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(base.trim().toLowerCase(Locale.ROOT)).toString();
         } catch (Exception ignored) {
             return "";
         }
@@ -1022,7 +1034,7 @@ public class WorldBlockConfig {
     private static Block getBlockById(String id) {
         if (id == null || id.isBlank()) return null;
         try {
-            return KineticRegistries.blocks().get(new ResourceLocation(id));
+            return KineticRegistries.blocks().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(id));
         } catch (Exception ignored) {
             return null;
         }
@@ -1033,8 +1045,8 @@ public class WorldBlockConfig {
         if (blockReplacements == null || blockReplacements.isEmpty()) return result;
         for (Map.Entry<String, String> entry : blockReplacements.entrySet()) {
             try {
-                Block sourceBlock = KineticRegistries.blocks().get(new ResourceLocation(entry.getKey()));
-                Block targetBlock = KineticRegistries.blocks().get(new ResourceLocation(entry.getValue()));
+                Block sourceBlock = KineticRegistries.blocks().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(entry.getKey()));
+                Block targetBlock = KineticRegistries.blocks().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(entry.getValue()));
                 if (sourceBlock == null || targetBlock == null) continue;
                 if (sourceBlock == Blocks.AIR || targetBlock == Blocks.AIR || sourceBlock == targetBlock) continue;
                 result.put(sourceBlock, targetBlock.defaultBlockState());
@@ -1215,7 +1227,7 @@ public class WorldBlockConfig {
             boolean itemMatches = stack != null && !stack.isEmpty() && stack.getTags().anyMatch(t -> t.location().toString().toLowerCase(Locale.ROOT).equals(targetTag));
             if (itemMatches) return true;
             try {
-                return state.is(BlockTags.create(new ResourceLocation(targetTag)));
+                return state.is(BlockTags.create(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(targetTag)));
             } catch (Exception ignored) {
                 return false;
             }
@@ -1260,6 +1272,9 @@ public class WorldBlockConfig {
 
     public static String getItemIdentifier(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return "";
+        //? if >=1.21 {
+        /*return dev.xyat.realmcontrol.worldblock.util.ItemRuleData.format(stack);
+        *///?} else {
         ResourceLocation id = KineticRegistries.items().id(stack.getItem());
         if (id == null) return "";
         String base = id.toString();
@@ -1268,6 +1283,7 @@ public class WorldBlockConfig {
         String compact = compactKnownNbtIdentifier(base, tag);
         if (!compact.isEmpty()) return compact;
         return base + tag;
+        //?}
     }
 
     public static ItemStack parseItemStack(String identifier) {
@@ -1277,14 +1293,17 @@ public class WorldBlockConfig {
 
         dev.xyat.realmcontrol.worldblock.util.ItemBanControl.withSkip(() -> {
             try {
-                int bracket = clean.indexOf('{');
+                //? if >=1.21 {
+                /*result[0] = dev.xyat.kineticcore.api.inventory.KineticItemText.parse(clean);
+                *///?} else {
+                int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(clean);
                 if (bracket == -1) {
-                    Item item = KineticRegistries.items().get(new ResourceLocation(clean));
+                    Item item = KineticRegistries.items().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(clean));
                     if (item != null) result[0] = new ItemStack(item);
                 } else {
                     String id = clean.substring(0, bracket);
                     String nbt = clean.substring(bracket);
-                    Item item = KineticRegistries.items().get(new ResourceLocation(id));
+                    Item item = KineticRegistries.items().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(id));
                     if (item != null) {
                         CompoundTag tag = safeParseTagForRule(clean, nbt);
                         if (tag != null) {
@@ -1294,6 +1313,7 @@ public class WorldBlockConfig {
                         }
                     }
                 }
+                //?}
             } catch (Throwable e) {
                 logLimitedWarn("解析物品失败，identifier=" + identifier + ", clean=" + clean, e);
             }

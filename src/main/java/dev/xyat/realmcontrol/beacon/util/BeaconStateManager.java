@@ -32,11 +32,16 @@ public class BeaconStateManager extends SavedData {
     }
 
     public static BeaconStateManager get(MinecraftServer server) {
+        //? if >=1.21 {
+        /*return server.overworld().getDataStorage().computeIfAbsent(new SavedData.Factory<>(BeaconStateManager::new,
+                (tag, registries) -> load(tag)), DATA_NAME);
+        *///?} else {
         return server.overworld().getDataStorage().computeIfAbsent(
                 BeaconStateManager::load,
                 BeaconStateManager::new,
                 DATA_NAME
         );
+        //?}
     }
 
     public BeaconStateManager() {}
@@ -94,7 +99,11 @@ public class BeaconStateManager extends SavedData {
     }
 
     @Override
+    //? if >=1.21 {
+    /*public @NotNull CompoundTag save(@NotNull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    *///?} else {
     public @NotNull CompoundTag save(@NotNull CompoundTag tag) {
+    //?}
         ListTag times = new ListTag();
         for (Map.Entry<UUID, Long> e : offlineTimes.entrySet()) {
             CompoundTag pt = new CompoundTag();

@@ -94,7 +94,7 @@ public final class ItemUnificationHelper {
     private static ParsedTag parseUnifiedTag(String tagId) {
         ResourceLocation location;
         try {
-            location = new ResourceLocation(tagId);
+            location = dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(tagId);
         } catch (Exception ignored) {
             return null;
         }
@@ -174,7 +174,7 @@ public final class ItemUnificationHelper {
         String base = baseId(idStr);
         String path;
         try {
-            path = new ResourceLocation(base).getPath().toLowerCase(Locale.ROOT);
+            path = dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(base).getPath().toLowerCase(Locale.ROOT);
         } catch (Exception ignored) {
             path = base.toLowerCase(Locale.ROOT);
         }
@@ -190,7 +190,7 @@ public final class ItemUnificationHelper {
         String clean = tagId.trim().toLowerCase(Locale.ROOT);
         if (clean.startsWith("#")) clean = clean.substring(1);
         try {
-            return new ResourceLocation(clean).toString();
+            return dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(clean).toString();
         } catch (Exception ignored) {
             return "";
         }
@@ -198,7 +198,7 @@ public final class ItemUnificationHelper {
 
     private static String baseId(String idStr) {
         if (idStr == null) return "";
-        int bracket = idStr.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(idStr);
         return bracket == -1 ? idStr : idStr.substring(0, bracket);
     }
 

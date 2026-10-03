@@ -27,11 +27,16 @@ public class WorldChunkLoaderManager extends SavedData {
     private record ProtectedRegion(int minX, int maxX, int minZ, int maxZ) {}
 
     public static WorldChunkLoaderManager get(ServerLevel level) {
+        //? if >=1.21 {
+        /*return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(WorldChunkLoaderManager::new,
+                (tag, registries) -> load(tag)), DATA_NAME);
+        *///?} else {
         return level.getDataStorage().computeIfAbsent(
                 WorldChunkLoaderManager::load,
                 WorldChunkLoaderManager::new,
                 DATA_NAME
         );
+        //?}
     }
 
     public WorldChunkLoaderManager() {}
@@ -106,7 +111,11 @@ public class WorldChunkLoaderManager extends SavedData {
     }
 
     @Override
+    //? if >=1.21 {
+    /*public @NotNull CompoundTag save(@NotNull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    *///?} else {
     public @NotNull CompoundTag save(@NotNull CompoundTag tag) {
+    //?}
         ListTag list = new ListTag();
         for (Map.Entry<Long, Integer> entry : beaconRadii.entrySet()) {
             CompoundTag c = new CompoundTag();

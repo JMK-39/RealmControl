@@ -358,7 +358,7 @@ infoY =
             if (itemMatches) return true;
             if (item.stack().getItem() instanceof BlockItem blockItem) {
                 try {
-                    return blockItem.getBlock().defaultBlockState().is(BlockTags.create(new ResourceLocation(tagId)));
+                    return blockItem.getBlock().defaultBlockState().is(BlockTags.create(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(tagId)));
                 } catch (Exception ignored) {
                     return false;
                 }
@@ -404,10 +404,10 @@ infoY =
     private ResourceLocation getId(String idStr) {
         if (idStr == null || idStr.isBlank()) return null;
         String clean = idStr.trim().toLowerCase(Locale.ROOT);
-        int bracket = clean.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(clean);
         if (bracket >= 0) clean = clean.substring(0, bracket);
         try {
-            return new ResourceLocation(clean);
+            return dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(clean);
         } catch (Exception ignored) {
             return null;
         }

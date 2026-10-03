@@ -400,7 +400,7 @@ public class WorldGenPage extends KineticPage {
             return;
         }
         try {
-            ResourceLocation langFile = new ResourceLocation(namespace, "lang/zh_cn.json");
+            ResourceLocation langFile = dev.xyat.kineticcore.api.resource.KineticResourceIds.of(namespace, "lang/zh_cn.json");
             KineticClientRuntime.resourceManager().getResource(langFile).ifPresent(this::loadZhCnResource);
         } catch (Exception ignored) {
         }

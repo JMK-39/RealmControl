@@ -13,11 +13,16 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
     private final LongOpenHashSet weightedProcessed = new LongOpenHashSet();
 
     public static LoadedChunkRewriteSavedData get(ServerLevel level) {
+        //? if >=1.21 {
+        /*return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(LoadedChunkRewriteSavedData::new,
+                (tag, registries) -> load(tag)), DATA_NAME);
+        *///?} else {
         return level.getDataStorage().computeIfAbsent(
                 LoadedChunkRewriteSavedData::load,
                 LoadedChunkRewriteSavedData::new,
                 DATA_NAME
         );
+        //?}
     }
 
     public static LoadedChunkRewriteSavedData load(CompoundTag tag) {
@@ -44,7 +49,11 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
     }
 
     @Override
+    //? if >=1.21 {
+    /*public CompoundTag save(@Nonnull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    *///?} else {
     public CompoundTag save(@Nonnull CompoundTag tag) {
+    //?}
         tag.putLongArray("fixed", fixedProcessed.toLongArray());
         tag.putLongArray("weighted", weightedProcessed.toLongArray());
         return tag;

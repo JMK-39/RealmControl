@@ -14,7 +14,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+//? if forge {
 import net.minecraftforge.network.NetworkEvent;
+//?} else {
+/*import net.neoforged.neoforge.network.handling.IPayloadContext;
+*///?}
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -47,9 +51,21 @@ public final class NaturesCompassMixins {
         }
 
         @Overwrite
+        //? if forge {
         public void handle(Supplier<NetworkEvent.Context> ctx) {
+        //?} else {
+        /*public static void handle(TeleportPacket packet, IPayloadContext ctx) {
+        *///?}
+            //? if forge {
             ctx.get().enqueueWork(() -> {
+            //?} else {
+            /*ctx.enqueueWork(() -> {
+            *///?}
+                //? if forge {
                 ServerPlayer player = ctx.get().getSender();
+                //?} else {
+                /*ServerPlayer player = ctx.player() instanceof ServerPlayer serverPlayer ? serverPlayer : null;
+                *///?}
                 if (player == null || player.getServer() == null) return;
 
                 ItemStack stack = ItemUtils.getHeldNatureCompass(player);
@@ -70,7 +86,11 @@ public final class NaturesCompassMixins {
                 if (allowed && natureCompass.getState(stack) == CompassState.FOUND) {
                     int x = natureCompass.getFoundBiomeX(stack);
                     int z = natureCompass.getFoundBiomeZ(stack);
+                    //? if forge {
                     int y = findValidTeleportHeight(player.level(), x, z);
+                    //?} else {
+                    /*int y = ((Logic)(Object)packet).findValidTeleportHeight(player.level(), x, z);
+                    *///?}
                     player.stopRiding();
                     player.connection.teleport(x, y, z, player.getYRot(), player.getXRot());
                     if (!player.isFallFlying()) {
@@ -79,11 +99,13 @@ public final class NaturesCompassMixins {
                     }
                 }
             });
+            //? if forge {
             ctx.get().setPacketHandled(true);
+            //?}
         }
 
         @Unique
-        private void realmcontrol_tpd$sendTpFeedback(ServerPlayer player, ITeleportAuth auth) {
+        private static void realmcontrol_tpd$sendTpFeedback(ServerPlayer player, ITeleportAuth auth) {
             long now = System.currentTimeMillis();
             Component message;
             if (auth.realmcontrol_tpd$getTpExpiry() > now) {

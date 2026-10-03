@@ -23,7 +23,7 @@ public final class WorldBlockNetwork {
     private static boolean eventsInstalled;
 
     public static final PacketChannel CHANNEL = PacketChannel.create(
-            new ResourceLocation(WorldBlockModule.MODID, "world_block_network"),
+            dev.xyat.kineticcore.api.resource.KineticResourceIds.of(WorldBlockModule.MODID, "world_block_network"),
             PROTOCOL_VERSION,
             NetworkVersionPolicy.ANY
     );

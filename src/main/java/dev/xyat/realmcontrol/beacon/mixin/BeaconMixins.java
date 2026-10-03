@@ -85,7 +85,11 @@ public class BeaconMixins {
         }
 
         @Inject(method = "saveAdditional", at = @At("TAIL"))
+        //? if >=1.21 {
+        /*private void saveKTSettings(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
+        *///?} else {
         private void saveKTSettings(CompoundTag tag, CallbackInfo ci) {
+        //?}
             tag.putBoolean("BeaconModuleChunkLoad", this.realmcontrol_beacon$ChunkLoadEnabled);
             tag.putInt("BeaconModuleChunkLoadRadius", this.realmcontrol_beacon$ChunkLoadRadius);
             tag.putBoolean("BeaconModuleSpawnPrevent", this.realmcontrol_beacon$SpawnPreventEnabled);
@@ -97,8 +101,13 @@ public class BeaconMixins {
             if (this.realmcontrol_beacon$Owner != null) tag.putUUID("BeaconModuleOwner", this.realmcontrol_beacon$Owner);
         }
 
+        //? if >=1.21 {
+        /*@Inject(method = "loadAdditional", at = @At("TAIL"))
+        private void loadKTSettings(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
+        *///?} else {
         @Inject(method = "load", at = @At("TAIL"))
         private void loadKTSettings(CompoundTag tag, CallbackInfo ci) {
+        //?}
             if (tag.contains("BeaconModuleChunkLoad")) this.realmcontrol_beacon$ChunkLoadEnabled = tag.getBoolean("BeaconModuleChunkLoad");
             if (tag.contains("BeaconModuleChunkLoadRadius")) this.realmcontrol_beacon$ChunkLoadRadius = tag.getInt("BeaconModuleChunkLoadRadius");
             if (tag.contains("BeaconModuleSpawnPrevent")) this.realmcontrol_beacon$SpawnPreventEnabled = tag.getBoolean("BeaconModuleSpawnPrevent");

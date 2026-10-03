@@ -98,7 +98,7 @@ public final class ItemSearchCache {
     private static String getBaseIdentifier(String idStr) {
         if (idStr == null) return "";
         String clean = idStr.trim().toLowerCase(Locale.ROOT);
-        int bracket = clean.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(clean);
         return bracket < 0 ? clean : clean.substring(0, bracket);
     }
 
@@ -400,7 +400,7 @@ public final class ItemSearchCache {
         try {
             String baseId = getBaseIdentifier(idStr);
             if (baseId.isBlank()) return ItemStack.EMPTY;
-            Item item = KineticRegistries.items().get(new ResourceLocation(baseId));
+            Item item = KineticRegistries.items().get(dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(baseId));
             if (item == null || item == Items.AIR) return ItemStack.EMPTY;
             return new ItemStack(item);
         } catch (Throwable ignored) {
@@ -422,11 +422,11 @@ public final class ItemSearchCache {
 
     private static String cachedIdentifier(KineticItemSearch.CachedItem item) {
         if (item == null) return "";
-        if (item.id() != null && (item.id().startsWith("@") || item.id().startsWith("#") || item.id().contains("{"))) {
+        if (item.id() != null && (item.id().startsWith("@") || item.id().startsWith("#") || dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(item.id()) >= 0)) {
             return item.id();
         }
         ItemStack stack = item.stack();
-        if (stack != null && !stack.isEmpty() && stack.hasTag()) {
+        if (stack != null && !stack.isEmpty() && dev.xyat.realmcontrol.worldblock.util.ItemRuleData.hasData(stack)) {
             try {
                 return WorldBlockConfig.getItemIdentifier(stack);
             } catch (Throwable ignored) {

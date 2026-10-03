@@ -27,7 +27,7 @@ public class BeaconNetwork {
     private static final String PROTOCOL_VERSION = "1";
     private static final int MAX_SPAWN_CODES_WIRE_LENGTH = 32;
     public static final PacketChannel CHANNEL = PacketChannel.create(
-            new ResourceLocation(BeaconModule.MODID, "beacon"),
+            dev.xyat.kineticcore.api.resource.KineticResourceIds.of(BeaconModule.MODID, "beacon"),
             PROTOCOL_VERSION,
             NetworkVersionPolicy.ANY
     );

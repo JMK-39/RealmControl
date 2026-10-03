@@ -58,7 +58,7 @@ public class WorldGenNetwork {
     private static final int LOCATE_RADIUS_CHUNKS = 100;
     private static boolean eventsInstalled;
     public static final PacketChannel CHANNEL = PacketChannel.create(
-            new ResourceLocation(WorldGenModule.MODID, "worldgen"),
+            dev.xyat.kineticcore.api.resource.KineticResourceIds.of(WorldGenModule.MODID, "worldgen"),
             PROTOCOL_VERSION,
             NetworkVersionPolicy.ANY
     );

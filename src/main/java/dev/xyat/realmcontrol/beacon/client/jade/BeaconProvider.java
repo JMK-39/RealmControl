@@ -16,7 +16,7 @@ import snownee.jade.api.ITooltip;
 import snownee.jade.api.config.IPluginConfig;
 
 public class BeaconProvider {
-    public static final ResourceLocation ID = new ResourceLocation("realmcontrol", "beacon_info");
+    public static final ResourceLocation ID = dev.xyat.kineticcore.api.resource.KineticResourceIds.of("realmcontrol", "beacon_info");
 
     public enum Server implements IServerDataProvider<BlockAccessor> {
         INSTANCE;

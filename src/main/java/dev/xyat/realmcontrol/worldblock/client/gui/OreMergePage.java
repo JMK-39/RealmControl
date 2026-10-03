@@ -805,7 +805,7 @@ return button;
 
     private String getBaseIdentifier(String idStr) {
         if (idStr == null) return "";
-        int bracket = idStr.indexOf('{');
+        int bracket = dev.xyat.realmcontrol.worldblock.util.ItemRuleData.dataStart(idStr);
         return bracket == -1 ? idStr : idStr.substring(0, bracket);
     }
 
