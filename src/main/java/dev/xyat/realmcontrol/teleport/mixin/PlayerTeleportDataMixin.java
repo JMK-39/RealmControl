@@ -35,6 +35,23 @@ public abstract class PlayerTeleportDataMixin implements ITeleportAuth {
         realmcontrol_tpd$tpExpiry = timestamp;
     }
 
+    // 26.1 saves entities through ValueOutput/ValueInput; the stored keys are the same.
+    //? if >=26.1 {
+    /*@Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
+    private void realmcontrol_tpd$saveTpData(net.minecraft.world.level.storage.ValueOutput output, CallbackInfo callback) {
+        net.minecraft.world.level.storage.ValueOutput data = output.child(TELEPORT_DATA_KEY);
+        data.putInt("TpCount", realmcontrol_tpd$tpCount);
+        data.putLong("TpExpiry", realmcontrol_tpd$tpExpiry);
+    }
+
+    @Inject(method = "readAdditionalSaveData", at = @At("TAIL"))
+    private void realmcontrol_tpd$loadTpData(net.minecraft.world.level.storage.ValueInput input, CallbackInfo callback) {
+        input.child(TELEPORT_DATA_KEY).ifPresent(data -> {
+            realmcontrol_tpd$tpCount = data.getInt("TpCount");
+            realmcontrol_tpd$tpExpiry = data.getLong("TpExpiry");
+        });
+    }
+    *///?} else {
     @Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
     private void realmcontrol_tpd$saveTpData(CompoundTag tag, CallbackInfo callback) {
         CompoundTag data = new CompoundTag();
@@ -50,6 +67,7 @@ public abstract class PlayerTeleportDataMixin implements ITeleportAuth {
         realmcontrol_tpd$tpCount = data.getInt("TpCount");
         realmcontrol_tpd$tpExpiry = data.getLong("TpExpiry");
     }
+    //?}
 
     @Inject(method = "restoreFrom", at = @At("TAIL"))
     private void realmcontrol_tpd$onClone(ServerPlayer oldPlayer, boolean wonGame, CallbackInfo callback) {

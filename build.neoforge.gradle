@@ -49,13 +49,12 @@ neoForge {
 
 kineticConfigureReleaseJar(tasks.named('jar', Jar))
 
+// Third-party mods differ per Minecraft version, so each node lists its own in mod_dependencies
+// (versions/<node>/gradle.properties, comma-separated coordinates). A "compileOnly:" prefix keeps a mod
+// off the dev runtime, for optional integrations whose build cannot start on that node's game version.
 dependencies {
-    implementation 'maven.modrinth:architectury-api:1IiqEQGl'
-    implementation 'maven.modrinth:jade:eYz2YBGT'
-    implementation 'maven.modrinth:kubejs:THIGFPwf'
-    implementation 'maven.modrinth:rhino:SqkDvOLG'
-    // KubeJS declares this separately; flatDir artifacts do not carry transitive metadata.
-    implementation 'maven.modrinth:better-advanced-tooltips:uPFbnD32'
-    implementation 'curse.maven:explorers-compass-edited-1203888:8234657'
-    implementation 'maven.modrinth:natures-compass:nFniEtJV'
+    (project.findProperty('mod_dependencies')?.toString() ?: '').split(',')*.trim().findAll { it }.each {
+        if (it.startsWith('compileOnly:')) compileOnly it.substring('compileOnly:'.length())
+        else implementation it
+    }
 }

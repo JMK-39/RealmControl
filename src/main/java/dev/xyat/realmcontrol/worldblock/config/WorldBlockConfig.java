@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import dev.xyat.kineticcore.api.registry.KineticRegistries;
 import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.realmcontrol.util.Nbt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -440,8 +441,8 @@ public class WorldBlockConfig {
 
     private static String compactKnownNbtIdentifier(String baseId, CompoundTag tag) {
         if (baseId == null || baseId.isBlank() || tag == null || tag.isEmpty()) return "";
-        if (tag.contains("GunId", 8)) {
-            String gunId = tag.getString("GunId").trim();
+        if (Nbt.hasString(tag, "GunId")) {
+            String gunId = Nbt.string(tag, "GunId").trim();
             if (!gunId.isEmpty()) {
                 CompoundTag stable = new CompoundTag();
                 stable.putString("GunId", gunId);

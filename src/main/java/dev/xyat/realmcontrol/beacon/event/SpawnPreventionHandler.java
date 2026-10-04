@@ -39,12 +39,12 @@ public class SpawnPreventionHandler {
     public static final Map<ResourceKey<Level>, Map<BlockPos, BeaconProtectData>> ACTIVE_SPAWN_PREVENTERS = new ConcurrentHashMap<>();
 
     public static void updateBeacon(Level level, BlockPos pos, int loadRadius, int type, String codes) {
-        if (level == null || level.isClientSide || loadRadius < 0) return;
+        if (level == null || level.isClientSide() || loadRadius < 0) return;
         ACTIVE_SPAWN_PREVENTERS.computeIfAbsent(level.dimension(), k -> new ConcurrentHashMap<>()).put(pos, new BeaconProtectData(loadRadius, type, codes == null ? "" : codes.toUpperCase()));
     }
 
     public static void removeBeacon(Level level, BlockPos pos) {
-        if (level == null || level.isClientSide) return;
+        if (level == null || level.isClientSide()) return;
         Map<BlockPos, BeaconProtectData> map = ACTIVE_SPAWN_PREVENTERS.get(level.dimension());
         if (map != null) map.remove(pos);
     }

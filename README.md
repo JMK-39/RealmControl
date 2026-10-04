@@ -8,7 +8,7 @@ Realm Control provides visual tools for world blocks, structure and biome genera
 - Structure/biome rules and configurable beacon coverage.
 - Teleport-use limits and timed authorization.
 
-Supports Minecraft **1.20.1 / Forge 47.4.2+** and **1.21.1 / NeoForge 21.1+** (validated with 21.1.252). Requires **Java 21** and **KineticCore 26.10.3+** matching the Minecraft/loader. Install required mods on the server and connecting clients. **26.1.2 is reserved and disabled, not supported.**
+Supports Minecraft **1.20.1 / Forge 47.4.2+**, **1.21.1 / NeoForge 21.1+** (validated with 21.1.252) and **26.1.2 / NeoForge 26.1.2+** (validated with 26.1.2.112). Requires **Java 21** (**Java 25** on 26.1.2) and **KineticCore 26.10.3+** matching the Minecraft/loader. Install required mods on the server and connecting clients.
 
 Optional: Jade 11+ on Forge or 15+ on NeoForge for beacon information.
 
@@ -20,7 +20,7 @@ Realm Control 提供世界方块、结构与群系生成、信标区域和传送
 - 结构、群系规则及可配置信标区域。
 - 传送次数限制与限时授权。
 
-支持 Minecraft **1.20.1 / Forge 47.4.2+** 与 **1.21.1 / NeoForge 21.1+**（验证使用 21.1.252），必需 **Java 21** 和与 Minecraft、加载器匹配的 **KineticCore 26.10.3+**。服务端与连接的客户端均安装必需模组。**26.1.2 仅预留、未启用，不代表支持。**
+支持 Minecraft **1.20.1 / Forge 47.4.2+**、**1.21.1 / NeoForge 21.1+**（验证使用 21.1.252）与 **26.1.2 / NeoForge 26.1.2+**（验证使用 26.1.2.112），必需 **Java 21**（26.1.2 为 **Java 25**）和与 Minecraft、加载器匹配的 **KineticCore 26.10.3+**。服务端与连接的客户端均安装必需模组。
 
 可选：Forge 使用 Jade 11+、NeoForge 使用 Jade 15+ 显示信标信息。
 

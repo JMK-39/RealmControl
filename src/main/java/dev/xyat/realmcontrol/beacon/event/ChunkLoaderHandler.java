@@ -133,7 +133,8 @@ public class ChunkLoaderHandler {
                     BeaconNetwork.syncAllQuotas(level.getServer());
                 }
 
-                manager.updateChunkForcing(level, new ChunkPos(pos).x, new ChunkPos(pos).z, storedRadius, false);
+                ChunkPos chunkPos = new ChunkPos(pos);
+                manager.updateChunkForcing(level, chunkPos.x, chunkPos.z, storedRadius, false);
                 manager.setStoredRadius(level, pos, -1);
                 notifyPlayers(level, pos, KineticI18n.translatable("msg.realmcontrol.beacon.beacon.broken"));
             }

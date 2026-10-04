@@ -27,8 +27,8 @@ public final class SavedDataRegression {
         rewrite.putLongArray("weighted", new long[]{-1, 4294967296L});
         LoadedChunkRewriteSavedData markers = LoadedChunkRewriteSavedData.load(rewrite);
         LoadedChunkRewriteSavedData restored = LoadedChunkRewriteSavedData.load(save(markers));
-        for (long key : rewrite.getLongArray("fixed")) require(restored.isFixedProcessed(key), "fixed marker " + key);
-        for (long key : rewrite.getLongArray("weighted")) require(restored.isWeightedProcessed(key), "weighted marker " + key);
+        for (long key : dev.xyat.realmcontrol.util.Nbt.longArray(rewrite, "fixed")) require(restored.isFixedProcessed(key), "fixed marker " + key);
+        for (long key : dev.xyat.realmcontrol.util.Nbt.longArray(rewrite, "weighted")) require(restored.isWeightedProcessed(key), "weighted marker " + key);
         require(!restored.isWeightedProcessed(0), "fixed/weighted markers independent");
 
         CompoundTag state = new CompoundTag();
@@ -40,7 +40,7 @@ public final class SavedDataRegression {
         state.put("GlobalRefs", global);
         state.put("PlayerRefs", new ListTag());
         CompoundTag offline = new CompoundTag();
-        offline.putUUID("UUID", new java.util.UUID(123, 456));
+        dev.xyat.realmcontrol.util.Nbt.putUuid(offline, "UUID", new java.util.UUID(123, 456));
         offline.putLong("Time", 1720000000123L);
         ListTag times = new ListTag();
         times.add(offline);
@@ -49,13 +49,28 @@ public final class SavedDataRegression {
         System.out.println("SavedDataRegression: three legacy schemas and chunk boundaries passed");
     }
 
-    private static CompoundTag save(SavedData data) {
-        //? if >=1.21 {
-        /*return data.save(new CompoundTag(), net.minecraft.core.RegistryAccess.EMPTY);
-        *///?} else {
+    // 26.1 saved data serializes through each type's codec, so every class keeps its own save.
+    //? if >=26.1 {
+    /*private static CompoundTag save(WorldChunkLoaderManager data) {
         return data.save(new CompoundTag());
-        //?}
     }
+
+    private static CompoundTag save(LoadedChunkRewriteSavedData data) {
+        return data.save(new CompoundTag());
+    }
+
+    private static CompoundTag save(BeaconStateManager data) {
+        return data.save(new CompoundTag());
+    }
+    *///?} else if >=1.21 {
+    /*private static CompoundTag save(SavedData data) {
+        return data.save(new CompoundTag(), net.minecraft.core.RegistryAccess.EMPTY);
+    }
+    *///?} else {
+    private static CompoundTag save(SavedData data) {
+        return data.save(new CompoundTag());
+    }
+    //?}
 
     public static void require(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);

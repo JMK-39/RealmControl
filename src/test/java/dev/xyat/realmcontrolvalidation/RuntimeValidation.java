@@ -8,11 +8,18 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.fml.common.Mod;
 
 @Mod("realmcontrol_validation")
 public final class RuntimeValidation {
     public RuntimeValidation() {
+        // Item components are bound once registries freeze (after mod construction on 26.1), so validate on server start.
+        MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent event) -> validate());
+    }
+
+    private static void validate() {
         SavedDataRegression.main(new String[0]);
         var actual = WorldBlockConfig.parseItemStack("minecraft:diamond_sword[damage=5,custom_data={extra:1}]");
         SavedDataRegression.require(!actual.isEmpty(), "component stack parsed");
@@ -32,26 +39,35 @@ public final class RuntimeValidation {
                 "legacy custom NBT upgraded and matched");
         SavedDataRegression.require("minecraft:diamond_sword".equals(WorldBlockConfig.getBaseIdentifier(
                 "minecraft:diamond_sword[damage=5]")), "component base ID");
-        var gun = WorldBlockConfig.parseItemStack("minecraft:stick{GunId:\"sample:test\",Ammo:12}");
+        // Item text only takes this version's component syntax, so stacks with item data are built directly;
+        // the rules below still use the 1.20.1 syntax that existing configs carry.
+        var gunData = new net.minecraft.nbt.CompoundTag();
+        gunData.putString("GunId", "sample:test");
+        gunData.putInt("Ammo", 12);
+        var gun = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK);
+        gun.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(gunData));
         String identity = WorldBlockConfig.getItemIdentifier(gun);
         SavedDataRegression.require(identity.contains("GunId") && !identity.contains("Ammo"), "stable legacy GunId identity");
         SavedDataRegression.require(new WorldBlockConfig.ItemRule(identity).matches(gun), "GunId rule matches extra data");
         String namedRule = "minecraft:stick{display:{Name:'{\"text\":\"Example\"}'}}";
-        SavedDataRegression.require(new WorldBlockConfig.ItemRule(namedRule).matches(WorldBlockConfig.parseItemStack(namedRule)),
+        var named = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK);
+        named.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, net.minecraft.network.chat.Component.literal("Example"));
+        SavedDataRegression.require(new WorldBlockConfig.ItemRule(namedRule).matches(named),
                 "legacy custom name matches after JSON normalization");
         String loreRule = "minecraft:stick{display:{Lore:['{\"text\":\"Line\"}']}}";
-        var extraLore = WorldBlockConfig.parseItemStack(
-                "minecraft:stick{display:{Lore:['{\"text\":\"Line\"}','{\"text\":\"Extra\"}']}}");
+        var extraLore = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK);
+        extraLore.set(net.minecraft.core.component.DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(java.util.List.of(
+                net.minecraft.network.chat.Component.literal("Line"), net.minecraft.network.chat.Component.literal("Extra"))));
         SavedDataRegression.require(new WorldBlockConfig.ItemRule(loreRule).matches(extraLore),
                 "legacy lore subset matches after JSON normalization");
         SavedDataRegression.require(!new WorldBlockConfig.ItemRule(
-                "minecraft:stick{display:{Name:'{\"text\":\"Different\"}'}}").matches(WorldBlockConfig.parseItemStack(namedRule)),
+                "minecraft:stick{display:{Name:'{\"text\":\"Different\"}'}}").matches(named),
                 "different legacy name rejected");
         SavedDataRegression.require(WorldBlockConfig.parseItemStack("minecraft:stick[damage=invalid]").isEmpty(),
                 "malformed component rejected");
 
         var lookup = net.minecraft.data.registries.VanillaRegistries.createLookup();
-        var enchantments = lookup.lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+        var enchantments = lookup.lookup(net.minecraft.core.registries.Registries.ENCHANTMENT).orElseThrow();
         var sharpness = enchantments.getOrThrow(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS);
         var unbreaking = enchantments.getOrThrow(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING);
         var wanted = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(

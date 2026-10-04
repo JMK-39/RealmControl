@@ -1,3 +1,17 @@
+2026年10月04日 13时42分 — 26.10.4
+
+- Added NeoForge 26.1.2 support (Java 25, KineticCore 26.10.3+). Beacon chunk loading and spawn prevention, teleport authorization, world-block item rules and world generation controls work on 26.1.2; existing saves keep their data.
+- On 26.1.2 the Explorer's Compass and Nature's Compass teleport authorization follows the mods' 26.1 releases; item rules use 26.1's /give syntax.
+- The KubeJS integration is built for 26.1.2 but untested: KubeJS's current 26.1 release fails to start a 26.1.2 server (a KubeJS issue).
+- Checked on 26.1.2 and 1.21.1 dedicated servers: saved data round trips, beacon data, item rules and server start-up.
+
+- 新增 NeoForge 26.1.2 支持（Java 25，需要 KineticCore 26.10.3+）。信标区块加载与刷怪抑制、传送授权、世界方块物品规则和世界生成控制均可在 26.1.2 中使用，已有存档的数据保持不变。
+- 26.1.2 中探险家指南针与自然指南针的传送授权适配这两个模组的 26.1 版本；物品规则使用 26.1 的 /give 写法。
+- KubeJS 联动已针对 26.1.2 构建但尚未测试：KubeJS 当前的 26.1 版本无法启动 26.1.2 服务端（KubeJS 自身的问题）。
+- 已在 26.1.2 与 1.21.1 专用服务端中检查：存档数据往返、信标数据、物品规则与服务端启动。
+
+---
+
 2026年10月04日 — Language key validation / 语言键一致性检查
 
 - Require identical authored English/Chinese keys and string values in source, version overrides and packaged resources; generated formatting keys are rejected during builds.

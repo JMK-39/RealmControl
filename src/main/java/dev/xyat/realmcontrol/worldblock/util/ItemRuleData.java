@@ -81,9 +81,9 @@ public final class ItemRuleData {
                 new com.mojang.serialization.Dynamic<>(net.minecraft.nbt.NbtOps.INSTANCE, stack), 3465,
                 net.minecraft.SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
         if (!(upgraded instanceof net.minecraft.nbt.CompoundTag result)) return false;
-        var components = result.getCompound("components");
+        var components = dev.xyat.realmcontrol.util.Nbt.compound(result, "components");
         var lookup = registries();
-        for (String key : components.getAllKeys()) {
+        for (String key : dev.xyat.realmcontrol.util.Nbt.keys(components)) {
             var type = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.get(
                     dev.xyat.kineticcore.api.resource.KineticResourceIds.parse(key));
             if (type == null || !matchesEncoded(type, components.get(key), actual.get(type), lookup)) return false;
@@ -141,8 +141,8 @@ public final class ItemRuleData {
 
     public static String format(ItemStack stack) {
         var custom = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (custom != null && custom.copyTag().contains("GunId", 8)) {
-            String gunId = custom.copyTag().getString("GunId").trim();
+        if (custom != null && dev.xyat.realmcontrol.util.Nbt.hasString(custom.copyTag(), "GunId")) {
+            String gunId = dev.xyat.realmcontrol.util.Nbt.string(custom.copyTag(), "GunId").trim();
             if (!gunId.isEmpty()) {
                 var stable = new net.minecraft.nbt.CompoundTag();
                 stable.putString("GunId", gunId);

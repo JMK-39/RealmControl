@@ -36,6 +36,136 @@ stonecutter.parameters {
         spec.replace 'dev.latvian.mods.kubejs.level.LevelEventJS', 'dev.latvian.mods.kubejs.level.KubeLevelEvent'
         spec.replace 'extends LevelEventJS', 'implements KubeLevelEvent'
     }
+
+
+
+
+    // Classes and methods that Minecraft or NeoForge only renamed or moved between 1.21.2 and 26.1, the same
+    // rules KineticCore uses. Whole words or exact calls only, because they also run backwards on older nodes.
+    // Classes whose API changed as well are handled in code with `//? if >=26.1 {` blocks.
+    replacements.regex(loader == 'neoforge' && eval(current.version, '>=26.1')) { spec ->
+        def rename = { String from, String to ->
+            spec.replace "\\b${from.replace('.', '\\.')}\\b", to, "\\b${to.replace('.', '\\.')}\\b", from
+        }
+        rename 'ResourceLocation', 'Identifier'
+        rename 'GuiGraphics', 'GuiGraphicsExtractor'
+        rename 'MobSpawnType', 'EntitySpawnReason'
+        rename 'DimensionTransition', 'TeleportTransition'
+        rename 'net.minecraft.Util', 'net.minecraft.util.Util'
+        rename 'net.minecraft.client.GuiMessage', 'net.minecraft.client.multiplayer.chat.GuiMessage'
+        rename 'net.minecraft.client.GuiMessageTag', 'net.minecraft.client.multiplayer.chat.GuiMessageTag'
+        rename 'net.minecraft.client.renderer.RenderType', 'net.minecraft.client.renderer.rendertype.RenderType'
+        rename 'net.minecraft.world.level.GameRules', 'net.minecraft.world.level.gamerules.GameRules'
+        rename 'net.neoforged.neoforge.common.util.TriState', 'net.minecraft.util.TriState'
+        rename 'ClickType', 'ContainerInput'
+        rename 'RegisterClientReloadListenersEvent', 'AddClientReloadListenersEvent'
+        rename 'AddReloadListenerEvent', 'AddServerReloadListenersEvent'
+
+        def call = { String from, String to ->
+            spec.replace java.util.regex.Pattern.quote(from), to, java.util.regex.Pattern.quote(to), from
+        }
+        // Registry keys: location() became identifier(); TagKey keeps location().
+        call 'dimension().location()', 'dimension().identifier()'
+        call 'getKey().location()', 'getKey().identifier()'
+        call 'key.location()', 'key.identifier()'
+        call 'OVERWORLD.location()', 'OVERWORLD.identifier()'
+        call 'ResourceKey::location', 'ResourceKey::identifier'
+        call '.moveTo(', '.snapTo('
+        call '.getMinBuildHeight()', '.getMinY()'
+        call 'level.getMaxBuildHeight()', '(level.getMaxY() + 1)'
+        call '.registryOrThrow(', '.lookupOrThrow('
+        call 'registryAccess().registry(', 'registryAccess().lookup('
+        call 'TagParser.parseTag(', 'TagParser.parseCompoundFully('
+        call 'writeResourceLocation(', 'writeIdentifier('
+        call 'readResourceLocation(', 'readIdentifier('
+        call 'FMLEnvironment.dist', 'FMLEnvironment.getDist()'
+        call 'PacketDistributor.sendToServer(', 'net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer('
+        // Click and hover events are one record per action on 26.1.
+        call 'new ClickEvent(ClickEvent.Action.RUN_COMMAND, ', 'new ClickEvent.RunCommand('
+        call 'new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, ', 'new ClickEvent.SuggestCommand('
+        call 'new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ', 'new ClickEvent.CopyToClipboard('
+        call 'new HoverEvent(HoverEvent.Action.SHOW_TEXT, ', 'new HoverEvent.ShowText('
+        // Widget methods.
+        rename 'renderWidget', 'extractWidgetRenderState'
+        rename 'getScrollbarPosition', 'scrollBarX'
+        rename 'getScrollAmount', 'scrollAmount'
+        rename 'getMaxScroll', 'maxScrollAmount'
+
+        // CompoundTag and ListTag getters return Optional since 1.21.5; the ...Or forms keep the old defaults.
+        def nbt = '\\b(tag|entityTag|stackTag|forgeData|persistentData|root|nbt|compound|data|list|getPersistentData\\(\\))'
+        def getter = { String from, String to, String defaultArgument ->
+            spec.replace "${nbt}\\.${from}\\(([^()]*)\\)", "\$1.${to}(\$2${defaultArgument})",
+                    "${nbt}\\.${to}\\(([^()]*?)${java.util.regex.Pattern.quote(defaultArgument)}\\)", "\$1.${from}(\$2)"
+        }
+        getter 'getInt', 'getIntOr', ', 0'
+        getter 'getLong', 'getLongOr', ', 0L'
+        getter 'getBoolean', 'getBooleanOr', ', false'
+        getter 'getString', 'getStringOr', ', ""'
+        getter 'getDouble', 'getDoubleOr', ', 0D'
+        getter 'getFloat', 'getFloatOr', ', 0F'
+        getter 'getCompound', 'getCompoundOrEmpty', ''
+        ['COMPOUND': 'CompoundTag', 'STRING': 'StringTag', 'LIST': 'ListTag'].each { type, tagClass ->
+            spec.replace "\\b([A-Za-z_]\\w*(?:\\(\\))?)\\.contains\\(([^(),]*), Tag\\.TAG_${type}\\)",
+                    "(\$1.get(\$2) instanceof net.minecraft.nbt.${tagClass})",
+                    "\\(([A-Za-z_]\\w*(?:\\(\\))?)\\.get\\(([^(),]*)\\) instanceof net\\.minecraft\\.nbt\\.${tagClass}\\)",
+                    "\$1.contains(\$2, Tag.TAG_${type})"
+        }
+        spec.replace '\\.getList\\(([^(),]*), Tag\\.(TAG_[A-Z]+)\\)', '.getListOrEmpty($1)/*$2*/',
+                '\\.getListOrEmpty\\(([^(),]*)\\)/\\*(TAG_[A-Z]+)\\*/', '.getList($1, Tag.$2)'
+        // Inventory slots, GameProfile records and permission sets.
+        call 'getInventory().items', 'getInventory().getNonEquipmentItems()'
+        call 'getGameProfile().getName()', 'getGameProfile().name()'
+        call 'profile.getName()', 'profile.name()'
+        call 'profile.getId()', 'profile.id()'
+        call 'getProfile().getName()', 'getProfile().name()'
+        call 'getProfile().getId()', 'getProfile().id()'
+        // Entity.getServer() is gone; the level knows its server.
+        call 'player.getServer()', 'player.level().getServer()'
+        call '.withPermission(2)', '.withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER)'
+        call '.withPermission(4)', '.withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER)'
+        call '.hasPermission(2)', '.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)'
+        call '.hasPermissions(2)', '.permissions().hasPermission(new net.minecraft.server.permissions.Permission.HasCommandLevel(net.minecraft.server.permissions.PermissionLevel.GAMEMASTERS))'
+        call '.hasPermission(3)', '.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)'
+        call 'player.serverLevel()', '((net.minecraft.server.level.ServerLevel) player.level())'
+        call 'player.displayClientMessage(message, true)', 'player.sendOverlayMessage(message)'
+        call '.isOp(player.getGameProfile())', '.isOp(new net.minecraft.server.players.NameAndId(player.getGameProfile()))'
+        call 'stack.getTags()', 'stack.typeHolder().tags()'
+        // Registries return holders from get and values from getValue since 1.21.2.
+        call '.getHolder(ResourceKey.create(', '.get(ResourceKey.create('
+        call 'getTagNames()', 'getTags().map(net.minecraft.core.HolderSet.Named::key)'
+        call 'registry.getTag(tag)', 'registry.get(tag)'
+        call 'registry.get(key)', 'registry.getValue(key)'
+        call 'levelStemRegistry.get(dimensionKey)', 'levelStemRegistry.getValue(dimensionKey)'
+        call 'structureRegistry.get(id)', 'structureRegistry.getValue(id)'
+        call 'structureSetRegistry.get(id)', 'structureSetRegistry.getValue(id)'
+        call 'dimensionKey.location()', 'dimensionKey.identifier()'
+        call 'case SPAWN_EGG, ', 'case SPAWN_ITEM_USE, '
+        // ChunkPos is a record: positions come from containing, and packed longs from pack.
+        call 'ChunkPos.asLong(', 'ChunkPos.pack('
+        call '.getPos().toLong()', '.getPos().pack()'
+        spec.replace '\\bnew ChunkPos\\(((?:[^(),]|\\([^()]*\\))+)\\)', 'ChunkPos.containing($1)',
+                '\\bChunkPos\\.containing\\(((?:[^(),]|\\([^()]*\\))+)\\)', 'new ChunkPos($1)'
+        spec.replace '\\b(playerChunkPos|chunkCenter|center|chunkPos|getPos\\(\\)|ChunkPos\\.containing\\(pos\\))\\.([xz])\\b(?![\\w(])', '$1.$2()',
+                '\\b(playerChunkPos|chunkCenter|center|chunkPos|getPos\\(\\)|ChunkPos\\.containing\\(pos\\))\\.([xz])\\(\\)', '$1.$2'
+        // Mods and classes that moved.
+        rename 'com.chaosthedude.explorerscompass.items', 'com.chaosthedude.explorerscompass.item'
+        rename 'com.chaosthedude.naturescompass.items', 'com.chaosthedude.naturescompass.item'
+        rename 'RelativeMovement', 'Relative'
+        // Item rule data: parser results, data versions and component lookups moved.
+        call 'net.minecraft.commands.arguments.item.ItemParser.ItemResult', 'net.minecraft.commands.arguments.item.ItemInput'
+        call 'getCurrentVersion().getDataVersion().getVersion()', 'getCurrentVersion().dataVersion().version()'
+        call 'DATA_COMPONENT_TYPE.get(', 'DATA_COMPONENT_TYPE.getValue('
+        call 'id.get().location()', 'id.get().identifier()'
+        call 'restored.loadWithComponents(tag, registries)', 'restored.loadWithComponents(net.minecraft.world.level.storage.TagValueInput.create(net.minecraft.util.ProblemReporter.DISCARDING, registries, tag))'
+        // Compass mods keep the found position in data components; teleports take relatives and a camera reset.
+        call '.getState(stack)', '.getCompassState(stack)'
+        call 'explorersCompass.getFoundStructureX(stack)', 'stack.getOrDefault(ExplorersCompass.FOUND_X, 0)'
+        call 'explorersCompass.getFoundStructureZ(stack)', 'stack.getOrDefault(ExplorersCompass.FOUND_Z, 0)'
+        call 'natureCompass.getFoundBiomeX(stack)', 'stack.getOrDefault(com.chaosthedude.naturescompass.NaturesCompass.FOUND_X, 0)'
+        call 'natureCompass.getFoundBiomeZ(stack)', 'stack.getOrDefault(com.chaosthedude.naturescompass.NaturesCompass.FOUND_Z, 0)'
+        call 'relative, yRot, xRot)', 'relative, yRot, xRot, true)'
+        call 'safePos.getZ() + 0.5D, player.getYRot(), player.getXRot())', 'safePos.getZ() + 0.5D, java.util.Set.of(), player.getYRot(), player.getXRot(), true)'
+    }
 }
 
 tasks.register('buildAll') {

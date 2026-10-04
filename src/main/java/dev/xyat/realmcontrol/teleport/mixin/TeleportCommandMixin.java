@@ -51,7 +51,12 @@ public abstract class TeleportCommandMixin {
             ServerLevel level,
             Coordinates position,
             @Nullable Coordinates rotation,
+            // 26.1 made LookAt a public top-level interface.
+            //? if >=26.1 {
+            /*@Nullable net.minecraft.server.commands.LookAt lookAt,
+            *///?} else {
             @Coerce @Nullable Object lookAt,
+            //?}
             CallbackInfoReturnable<Integer> callback
     ) {
         if (realmcontrol_tpd$checkAndConsumeAuth(source, targets)) callback.setReturnValue(0);

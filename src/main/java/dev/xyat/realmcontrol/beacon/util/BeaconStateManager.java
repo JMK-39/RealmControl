@@ -3,6 +3,7 @@ package dev.xyat.realmcontrol.beacon.util;
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.realmcontrol.beacon.config.BeaconConfig;
+import dev.xyat.realmcontrol.util.Nbt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
@@ -32,7 +33,11 @@ public class BeaconStateManager extends SavedData {
     }
 
     public static BeaconStateManager get(MinecraftServer server) {
-        //? if >=1.21 {
+        //? if >=26.1 {
+        /*return server.overworld().getDataStorage().computeIfAbsent(new net.minecraft.world.level.saveddata.SavedDataType<>(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("realmcontrol", DATA_NAME), BeaconStateManager::new,
+                CompoundTag.CODEC.xmap(BeaconStateManager::load, data -> data.save(new CompoundTag()))));
+        *///?} else if >=1.21 {
         /*return server.overworld().getDataStorage().computeIfAbsent(new SavedData.Factory<>(BeaconStateManager::new,
                 (tag, registries) -> load(tag)), DATA_NAME);
         *///?} else {
@@ -49,18 +54,18 @@ public class BeaconStateManager extends SavedData {
     public static BeaconStateManager load(CompoundTag tag) {
         BeaconStateManager state = new BeaconStateManager();
 
-        ListTag times = tag.getList("OfflineTimes", 10);
+        ListTag times = Nbt.compoundList(tag, "OfflineTimes");
         for (int i = 0; i < times.size(); i++) {
-            CompoundTag pt = times.getCompound(i);
-            state.offlineTimes.put(pt.getUUID("UUID"), pt.getLong("Time"));
+            CompoundTag pt = Nbt.compoundAt(times, i);
+            state.offlineTimes.put(Nbt.uuid(pt, "UUID"), Nbt.longValue(pt, "Time"));
         }
 
         if (tag.contains("GlobalRefs")) {
-            CompoundTag gRefs = tag.getCompound("GlobalRefs");
-            for (String dim : gRefs.getAllKeys()) {
-                CompoundTag dimTag = gRefs.getCompound(dim);
-                long[] posArr = dimTag.getLongArray("Pos");
-                int[] countArr = dimTag.getIntArray("Count");
+            CompoundTag gRefs = Nbt.compound(tag, "GlobalRefs");
+            for (String dim : Nbt.keys(gRefs)) {
+                CompoundTag dimTag = Nbt.compound(gRefs, dim);
+                long[] posArr = Nbt.longArray(dimTag, "Pos");
+                int[] countArr = Nbt.intArray(dimTag, "Count");
                 Map<Long, Integer> map = new HashMap<>();
                 for (int i = 0; i < posArr.length && i < countArr.length; i++) {
                     map.put(posArr[i], countArr[i]);
@@ -70,16 +75,16 @@ public class BeaconStateManager extends SavedData {
         }
 
         if (tag.contains("PlayerRefs")) {
-            ListTag pRefs = tag.getList("PlayerRefs", 10);
+            ListTag pRefs = Nbt.compoundList(tag, "PlayerRefs");
             for (int j = 0; j < pRefs.size(); j++) {
-                CompoundTag pTag = pRefs.getCompound(j);
-                UUID uuid = pTag.getUUID("UUID");
-                CompoundTag dimsTag = pTag.getCompound("Dims");
+                CompoundTag pTag = Nbt.compoundAt(pRefs, j);
+                UUID uuid = Nbt.uuid(pTag, "UUID");
+                CompoundTag dimsTag = Nbt.compound(pTag, "Dims");
                 Map<String, Map<Long, Integer>> pMap = new HashMap<>();
-                for (String dim : dimsTag.getAllKeys()) {
-                    CompoundTag dimTag = dimsTag.getCompound(dim);
-                    long[] posArr = dimTag.getLongArray("Pos");
-                    int[] countArr = dimTag.getIntArray("Count");
+                for (String dim : Nbt.keys(dimsTag)) {
+                    CompoundTag dimTag = Nbt.compound(dimsTag, dim);
+                    long[] posArr = Nbt.longArray(dimTag, "Pos");
+                    int[] countArr = Nbt.intArray(dimTag, "Count");
                     Map<Long, Integer> map = new HashMap<>();
                     for (int i = 0; i < posArr.length && i < countArr.length; i++) {
                         map.put(posArr[i], countArr[i]);
@@ -98,8 +103,10 @@ public class BeaconStateManager extends SavedData {
         return state;
     }
 
+    // 26.1 saves through the codec above, so save is a plain method there.
+    //? if <26.1
     @Override
-    //? if >=1.21 {
+    //? if >=1.21 <26.1 {
     /*public @NotNull CompoundTag save(@NotNull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
     *///?} else {
     public @NotNull CompoundTag save(@NotNull CompoundTag tag) {
@@ -107,7 +114,7 @@ public class BeaconStateManager extends SavedData {
         ListTag times = new ListTag();
         for (Map.Entry<UUID, Long> e : offlineTimes.entrySet()) {
             CompoundTag pt = new CompoundTag();
-            pt.putUUID("UUID", e.getKey());
+            Nbt.putUuid(pt, "UUID", e.getKey());
             pt.putLong("Time", e.getValue());
             times.add(pt);
         }
@@ -122,7 +129,7 @@ public class BeaconStateManager extends SavedData {
         ListTag pRefs = new ListTag();
         for (Map.Entry<UUID, Map<String, Map<Long, Integer>>> pEntry : playerRefs.entrySet()) {
             CompoundTag pTag = new CompoundTag();
-            pTag.putUUID("UUID", pEntry.getKey());
+            Nbt.putUuid(pTag, "UUID", pEntry.getKey());
             CompoundTag dimsTag = new CompoundTag();
             for (Map.Entry<String, Map<Long, Integer>> e : pEntry.getValue().entrySet()) {
                 dimsTag.put(e.getKey(), mapArrays(e.getValue()));

@@ -54,7 +54,7 @@ public class StructureUtils {
         if (entity == null || structureId == null || structureId.isBlank()) {
             return false;
         }
-        if (entity.level().isClientSide) {
+        if (entity.level().isClientSide()) {
             return false;
         }
         if (!(entity.level() instanceof ServerLevel serverLevel)) {

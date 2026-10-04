@@ -43,7 +43,7 @@ public class BeaconMixins {
         @Override public void realmcontrol_beacon$setSpawnPreventEnabled(boolean enabled) {
             this.realmcontrol_beacon$SpawnPreventEnabled = enabled;
             BeaconBlockEntity beacon = (BeaconBlockEntity) (Object) this;
-            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide) {
+            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide()) {
                 int levels = ((LevelAccess) beacon).realmcontrol_beacon$getLevels();
                 if (enabled && levels > 0) {
                     int max = BeaconConfig.getBeaconRadius(levels);
@@ -74,7 +74,7 @@ public class BeaconMixins {
         public boolean realmcontrol_beacon$checkOffline() {
             if (this.realmcontrol_beacon$Owner == null || BeaconConfig.beaconOfflineTimeout < 0) return false;
             BeaconBlockEntity beacon = (BeaconBlockEntity) (Object) this;
-            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide) {
+            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide()) {
                 MinecraftServer server = beacon.getLevel().getServer();
                 if (server == null) return false;
 
@@ -85,7 +85,9 @@ public class BeaconMixins {
         }
 
         @Inject(method = "saveAdditional", at = @At("TAIL"))
-        //? if >=1.21 {
+        //? if >=26.1 {
+        /*private void saveKTSettings(net.minecraft.world.level.storage.ValueOutput tag, CallbackInfo ci) {
+        *///?} else if >=1.21 {
         /*private void saveKTSettings(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
         *///?} else {
         private void saveKTSettings(CompoundTag tag, CallbackInfo ci) {
@@ -98,16 +100,37 @@ public class BeaconMixins {
             tag.putString("BeaconModuleSpawnPreventCodes", this.realmcontrol_beacon$SpawnPreventCodes);
             tag.putInt("BeaconModuleStoredLevels", ((LevelAccess) this).realmcontrol_beacon$getLevels());
             tag.putBoolean("BeaconModuleWasOffline", this.realmcontrol_beacon$WasOffline);
+            //? if >=26.1 {
+            /*tag.storeNullable("BeaconModuleOwner", net.minecraft.core.UUIDUtil.CODEC, this.realmcontrol_beacon$Owner);
+            *///?} else {
             if (this.realmcontrol_beacon$Owner != null) tag.putUUID("BeaconModuleOwner", this.realmcontrol_beacon$Owner);
+            //?}
         }
 
-        //? if >=1.21 {
+        // 26.1 loads block entities through ValueInput; the stored keys are the same.
+        //? if >=26.1 {
+        /*@Inject(method = "loadAdditional", at = @At("TAIL"))
+        private void loadKTSettings(net.minecraft.world.level.storage.ValueInput tag, CallbackInfo ci) {
+            this.realmcontrol_beacon$ChunkLoadEnabled = tag.getBooleanOr("BeaconModuleChunkLoad", this.realmcontrol_beacon$ChunkLoadEnabled);
+            this.realmcontrol_beacon$ChunkLoadRadius = tag.getIntOr("BeaconModuleChunkLoadRadius", this.realmcontrol_beacon$ChunkLoadRadius);
+            this.realmcontrol_beacon$SpawnPreventEnabled = tag.getBooleanOr("BeaconModuleSpawnPrevent", this.realmcontrol_beacon$SpawnPreventEnabled);
+            this.realmcontrol_beacon$SpawnPreventRadius = tag.getIntOr("BeaconModuleSpawnPreventRadius", this.realmcontrol_beacon$SpawnPreventRadius);
+            this.realmcontrol_beacon$SpawnPreventType = tag.getIntOr("BeaconModuleSpawnPreventType", this.realmcontrol_beacon$SpawnPreventType);
+            this.realmcontrol_beacon$SpawnPreventCodes = tag.getStringOr("BeaconModuleSpawnPreventCodes", this.realmcontrol_beacon$SpawnPreventCodes);
+            ((LevelAccess) this).realmcontrol_beacon$setLevels(tag.getIntOr("BeaconModuleStoredLevels", ((LevelAccess) this).realmcontrol_beacon$getLevels()));
+            this.realmcontrol_beacon$WasOffline = tag.getBooleanOr("BeaconModuleWasOffline", this.realmcontrol_beacon$WasOffline);
+            tag.read("BeaconModuleOwner", net.minecraft.core.UUIDUtil.CODEC).ifPresent(owner -> this.realmcontrol_beacon$Owner = owner);
+        }
+        *///?}
+
+        //? if >=1.21 <26.1 {
         /*@Inject(method = "loadAdditional", at = @At("TAIL"))
         private void loadKTSettings(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
-        *///?} else {
+        *///?} else if <1.21 {
         @Inject(method = "load", at = @At("TAIL"))
         private void loadKTSettings(CompoundTag tag, CallbackInfo ci) {
         //?}
+        //? if <26.1 {
             if (tag.contains("BeaconModuleChunkLoad")) this.realmcontrol_beacon$ChunkLoadEnabled = tag.getBoolean("BeaconModuleChunkLoad");
             if (tag.contains("BeaconModuleChunkLoadRadius")) this.realmcontrol_beacon$ChunkLoadRadius = tag.getInt("BeaconModuleChunkLoadRadius");
             if (tag.contains("BeaconModuleSpawnPrevent")) this.realmcontrol_beacon$SpawnPreventEnabled = tag.getBoolean("BeaconModuleSpawnPrevent");
@@ -118,10 +141,11 @@ public class BeaconMixins {
             if (tag.contains("BeaconModuleWasOffline")) this.realmcontrol_beacon$WasOffline = tag.getBoolean("BeaconModuleWasOffline");
             if (tag.contains("BeaconModuleOwner")) this.realmcontrol_beacon$Owner = tag.getUUID("BeaconModuleOwner");
         }
+        //?}
 
         @Inject(method = "tick", at = @At("HEAD"))
         private static void realmcontrol_beacon$checkStateBeforeTick(Level level, BlockPos pos, BlockState state, BeaconBlockEntity beacon, CallbackInfo ci) {
-            if (level.isClientSide) return;
+            if (level.isClientSide()) return;
             IBeaconAccess accessor = (IBeaconAccess) beacon;
             boolean isOffline = accessor.realmcontrol_beacon$checkOffline();
             boolean wasOffline = accessor.realmcontrol_beacon$getWasOffline();
@@ -158,7 +182,7 @@ public class BeaconMixins {
             int oldLevel = ((LevelAccess) beacon).realmcontrol_beacon$getLevels();
             ((LevelAccess) beacon).realmcontrol_beacon$setLevels(newLevel);
 
-            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide && oldLevel != newLevel) {
+            if (beacon.getLevel() != null && !beacon.getLevel().isClientSide() && oldLevel != newLevel) {
                 KineticExternalEvents.post(new LevelChangedEvent(beacon.getLevel(), beacon.getBlockPos(), beacon, oldLevel, newLevel));
                 IBeaconAccess accessor = (IBeaconAccess) beacon;
                 if (accessor.realmcontrol_beacon$isSpawnPreventEnabled() && newLevel > 0) {

@@ -3,6 +3,7 @@ package dev.xyat.realmcontrol.worldblock.event;
 import javax.annotation.Nonnull;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import dev.xyat.realmcontrol.util.Nbt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -13,7 +14,11 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
     private final LongOpenHashSet weightedProcessed = new LongOpenHashSet();
 
     public static LoadedChunkRewriteSavedData get(ServerLevel level) {
-        //? if >=1.21 {
+        //? if >=26.1 {
+        /*return level.getDataStorage().computeIfAbsent(new net.minecraft.world.level.saveddata.SavedDataType<>(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("realmcontrol", DATA_NAME), LoadedChunkRewriteSavedData::new,
+                CompoundTag.CODEC.xmap(LoadedChunkRewriteSavedData::load, data -> data.save(new CompoundTag()))));
+        *///?} else if >=1.21 {
         /*return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(LoadedChunkRewriteSavedData::new,
                 (tag, registries) -> load(tag)), DATA_NAME);
         *///?} else {
@@ -27,8 +32,8 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
 
     public static LoadedChunkRewriteSavedData load(CompoundTag tag) {
         LoadedChunkRewriteSavedData data = new LoadedChunkRewriteSavedData();
-        for (long chunkKey : tag.getLongArray("fixed")) data.fixedProcessed.add(chunkKey);
-        for (long chunkKey : tag.getLongArray("weighted")) data.weightedProcessed.add(chunkKey);
+        for (long chunkKey : Nbt.longArray(tag, "fixed")) data.fixedProcessed.add(chunkKey);
+        for (long chunkKey : Nbt.longArray(tag, "weighted")) data.weightedProcessed.add(chunkKey);
         return data;
     }
 
@@ -48,8 +53,10 @@ public final class LoadedChunkRewriteSavedData extends SavedData {
         if (weightedProcessed.add(chunkKey)) setDirty();
     }
 
+    // 26.1 saves through the codec above, so save is a plain method there.
+    //? if <26.1
     @Override
-    //? if >=1.21 {
+    //? if >=1.21 <26.1 {
     /*public CompoundTag save(@Nonnull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
     *///?} else {
     public CompoundTag save(@Nonnull CompoundTag tag) {

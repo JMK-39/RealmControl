@@ -1,6 +1,7 @@
 package dev.xyat.realmcontrol.beacon.data;
 
 import net.minecraft.core.BlockPos;
+import dev.xyat.realmcontrol.util.Nbt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -27,7 +28,11 @@ public class WorldChunkLoaderManager extends SavedData {
     private record ProtectedRegion(int minX, int maxX, int minZ, int maxZ) {}
 
     public static WorldChunkLoaderManager get(ServerLevel level) {
-        //? if >=1.21 {
+        //? if >=26.1 {
+        /*return level.getDataStorage().computeIfAbsent(new net.minecraft.world.level.saveddata.SavedDataType<>(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("realmcontrol", DATA_NAME), WorldChunkLoaderManager::new,
+                CompoundTag.CODEC.xmap(WorldChunkLoaderManager::load, data -> data.save(new CompoundTag()))));
+        *///?} else if >=1.21 {
         /*return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(WorldChunkLoaderManager::new,
                 (tag, registries) -> load(tag)), DATA_NAME);
         *///?} else {
@@ -104,14 +109,16 @@ public class WorldChunkLoaderManager extends SavedData {
         ListTag list = tag.getList("Beacons", Tag.TAG_COMPOUND);
         for (Tag t : list) {
             CompoundTag c = (CompoundTag) t;
-            manager.beaconRadii.put(c.getLong("Pos"), c.getInt("Radius"));
+            manager.beaconRadii.put(Nbt.longValue(c, "Pos"), Nbt.intValue(c, "Radius"));
         }
         manager.rebuildCache();
         return manager;
     }
 
+    // 26.1 saves through the codec above, so save is a plain method there.
+    //? if <26.1
     @Override
-    //? if >=1.21 {
+    //? if >=1.21 <26.1 {
     /*public @NotNull CompoundTag save(@NotNull CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
     *///?} else {
     public @NotNull CompoundTag save(@NotNull CompoundTag tag) {

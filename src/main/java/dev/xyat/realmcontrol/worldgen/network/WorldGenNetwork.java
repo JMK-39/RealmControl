@@ -211,7 +211,7 @@ public class WorldGenNetwork {
             return;
         }
         WorldGenConfig.load();
-        MinecraftServer server = player.server;
+        MinecraftServer server = player.getServer();
         CHANNEL.sendToPlayer(player, new OpenWorldGenGuiPacket(
                         WorldGenConfig.enableStructureBlocking,
                         getAllStructureIds(server),
@@ -275,13 +275,13 @@ public class WorldGenNetwork {
             return;
         }
 
-        Optional<Holder.Reference<Structure>> structureHolder = getStructureHolder(player.server, structureId);
+        Optional<Holder.Reference<Structure>> structureHolder = getStructureHolder(player.getServer(), structureId);
         if (structureHolder.isEmpty()) {
             sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
             return;
         }
 
-        List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.server, structureId);
+        List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.getServer(), structureId);
         if (dimensionIds.isEmpty()) {
             sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
             return;
@@ -326,12 +326,12 @@ public class WorldGenNetwork {
             return;
         }
 
-        if (getStructureHolder(player.server, structureId).isEmpty()) {
+        if (getStructureHolder(player.getServer(), structureId).isEmpty()) {
             sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.invalid_structure", structureId));
             return;
         }
 
-        List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.server, structureId);
+        List<String> dimensionIds = StructureGenerationControl.getStructureDimensions(player.getServer(), structureId);
         if (dimensionIds.isEmpty()) {
             sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_unknown", structureId));
             return;
@@ -353,7 +353,7 @@ public class WorldGenNetwork {
             return;
         }
 
-        ServerLevel targetLevel = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, targetLocation));
+        ServerLevel targetLevel = player.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, targetLocation));
         if (targetLevel == null) {
             sendStructureActionResult(player, KineticI18n.translatable("msg.realmcontrol.worldgen.structure_action.dimension_missing", dimensionDisplay(targetDimensionId)));
             return;
@@ -495,8 +495,8 @@ public class WorldGenNetwork {
                 return;
             }
             CHANNEL.sendToPlayer(player, new StructureRegistryPacket(
-                    getAllStructureIds(player.server),
-                    StructureGenerationControl.getDescriptors(player.server)
+                    getAllStructureIds(player.getServer()),
+                    StructureGenerationControl.getDescriptors(player.getServer())
             ));
         }
     }
@@ -587,15 +587,15 @@ public class WorldGenNetwork {
                 return;
             }
 
-            Set<String> allowedStructures = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE).keySet().stream()
+            Set<String> allowedStructures = player.getServer().registryAccess().registryOrThrow(Registries.STRUCTURE).keySet().stream()
                     .map(ResourceLocation::toString)
                     .collect(Collectors.toSet());
-            Set<String> allowedStructureSets = player.server.registryAccess().registryOrThrow(Registries.STRUCTURE_SET).keySet().stream()
+            Set<String> allowedStructureSets = player.getServer().registryAccess().registryOrThrow(Registries.STRUCTURE_SET).keySet().stream()
                     .map(ResourceLocation::toString)
                     .collect(Collectors.toSet());
 
             if (hasInvalidEntryRules(entryRules, allowedStructures)
-                    || !validatePlacementRules(placementRules, allowedStructureSets, StructureGenerationControl.getDescriptors(player.server))) {
+                    || !validatePlacementRules(placementRules, allowedStructureSets, StructureGenerationControl.getDescriptors(player.getServer()))) {
                 sendSaveResult(player, false);
                 return;
             }
@@ -681,7 +681,7 @@ public class WorldGenNetwork {
                 sendSaveResult(player, false);
                 return;
             }
-            if (!validateBiomeRules(player.server, rules)) {
+            if (!validateBiomeRules(player.getServer(), rules)) {
                 sendSaveResult(player, false);
                 return;
             }
@@ -699,10 +699,10 @@ public class WorldGenNetwork {
 
     private static void sendBiomeControlEditor(ServerPlayer player) {
         WorldGenConfig.load();
-        Registry<Biome> biomeRegistry = player.server.registryAccess().registryOrThrow(Registries.BIOME);
+        Registry<Biome> biomeRegistry = player.getServer().registryAccess().registryOrThrow(Registries.BIOME);
         List<String> biomes = biomeRegistry.keySet().stream().map(ResourceLocation::toString).sorted().toList();
         List<String> tags = biomeRegistry.getTagNames().map(tag -> "#" + tag.location()).sorted().toList();
-        List<String> dimensions = getSupportedBiomeControlDimensions(player.server);
+        List<String> dimensions = getSupportedBiomeControlDimensions(player.getServer());
         CHANNEL.sendToPlayer(player, new OpenBiomeControlPacket(
                 WorldGenConfig.enableBiomeControl,
                 new ArrayList<>(WorldGenConfig.biomeReplacementRules),
