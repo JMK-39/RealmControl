@@ -1,3 +1,13 @@
+2026年10月05日 23时46分 — 26.10.5
+
+- Saving the world-block item rules (ore merging, banned ores, weighted block merging) answers only the admin who saved; the rules are no longer sent to every online player. Other players receive them when they log in. The /reload command still refreshes everyone.
+- Built against KineticCore 26.10.5, whose lists, buttons and text fields keep text clear of frames and scroll long text instead of cutting it off.
+
+- 保存世界方块物品规则（矿物合并、禁用矿物、加权方块合并）只回复保存的管理员，不再发送给所有在线玩家；其他玩家在登录时获得规则。/reload 命令仍会刷新所有玩家。
+- 基于 KineticCore 26.10.5 构建：其列表、按钮与输入框的文字不压边框，过长文字滚动显示而不截断。
+
+---
+
 2026年10月04日 13时42分 — 26.10.4
 
 - Added NeoForge 26.1.2 support (Java 25, KineticCore 26.10.3+). Beacon chunk loading and spawn prevention, teleport authorization, world-block item rules and world generation controls work on 26.1.2; existing saves keep their data.

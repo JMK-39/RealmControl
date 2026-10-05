@@ -195,11 +195,8 @@ public final class WorldBlockNetwork {
             ServerPlayer player = context.sender();
             boolean success = player.hasPermissions(2)
                     && WorldBlockConfig.applyJson(jsonData, "server packet from " + player.getGameProfile().getName(), true);
-            if (success) {
-                syncServerConfigToAllPlayers();
-            } else {
-                sendServerConfigToPlayer(player, false);
-            }
+            // Only the editor needs the saved config; other players get it when they log in.
+            sendServerConfigToPlayer(player, false);
             CHANNEL.sendToPlayer(player, new SaveWorldBlockConfigResultPacket(success));
         }
     }
