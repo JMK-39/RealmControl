@@ -208,7 +208,8 @@ rows.add(new FieldRow(labelKey, box, original, y));
         Component setValue = descriptor.structureSetId().isBlank()
                 ? KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned")
                 : Component.literal(descriptor.structureSetId());
-        g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, Math.max(1, width() - 52), 0xFFFFFFFF, false);
+        // Shares its row with the enable button at x 360.
+        g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, 360 - 4 - 26, 0xFFFFFFFF, false);
 
         if (descriptor.supportsPlacementEditing()) {
             g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFFCC55, false);

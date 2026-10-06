@@ -31,6 +31,10 @@ neoForge {
             if (project.findProperty('kinetic_quick_play')) {
                 programArguments.addAll('--quickPlaySingleplayer', project.property('kinetic_quick_play').toString())
             }
+            // -Pkinetic_client_jvm_args="-Dkey=value ..." passes system properties, e.g. to switch on a validation fixture.
+            if (project.findProperty('kinetic_client_jvm_args')) {
+                jvmArguments.addAll(project.property('kinetic_client_jvm_args').toString().trim().split(/\s+/).toList())
+            }
         }
 
         server {

@@ -1,3 +1,17 @@
+2026年10月06日 08时21分 — 26.10.6
+
+- In the weighted block merge editor, the yellow hint line ran under the Loaded Chunks button; it now ends before the button.
+- In the ore merge and weighted block merge editors, a long Replacement Chance label pushed the Loaded Chunks button out of its panel or over other controls; the label now scrolls within its own space.
+- In the structure rule editor, a long Structure Set line no longer runs under the Structure Enabled button.
+- Built against KineticCore 26.10.6 (26.10.5 was announced but the build still used 26.10.3), so long button and label text shows an ellipsis and scrolls on hover instead of being cut off.
+
+- 加权方块合并编辑器中，黄色提示行会压到"已加载区块"按钮下面；现在在按钮之前结束。
+- 矿物合并与加权方块合并编辑器中，过长的"替换概率"标签会把"已加载区块"按钮挤出面板或压到其他控件上；现在标签在自己的空间内滚动。
+- 结构规则编辑器中，过长的"结构集合"一行不再压到"结构启用"按钮下面。
+- 基于 KineticCore 26.10.6 构建（26.10.5 的说明有误，实际仍使用 26.10.3），过长的按钮与标签文字显示省略号、悬停时滚动，而不再被截断。
+
+---
+
 2026年10月05日 23时46分 — 26.10.5
 
 - Saving the world-block item rules (ore merging, banned ores, weighted block merging) answers only the admin who saved; the rules are no longer sent to every online player. Other players receive them when they log in. The /reload command still refreshes everyone.

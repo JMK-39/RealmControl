@@ -39,6 +39,8 @@ import java.util.TreeSet;
 public class OreMergePage extends KineticPage {
     private static final int SLOT_SIZE = 18;
     private static final int SLOT_PITCH = 19;
+    // A long chance label scrolls within this width instead of pushing the loaded-chunks toggle out of the panel.
+    private static final int CHANCE_LABEL_MAX_WIDTH = 110;
     private static final int RIGHT_SCROLLBAR_INSET = 7;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
@@ -525,8 +527,7 @@ return box;
     private KineticButton createLoadedChunksToggleButton() {
         int width = 80;
         int chanceBoxX = rightX + rightW - 48;
-        int chanceLabelWidth = KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance"));
-        int x = chanceBoxX - chanceLabelWidth - width - 10;
+        int x = chanceBoxX - chanceLabelWidth() - width - 10;
         int y = rightY + 2;
         KineticButton button = ui().button(x, y, width).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
@@ -994,7 +995,7 @@ return button;
             );
         }
         int infoRight = replacementChanceBox != null && isControlVisible(replacementChanceBox)
-                ? replacementChanceBox.controlX() - KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")) - 6
+                ? replacementChanceBox.controlX() - chanceLabelWidth() - 6
                 : rightX + rightW - 4;
         if (loadedChunksToggleBtn != null && isControlVisible(loadedChunksToggleBtn)) {
             infoRight = Math.min(infoRight, loadedChunksToggleBtn.controlX() - 6);
@@ -1002,8 +1003,12 @@ return button;
         g.scrollingText(info, rightX + 6, rightY + 8, Math.max(1, infoRight - (rightX + 6)), 0xFFFFFFFF, false);
         if (replacementChanceBox != null && isControlVisible(replacementChanceBox)) {
             Component chanceLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            g.scrollingTextRight(chanceLabel, replacementChanceBox.controlX() - 3, rightY + 8, Math.max(1, replacementChanceBox.controlX() - rightX - 9), 0xFFFFFFFF, false);
+            g.scrollingTextRight(chanceLabel, replacementChanceBox.controlX() - 3, rightY + 8, chanceLabelWidth(), 0xFFFFFFFF, false);
         }
+    }
+
+    private static int chanceLabelWidth() {
+        return Math.min(CHANCE_LABEL_MAX_WIDTH, KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")));
     }
 
     private void renderRightPanel(KineticGraphics g, int smx, int smy) {

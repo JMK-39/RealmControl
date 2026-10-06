@@ -85,6 +85,9 @@ stonecutter.parameters {
         call 'new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, ', 'new ClickEvent.SuggestCommand('
         call 'new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ', 'new ClickEvent.CopyToClipboard('
         call 'new HoverEvent(HoverEvent.Action.SHOW_TEXT, ', 'new HoverEvent.ShowText('
+        // GUI capture fixture: the window resizes the GUI, and screenshots arrive through a callback.
+        call 'mc.resizeDisplay()', 'mc.resizeGui()'
+        call 'try(var image=Screenshot.takeScreenshot(mc.getMainRenderTarget())){image.writeToFile(path);}', 'Screenshot.takeScreenshot(mc.getMainRenderTarget(),image->{try(image){image.writeToFile(path);}catch(java.io.IOException error){throw new java.io.UncheckedIOException(error);}});'
         // Widget methods.
         rename 'renderWidget', 'extractWidgetRenderState'
         rename 'getScrollbarPosition', 'scrollBarX'

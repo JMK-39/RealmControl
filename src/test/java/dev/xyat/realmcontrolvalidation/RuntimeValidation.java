@@ -15,6 +15,10 @@ import net.minecraftforge.fml.common.Mod;
 @Mod("realmcontrol_validation")
 public final class RuntimeValidation {
     public RuntimeValidation() {
+        if (Boolean.getBoolean("realmcontrol.guiValidation")) {
+            dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> GuiCaptureValidation::install);
+            return;
+        }
         // Item components are bound once registries freeze (after mod construction on 26.1), so validate on server start.
         MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent event) -> validate());
     }
