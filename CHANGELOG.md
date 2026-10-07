@@ -1,3 +1,11 @@
+2026年10月08日 — Structure page hint / 结构页面提示
+
+- Hint text on the structure page no longer runs onto the panel frame.
+
+- 结构页面的提示文字不再压到面板边框。
+
+---
+
 2026年10月07日 00时45分 — Same layout in every language / 各语言排版一致
 
 - The Replacement Chance label in the ore merge and weighted block merge editors and the weight label in the weighted block merge editor have fixed widths, so the fields after them sit in the same place in every language; longer labels scroll.
