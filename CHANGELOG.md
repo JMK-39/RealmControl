@@ -56,13 +56,13 @@
 
 2026年10月03日 16时51分 — 26.10.3
 
-- Added NeoForge 1.21.1 support alongside Forge 1.20.1, using Java 21 and matching KineticCore 26.10.3+.
+- Added NeoForge 1.21.1 support alongside Forge 1.20.1, using matching KineticCore 26.10.3+.
 - Adapted saved world/beacon data and 1.21.1 item-component rules while retaining legacy item-NBT rule compatibility.
 - Fixed untranslated Jade beacon information and the 1.21.1 teleport-command callback.
 - Both builds and targeted runtime checks passed; world generation, ordinary-player teleport permissions, and dedicated servers have not been fully tested.
 - The 26.1.2 node is reserved and disabled; it is not a supported release.
 
-- 新增 NeoForge 1.21.1 支持，同时保留 Forge 1.20.1；使用 Java 21 和对应版本的 KineticCore 26.10.3+。
+- 新增 NeoForge 1.21.1 支持，同时保留 Forge 1.20.1；使用对应版本的 KineticCore 26.10.3+。
 - 适配世界与信标存储，以及 1.21.1 物品组件规则；保留旧物品 NBT 规则兼容。
 - 修复 Jade 信标信息显示原始翻译键，以及 1.21.1 传送命令回调。
 - 两个版本构建及针对性运行检查通过；世界生成、普通玩家传送权限和专用服务端尚未完整测试。
