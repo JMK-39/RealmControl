@@ -212,11 +212,11 @@ rows.add(new FieldRow(labelKey, box, original, y));
         g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.structure_set", setValue), 26, 52, 360 - 4 - 26, 0xFFFFFFFF, false);
 
         if (descriptor.supportsPlacementEditing()) {
-            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFFCC55, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.shared_notice"), 26, 65, Math.max(1, width() - 52), 0xFFFFCC55, false);
         } else if ("other".equals(descriptor.placementType())) {
-            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFFCC55, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.custom_placement_notice"), 26, 65, Math.max(1, width() - 52), 0xFFFFCC55, false);
         } else {
-            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 68, Math.max(1, width() - 52), 0xFFFF5555, false);
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.unassigned_notice"), 26, 65, Math.max(1, width() - 52), 0xFFFF5555, false);
         }
 
         for (FieldRow row : rows) {
