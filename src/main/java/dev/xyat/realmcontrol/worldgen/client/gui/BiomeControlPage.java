@@ -180,7 +180,8 @@ public final class BiomeControlPage extends KineticPage {
         KineticTheme.separator(graphics, 16, 71, width() - 32);
         int listY = 76;
         int listH = height() - listY - 16;
-        KineticTheme.panelAlt(graphics, 18, listY - 2, width() - 36, listH + 4);
+        // 3 px outside the list on the sides and bottom, so the list keeps 2 px from the frame lines.
+        KineticTheme.panelAlt(graphics, 17, listY - 2, width() - 34, listH + 5);
     }
 
     @Override

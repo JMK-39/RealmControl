@@ -5,7 +5,6 @@ import dev.xyat.kineticcore.api.client.gui.KineticGui;
 import dev.xyat.kineticcore.api.client.gui.input.ScrollInput;
 import dev.xyat.kineticcore.api.client.gui.input.MouseDragInput;
 import dev.xyat.kineticcore.api.client.gui.input.MouseInput;
-import dev.xyat.kineticcore.api.client.gui.text.KineticText;
 import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
 import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
@@ -528,7 +527,8 @@ return box;
         int width = 80;
         int chanceBoxX = rightX + rightW - 48;
         int x = chanceBoxX - chanceLabelWidth() - width - 10;
-        int y = rightY + 2;
+        // 3 px under the panel's top line, 2 px clear of it.
+        int y = rightY + 3;
         KineticButton button = ui().button(x, y, width).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
                     loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
@@ -545,7 +545,7 @@ return button;
     }
 
     private KineticTextField createReplacementChanceBox() {
-        KineticTextField box = ui().textField(rightX + rightW - 48, rightY + 2, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
+        KineticTextField box = ui().textField(rightX + rightW - 48, rightY + 3, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
         box.limitTextLength(3);
         box.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         box.onTextChange(this::updateReplacementChance);
@@ -1008,7 +1008,8 @@ return button;
     }
 
     private static int chanceLabelWidth() {
-        return Math.min(CHANCE_LABEL_MAX_WIDTH, KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")));
+        // The same room in every language; the label scrolls when longer, so the field after it never moves.
+        return Math.min(CHANCE_LABEL_MAX_WIDTH, 60);
     }
 
     private void renderRightPanel(KineticGraphics g, int smx, int smy) {

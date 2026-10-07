@@ -1,5 +1,4 @@
-//? if >=1.21 {
-/*package dev.xyat.realmcontrolvalidation;
+package dev.xyat.realmcontrolvalidation;
 
 import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
 import dev.xyat.kineticcore.api.client.gui.KineticGui;
@@ -12,7 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/^** Opens every RealmControl screen and captures it, in English and Chinese at two window sizes plus a long-text pass. Never clicks or saves. *^/
+/*** Opens every RealmControl screen and captures it, in English and Chinese at two window sizes plus a long-text pass. Never clicks or saves. */
 public final class GuiCaptureValidation {
     private static final Logger LOG=LoggerFactory.getLogger(GuiCaptureValidation.class);
     private static final String ROOT=System.getProperty("realmcontrol.guiValidation.output","D:/IDEAWork/RealmControl/.gradle/gui-capture/");
@@ -177,4 +176,3 @@ public final class GuiCaptureValidation {
         @Override public net.minecraft.util.FormattedCharSequence getVisualOrder(net.minecraft.network.chat.FormattedText text){return delegate.getVisualOrder(text);}
     }
 }
-*///?}

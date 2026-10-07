@@ -200,8 +200,8 @@ newButton = ui().button(newX, 5, buttonWidth).text(KineticI18n.translatable("gui
 doneButton = ui().button(doneX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done")).onClick(() -> finishTargets()).build();
 saveButton = ui().button(saveX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save")).onClick(() -> save()).build();
 backButton = ui().button(closeX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
-Component weightLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight");
-        int weightBoxX = rightX + KineticText.width(weightLabel) + 6;
+        // The weight label has a fixed 40 px area in every language, so the box after it never moves.
+        int weightBoxX = rightX + 40 + 6;
         weightBox = ui().textField(weightBoxX, 31, 72).build();
         weightBox.limitTextLength(7);
         weightBox.setValidator(value -> value.isEmpty() || value.matches("\\d{1,7}"));
@@ -644,7 +644,8 @@ refreshLeft();
     }
 
     private static int chanceLabelWidth() {
-        return Math.min(CHANCE_LABEL_MAX_WIDTH, KineticText.width(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")));
+        // The same room in every language; the label scrolls when longer, so the field after it never moves.
+        return Math.min(CHANCE_LABEL_MAX_WIDTH, 60);
     }
 
     private void renderLeft(KineticGraphics g, int mx, int my) {

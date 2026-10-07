@@ -496,7 +496,8 @@ public class WorldGenPage extends KineticPage {
         KineticTheme.panel(g, 10, 8, this.width() - 20, this.height() - 16);
         KineticTheme.separator(g, 16, 40, this.width() - 32);
         KineticTheme.separator(g, 16, 71, this.width() - 32);
-        KineticTheme.panelAlt(g, startX - 2, listY - 2, panelW + 4, listH + 4);
+        // 3 px outside the list on the sides and bottom, so the list keeps 2 px from the frame lines.
+        KineticTheme.panelAlt(g, startX - 3, listY - 2, panelW + 6, listH + 5);
     }
 
     @Override

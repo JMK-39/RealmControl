@@ -1,3 +1,13 @@
+2026年10月07日 00时45分 — Same layout in every language / 各语言排版一致
+
+- The Replacement Chance label in the ore merge and weighted block merge editors and the weight label in the weighted block merge editor have fixed widths, so the fields after them sit in the same place in every language; longer labels scroll.
+- The Loaded Chunks button and the chance field keep 2 px below the panel's top line, and the structure and biome lists keep 2 px from their frames.
+
+- 矿物合并与加权方块合并编辑器的"替换概率"标签以及加权方块合并编辑器的"权重"标签使用固定宽度，其后的输入框在所有语言下位置相同；过长标签滚动显示。
+- "已加载区块"按钮与概率输入框与面板顶边线保持 2 像素，结构列表与生物群系列表与其边框保持 2 像素。
+
+---
+
 2026年10月06日 08时21分 — 26.10.6
 
 - In the weighted block merge editor, the yellow hint line ran under the Loaded Chunks button; it now ends before the button.
