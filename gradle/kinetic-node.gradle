@@ -259,6 +259,51 @@ tasks.register('checkSavedDataRegression', JavaExec) {
 }
 tasks.named('check').configure { dependsOn 'checkSavedDataRegression' }
 
+// MDG can retain Forge's original signatures after remapping its classes. Standalone
+// regression JVMs use unsigned copies, as in KineticCore; the game and release JARs
+// continue to use the original dependencies.
+if (pLoader == 'forge') {
+    def regressionJars = layout.buildDirectory.dir('tmp/unsignedRegressionClasspath')
+    def signatureFile = ~/META-INF\/[^\/]+\.(SF|RSA|DSA|EC)/
+    def unsignedClasspath = tasks.register('unsignRealmRegressionClasspath') {
+        inputs.files(sourceSets.test.runtimeClasspath)
+        outputs.dir(regressionJars)
+        doLast {
+            File directory = regressionJars.get().asFile
+            if (!directory.canonicalPath.startsWith(layout.buildDirectory.get().asFile.canonicalPath + File.separator)) {
+                throw new GradleException('Unsigned regression copies must stay inside this node build directory')
+            }
+            project.delete(directory)
+            directory.mkdirs()
+            sourceSets.test.runtimeClasspath.files.findAll { it.isFile() && it.name.endsWith('.jar') }.each { File jar ->
+                new java.util.zip.ZipFile(jar).withCloseable { zip ->
+                    if (!zip.entries().toList().any { it.name ==~ signatureFile }) return
+                    new java.util.zip.ZipOutputStream(new FileOutputStream(new File(directory, jar.name))).withCloseable { out ->
+                        zip.entries().each { entry ->
+                            if (entry.name ==~ signatureFile) return
+                            out.putNextEntry(new java.util.zip.ZipEntry(entry.name))
+                            zip.getInputStream(entry).withCloseable { out << it }
+                            out.closeEntry()
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ['test', 'checkSavedDataRegression'].each { String taskName ->
+        tasks.named(taskName).configure {
+            dependsOn unsignedClasspath
+            doFirst {
+                File directory = regressionJars.get().asFile
+                classpath = files(classpath.files.collect { File file ->
+                    File unsigned = new File(directory, file.name)
+                    unsigned.isFile() ? unsigned : file
+                })
+            }
+        }
+    }
+}
+
 // Explicit test fixture; never included in release artifacts.
 if (pLoader == 'neoforge') {
     def metadata = layout.buildDirectory.dir('runtime-validation')
