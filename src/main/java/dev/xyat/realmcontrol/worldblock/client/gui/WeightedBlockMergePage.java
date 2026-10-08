@@ -38,11 +38,13 @@ public final class WeightedBlockMergePage extends KineticPage {
         SELECT_TARGETS
     }
 
-    private static final int SLOT_SIZE = 18;
-    private static final int SLOT_PITCH = 19;
+    private static final int SLOT_SIZE = 22;
+    private static final int SLOT_PITCH = SLOT_SIZE + 2;
+    private static final int SOURCE_ROW_HEIGHT = SLOT_SIZE + 6;
+    private static final int SOURCE_ROW_PITCH = SOURCE_ROW_HEIGHT + 2;
     // A long chance label scrolls within this width instead of pushing the loaded-chunks toggle over other controls.
     private static final int CHANCE_LABEL_MAX_WIDTH = 110;
-    private static final int PANEL_INSET = 2;
+    private static final int PANEL_INSET = 3;
     private static final int SCROLLBAR_WIDTH = 4;
     private static final int SCROLLBAR_MIN_THUMB = 20;
     private static final int SELECTED_OUTLINE_COLOR = 0xFF55FF55;
@@ -339,7 +341,7 @@ refreshLeft();
             }
         }
         visibleSources.sort(Comparator.naturalOrder());
-        totalLeftHeight = visibleSources.size() * 25;
+        totalLeftHeight = visibleSources.size() * SOURCE_ROW_PITCH;
         leftScroll.update(totalLeftHeight, leftContentH);
     }
 
@@ -657,38 +659,38 @@ refreshLeft();
         int y = leftContentY - (int) Math.round(leftScroll.smoothOffset());
         for (String source : visibleSources) {
             int rowY = y;
-            if (rowY + 24 >= leftContentY && rowY < leftContentY + leftContentH) {
+            if (rowY + SOURCE_ROW_HEIGHT >= leftContentY && rowY < leftContentY + leftContentH) {
                 boolean hovered = mx >= leftContentX
                         && mx < leftContentX + leftContentW
                         && my >= rowY
-                        && my < rowY + 24;
+                        && my < rowY + SOURCE_ROW_HEIGHT;
                 boolean selected = source.equals(selectedSource);
                 KineticTheme.stateSurface(
                         g,
                         leftContentX,
                         rowY,
                         leftContentW,
-                        24,
+                        SOURCE_ROW_HEIGHT,
                         KineticTheme.Surface.PANEL_ALT,
                         selected,
                         hovered,
                         false
                 );
                 var stack = WorldBlockConfig.parseItemStack(source);
-                KineticTheme.itemSlot(g, leftContentX + 2, rowY + 2, 20, 20, 4, selected, hovered, false);
+                KineticTheme.itemSlot(g, leftContentX + 3, rowY + 3, SLOT_SIZE, SLOT_SIZE, 4, selected, hovered, false);
                 ItemBanControl.withSkip(() -> {
-                    KineticTheme.item(g, stack, leftContentX + 2, rowY + 2, 20, 1.0F, false);
+                    KineticTheme.item(g, stack, leftContentX + 3, rowY + 3, SLOT_SIZE, 1.0F, false);
                     return null;
                 });
                 String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
-                int countWidth = 18;
-                int nameWidth = Math.max(8, leftContentW - 30 - countWidth);
-                g.scrollingText(Component.literal(name), leftContentX + 26, rowY + 8, nameWidth, 0xFFFFFFFF, false);
+                int countWidth = 24;
+                int nameWidth = Math.max(1, leftContentW - 29 - countWidth - 5);
+                g.scrollingText(Component.literal(name), leftContentX + 29, rowY + 10, nameWidth, 0xFFFFFFFF, false);
                 int count = rules.getOrDefault(source, List.of()).size();
                 Component countText = Component.literal(String.valueOf(count));
-                g.scrollingTextRight(countText, leftContentX + leftContentW - 2, rowY + 8, 24, 0xFFFFFFFF, false);
+                g.scrollingTextRight(countText, leftContentX + leftContentW - 3, rowY + 10, countWidth, 0xFFFFFFFF, false);
             }
-            y += 25;
+            y += SOURCE_ROW_PITCH;
         }
         g.endScissor();
         leftScroll.render(
@@ -747,9 +749,9 @@ refreshLeft();
     }
 
     private void renderProbabilityBadge(KineticGraphics g, int x, int y, Component badge) {
-        int scaledWidth = Math.max(1, (int) Math.ceil(KineticText.width(badge) * 0.5F));
-        int drawX = x + SLOT_SIZE - scaledWidth - 1;
-        int drawY = y + SLOT_SIZE - 5;
+        int scaledWidth = Math.max(1, Math.min(SLOT_SIZE - 6, (int) Math.ceil(KineticText.width(badge) * 0.5F)));
+        int drawX = x + SLOT_SIZE - scaledWidth - 3;
+        int drawY = y + SLOT_SIZE - 7;
         // 原 runWithoutDepthTest + translate(z=300)：隔离绘制并抬高一层盖过物品
         // Former runWithoutDepthTest + translate(z=300): isolated drawing raised one layer above items.
         g.isolated(() -> {
@@ -760,8 +762,8 @@ refreshLeft();
                     g,
                     badgeX,
                     drawY - 1,
-                    x + SLOT_SIZE - badgeX,
-                    y + SLOT_SIZE - drawY + 1,
+                    scaledWidth + 2,
+                    6,
                     KineticTheme.Surface.PANEL_ALT
             );
             g.translate(drawX, drawY);
@@ -925,7 +927,9 @@ refreshLeft();
                 || my >= leftContentY + leftContentH) {
             return -1;
         }
-        int row = (int) Math.floor((my - leftContentY + (int) Math.round(leftScroll.smoothOffset())) / 25.0D);
+        int localY = (int) Math.floor(my - leftContentY + (int) Math.round(leftScroll.smoothOffset()));
+        if (localY % SOURCE_ROW_PITCH >= SOURCE_ROW_HEIGHT) return -1;
+        int row = localY / SOURCE_ROW_PITCH;
         return row >= 0 && row < visibleSources.size() ? row : -1;
     }
 
@@ -967,7 +971,7 @@ refreshLeft();
                 && mx <= leftX + leftW - PANEL_INSET
                 && my >= leftContentY
                 && my <= leftContentY + leftContentH
-                && leftScroll.scroll(delta, 25D)) return true;
+                && leftScroll.scroll(delta, SOURCE_ROW_PITCH)) return true;
         if (mx >= rightContentX
                 && mx <= rightX + rightW - PANEL_INSET
                 && my >= rightContentY

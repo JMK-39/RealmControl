@@ -1,3 +1,13 @@
+2026年10月08日 — Block preview spacing / 方块预览间距
+
+- Block generation and replacement editors show complete item icons on checker backgrounds, with space between cells and inside rule rows.
+- Grid gaps no longer select neighbouring blocks. The existing panels, controls and replacement workflow stay in place across all supported versions.
+
+- 方块生成与替换编辑器在棋盘格背景上完整显示物品图标，格子之间及规则行内部留有间距。
+- 点击格子间隙不再选中相邻方块。各支持版本保留现有面板、控件位置与替换操作流程。
+
+---
+
 2026年10月08日 — Structure page hint / 结构页面提示
 
 - Hint text on the structure page no longer runs onto the panel frame.

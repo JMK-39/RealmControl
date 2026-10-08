@@ -267,7 +267,7 @@ if (pLoader == 'neoforge') {
         doLast {
             File target = new File(metadata.get().asFile, 'META-INF/neoforge.mods.toml')
             target.parentFile.mkdirs()
-            target.setText('modLoader="javafml"\nloaderVersion="[1,)"\nlicense="LGPLv3"\n[[mods]]\nmodId="realmcontrol_gui_capture"\nversion="1.0.0"\ndisplayName="RealmControl runtime validation"\n', 'UTF-8')
+            target.setText('modLoader="javafml"\nloaderVersion="[1,)"\nlicense="LGPLv3"\n[[mods]]\nmodId="realmcontrol_validation"\nversion="1.0.0"\ndisplayName="RealmControl runtime validation"\n', 'UTF-8')
         }
     }
     tasks.register('runtimeValidationJar', Jar) {

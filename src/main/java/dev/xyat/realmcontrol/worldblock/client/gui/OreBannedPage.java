@@ -32,7 +32,9 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public class OreBannedPage extends KineticPage {
-    private static final int SLOT_SIZE = 18;
+    private static final int SLOT_SIZE = 22;
+    private static final int SLOT_PITCH = SLOT_SIZE + 2;
+    private static final int TEXT_ROW_HEIGHT = 18;
 
     private static int viewMode = 0;
     private static int rememberedScrollOffset = 0;
@@ -107,11 +109,11 @@ public class OreBannedPage extends KineticPage {
         gridCols =
                 Math.max(
                         1,
-                        availableWidth / SLOT_SIZE
+                        (availableWidth + 2) / SLOT_PITCH
                 );
 
         contentW =
-                gridCols * SLOT_SIZE;
+                gridCols * SLOT_PITCH - 2;
 
         gridX =
                 Math.max(
@@ -132,8 +134,8 @@ public class OreBannedPage extends KineticPage {
                                         height()
                                                 - gridY
                                                 - 8
-                                ) / SLOT_SIZE
-                        ) * SLOT_SIZE
+                                ) / SLOT_PITCH
+                        ) * SLOT_PITCH
                 );
 
         int rightEdge =
@@ -302,7 +304,7 @@ infoY =
                 isAutoCompleteMode = true;
                 setControlVisible(ruleBtn, false);
                 autoCompleteList = ItemSearchCache.searchStrings("banore_mod", oreMods, query);
-                totalH = autoCompleteList.size() * SLOT_SIZE;
+                totalH = autoCompleteList.size() * TEXT_ROW_HEIGHT;
             }
         } else if (query.startsWith("#")) {
             if (oreTags.contains(query) && !query.equals("#")) {
@@ -314,7 +316,7 @@ infoY =
                 isAutoCompleteMode = true;
                 setControlVisible(ruleBtn, false);
                 autoCompleteList = ItemSearchCache.searchStrings("banore_tag", oreTags, query);
-                totalH = autoCompleteList.size() * SLOT_SIZE;
+                totalH = autoCompleteList.size() * TEXT_ROW_HEIGHT;
             }
         } else {
             isAutoCompleteMode = false;
@@ -324,7 +326,7 @@ infoY =
 
         if (!isAutoCompleteMode) {
             int totalRows = (int) Math.ceil((double) displayList.size() / gridCols);
-            totalH = totalRows * SLOT_SIZE;
+            totalH = totalRows * SLOT_PITCH;
         }
 
         gridScroll.update(totalH, contentH);
@@ -436,15 +438,15 @@ infoY =
             );
             for (int i = 0; i < autoCompleteList.size(); i++) {
                 String entry = autoCompleteList.get(i);
-                int y = gridY + i * SLOT_SIZE - (int) Math.round(gridScroll.smoothOffset());
-                if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
-                    boolean hovered = smx >= gridX && smx < gridX + contentW && smy >= y && smy < y + SLOT_SIZE;
+                int y = gridY + i * TEXT_ROW_HEIGHT - (int) Math.round(gridScroll.smoothOffset());
+                if (y + TEXT_ROW_HEIGHT > gridY && y < gridY + contentH) {
+                    boolean hovered = smx >= gridX && smx < gridX + contentW && smy >= y && smy < y + TEXT_ROW_HEIGHT;
                     KineticTheme.stateSurface(
                             g,
                             gridX,
                             y,
                             contentW,
-                            SLOT_SIZE,
+                            TEXT_ROW_HEIGHT,
                             i % 2 == 0 ? KineticTheme.Surface.PANEL : KineticTheme.Surface.PANEL_ALT,
                             false,
                             hovered,
@@ -465,8 +467,8 @@ infoY =
                 KineticItemSearch.CachedItem item = displayList.get(i);
                 int col = i % gridCols;
                 int row = i / gridCols;
-                int x = gridX + col * SLOT_SIZE;
-                int y = gridY + row * SLOT_SIZE - (int) Math.round(gridScroll.smoothOffset());
+                int x = gridX + col * SLOT_PITCH;
+                int y = gridY + row * SLOT_PITCH - (int) Math.round(gridScroll.smoothOffset());
                 if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
                     boolean hovered = smx >= x && smx < x + SLOT_SIZE
                             && smy >= y && smy < y + SLOT_SIZE;
@@ -527,8 +529,11 @@ infoY =
     private void renderGridTooltip(int smx, int smy) {
         if (isAutoCompleteMode) return;
         if (smx < gridX || smx >= gridX + contentW || smy < gridY || smy >= gridY + contentH) return;
-        int col = (smx - gridX) / SLOT_SIZE;
-        int row = (int) Math.floor((smy - gridY + gridScroll.smoothOffset()) / SLOT_SIZE);
+        int localX = smx - gridX;
+        int localY = smy - gridY + (int) Math.round(gridScroll.smoothOffset());
+        if (localX % SLOT_PITCH >= SLOT_SIZE || localY % SLOT_PITCH >= SLOT_SIZE) return;
+        int col = localX / SLOT_PITCH;
+        int row = localY / SLOT_PITCH;
         int idx = row * gridCols + col;
         if (col < 0 || col >= gridCols || idx < 0 || idx >= displayList.size()) return;
         KineticItemSearch.CachedItem item = displayList.get(idx);
@@ -569,14 +574,17 @@ infoY =
         }
         if (smx >= gridX && smx < gridX + contentW && smy >= gridY && smy < gridY + contentH) {
             if (isAutoCompleteMode) {
-                int idx = (int) ((smy - gridY + gridScroll.smoothOffset()) / SLOT_SIZE);
+                int idx = (int) ((smy - gridY + gridScroll.smoothOffset()) / TEXT_ROW_HEIGHT);
                 if (idx >= 0 && idx < autoCompleteList.size()) {
                     searchBox.setTextValue(autoCompleteList.get(idx));
                     return true;
                 }
             } else {
-                int col = (int) ((smx - gridX) / SLOT_SIZE);
-                int row = (int) ((smy - gridY + gridScroll.smoothOffset()) / SLOT_SIZE);
+                int localX = (int) Math.floor(smx - gridX);
+                int localY = (int) Math.floor(smy - gridY + (int) Math.round(gridScroll.smoothOffset()));
+                if (localX % SLOT_PITCH >= SLOT_SIZE || localY % SLOT_PITCH >= SLOT_SIZE) return false;
+                int col = localX / SLOT_PITCH;
+                int row = localY / SLOT_PITCH;
                 int idx = row * gridCols + col;
                 if (col >= 0 && col < gridCols && idx >= 0 && idx < displayList.size()) {
                     KineticItemSearch.CachedItem item = displayList.get(idx);
@@ -633,7 +641,7 @@ infoY =
     @Override
     protected boolean onMouseScroll(ScrollInput input) {
         double d = input.deltaY();
-        if (gridScroll.scroll(d, SLOT_SIZE)) {
+        if (gridScroll.scroll(d, isAutoCompleteMode ? TEXT_ROW_HEIGHT : SLOT_PITCH)) {
             rememberedScrollOffset = gridScroll.offset();
             return true;
         }

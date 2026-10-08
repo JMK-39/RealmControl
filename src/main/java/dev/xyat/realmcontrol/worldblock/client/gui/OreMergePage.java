@@ -36,8 +36,9 @@ import java.util.Comparator;
 import java.util.TreeSet;
 
 public class OreMergePage extends KineticPage {
-    private static final int SLOT_SIZE = 18;
-    private static final int SLOT_PITCH = 19;
+    private static final int SLOT_SIZE = 22;
+    private static final int SLOT_PITCH = SLOT_SIZE + 2;
+    private static final int LEFT_ROW_HEIGHT = SLOT_SIZE + 6;
     // A long chance label scrolls within this width instead of pushing the loaded-chunks toggle out of the panel.
     private static final int CHANCE_LABEL_MAX_WIDTH = 110;
     private static final int RIGHT_SCROLLBAR_INSET = 7;
@@ -689,8 +690,8 @@ return button;
 
         totalLeftH = 0;
         for (LeftEntry entry : leftEntries) {
-            entry.h = 20;
-            totalLeftH += entry.h + 1;
+            entry.h = LEFT_ROW_HEIGHT;
+            totalLeftH += entry.h + 2;
         }
         leftScroll.update(totalLeftH, leftH);
     }
@@ -930,12 +931,12 @@ return button;
         int currentY = leftY - (int) Math.round(leftScroll.smoothOffset());
         for (LeftEntry entry : leftEntries) {
             if (currentY + entry.h >= leftY && currentY <= leftY + leftH) {
-                entry.x = leftX + 2;
+                entry.x = leftX + 3;
                 entry.y = currentY;
-                entry.w = leftW - 4;
+                entry.w = leftW - 6;
                 entry.render(g, smx, smy);
             }
-            currentY += entry.h + 1;
+            currentY += entry.h + 2;
         }
         g.endScissor();
         leftScroll.render(
@@ -1017,7 +1018,7 @@ return button;
 
         renderRightStatus(g);
 
-        int gridX = rightX + 2;
+        int gridX = rightX + 3;
         int gridY = getRightGridY();
         g.scissor(rightX,
                 gridY,
@@ -1098,7 +1099,7 @@ return button;
                     entry.requestTooltip();
                     return;
                 }
-                currentY += entry.h + 1;
+                currentY += entry.h + 2;
             }
         }
 
@@ -1123,7 +1124,7 @@ return button;
     private int getRightItemIndexAt(double smx, double smy) {
         if (!isCreatingRule && selectedTarget == null) return -1;
 
-        int gridX = rightX + 2;
+        int gridX = rightX + 3;
         int gridY = getRightGridY();
         if (smx < gridX || smx >= rightX + rightW || smy < gridY || smy >= gridY + gridAreaH) return -1;
 
@@ -1181,7 +1182,7 @@ return button;
                 if (currentY + entry.h >= leftY && currentY <= leftY + leftH && smx >= entry.x && smx < entry.x + entry.w && smy >= currentY && smy < currentY + entry.h) {
                     if (entry.mouseClicked(input)) return true;
                 }
-                currentY += entry.h + 1;
+                currentY += entry.h + 2;
             }
         } else {
             int idx = getRightItemIndexAt(smx, smy);
@@ -1311,15 +1312,15 @@ return button;
             boolean selected = id.equals(selectedTarget);
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
             KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, selected, hover, false);
-            KineticTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
+            KineticTheme.itemSlot(g, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
             ItemBanControl.withSkip(() -> {
-                KineticTheme.item(g, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, stack, x + 3, y + 3, SLOT_SIZE, 1.0F, false);
                 return null;
             });
             String name = ItemCacheHudRenderer.getDisplayNameCustom(stack).getString();
-            g.scrollingText(Component.literal(name), x + 24, y + 6, w - 58, 0xFFFFFF, false);
-            g.scrollingTextRight(KineticI18n.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count))), x + w - 4, y + 6, 22, 0xFFFFFF, false);
-            g.scrollingText(KineticI18n.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"), x + w - 36, y + 6, 10, 0xFFFFFF, false);
+            g.scrollingText(Component.literal(name), x + 28, y + 10, w - 68, 0xFFFFFF, false);
+            g.scrollingTextRight(KineticI18n.translatable("gui.realmcontrol.worldblock.common.count_parentheses", Component.literal(String.valueOf(count))), x + w - 4, y + 10, 22, 0xFFFFFF, false);
+            g.scrollingText(KineticI18n.translatable(expandedTargets.contains(id) ? "gui.realmcontrol.worldblock.common.collapse" : "gui.realmcontrol.worldblock.common.expand"), x + w - 38, y + 10, 10, 0xFFFFFF, false);
         }
 
         @Override
@@ -1373,9 +1374,9 @@ return button;
         void render(KineticGraphics g, int mx, int my) {
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
             KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, false, hover, false);
-            KineticTheme.itemSlot(g, x + 1, y + 1, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
+            KineticTheme.itemSlot(g, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
             ItemBanControl.withSkip(() -> {
-                KineticTheme.item(g, stack, x + 1, y + 1, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, stack, x + 3, y + 3, SLOT_SIZE, 1.0F, false);
                 return null;
             });
         }

@@ -19,7 +19,8 @@ public final class GuiCaptureValidation {
     // The page each case waits for before it captures; child pages open from their parent once it is showing.
     private static final String[] PAGES={"OreBannedPage","OreMergePage","WeightedBlockMergePage","WorldGenPage","StructureRuleEditPage","BiomeControlPage","BiomeRuleEditPage"};
     private static final long OPEN_TIMEOUT=20000;
-    private static boolean installed,started,screenshot,finished,originalFullscreen,childOpened;
+    private static boolean installed,started,screenshot,finished,originalFullscreen,childOpened,previewPrepared;
+    private static final BitSet visitedPages = new BitSet();
     private static String originalLanguage;
     private static int originalScale,originalWidth,originalHeight,phase=-1,page=-1,captures,failures;
     private static long due,deadline;
@@ -59,6 +60,12 @@ public final class GuiCaptureValidation {
                     if(now>=deadline)throw new IllegalStateException("page "+PAGES[page]+" did not open; showing "+current);
                     due=now+1000;return;
                 }
+                if (!previewPrepared) {
+                    prepareItemPreview();
+                    previewPrepared=true;
+                    due=now+1000;
+                    return;
+                }
                 if(now>=due) { capture("start");screenshot=true;due=now+(phase==4?3400:550); }
                 return;
             }
@@ -94,7 +101,8 @@ public final class GuiCaptureValidation {
         String selectedPages=System.getProperty("realmcontrol.guiValidation.pages", "");
         while(page<NAMES.length && !selectedPages.isBlank() && !List.of(selectedPages.split(",")).contains(String.valueOf(page)))page++;
         if(page>=NAMES.length){nextPhase();return;}
-        screenshot=false;childOpened=false;
+        screenshot=false;childOpened=false;previewPrepared=false;
+        visitedPages.set(page);
         long now=System.currentTimeMillis();due=now+1000;deadline=now+OPEN_TIMEOUT;
         Minecraft.getInstance().setScreen(null);
         openPage(page);
@@ -147,6 +155,32 @@ public final class GuiCaptureValidation {
         }
         throw new NoSuchMethodException(type.getName()+"."+name);
     }
+    @SuppressWarnings("unchecked")
+    private static void prepareItemPreview() throws Exception {
+        if (!Boolean.getBoolean("realmcontrol.guiValidation.itemPreview")) return;
+        Object target=KineticGui.currentPage();
+        if (page==1) {
+            var rules=(Map<String,List<String>>)field(target,"tempRules").get(target);
+            rules.put("minecraft:stone",new ArrayList<>(List.of("minecraft:dirt","minecraft:oak_planks")));
+            ((Set<String>)field(target,"expandedTargets").get(target)).add("minecraft:stone");
+            field(target,"selectedTarget").set(target,"minecraft:stone");
+            invokeNoArgs(target,"updateLeftEntries");
+            invokeNoArgs(target,"updateRightPanel");
+        } else if (page==2) {
+            var rules=(Map<String,List<dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig.WeightedBlockTarget>>)field(target,"rules").get(target);
+            rules.put("minecraft:stone",new ArrayList<>(List.of(
+                    new dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig.WeightedBlockTarget("minecraft:dirt",1),
+                    new dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig.WeightedBlockTarget("minecraft:oak_planks",3))));
+            invokeNoArgs(target,"refreshLeft");
+            invoke(target.getClass(),target,"editRule","minecraft:stone");
+        }
+    }
+    private static java.lang.reflect.Field field(Object target,String name) throws Exception {
+        var field=target.getClass().getDeclaredField(name);field.setAccessible(true);return field;
+    }
+    private static void invokeNoArgs(Object target,String name) throws Exception {
+        var method=target.getClass().getDeclaredMethod(name);method.setAccessible(true);method.invoke(target);
+    }
     private static void capture(String frame)throws Exception {
         var mc=Minecraft.getInstance();Path path=Path.of(ROOT,String.format("%d-%02d-%s-%s.png",phase,page,NAMES[page],frame));Files.createDirectories(path.getParent());
         try(var image=Screenshot.takeScreenshot(mc.getMainRenderTarget())){image.writeToFile(path);}
@@ -161,7 +195,7 @@ public final class GuiCaptureValidation {
         mc.setScreen(null);
         mc.getWindow().setWindowed(originalWidth,originalHeight);
         if(originalFullscreen && !mc.getWindow().isFullscreen())mc.getWindow().toggleFullScreen();
-        LOG.info("REALM_GUI_{} pages={} captures={} failures={} userSettingsRestored=true",failures==0?"PASS":"FAIL",NAMES.length,captures,failures);
+        LOG.info("REALM_GUI_{} pages={} captures={} failures={} userSettingsRestored=true",failures==0?"PASS":"FAIL",visitedPages.cardinality(),captures,failures);
         dev.xyat.kineticcore.api.runtime.KineticClientRuntime.stopClient();
     }
     private static final class StressLanguage extends Language {
