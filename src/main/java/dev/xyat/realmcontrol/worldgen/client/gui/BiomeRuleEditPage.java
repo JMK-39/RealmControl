@@ -55,7 +55,7 @@ public final class BiomeRuleEditPage extends KineticPage {
                 }).build();
 
         ui().button(x + 240, y + 202, 80).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.save")).onClick(this::saveRule).build();
-        ui().button(x + 325, y + 202, 75).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
+        ui().button(84, 39, 75).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
     }
 
     private void saveRule() {
@@ -91,7 +91,7 @@ public final class BiomeRuleEditPage extends KineticPage {
 
     @Override
     protected void renderForeground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.title"), 120, 48, 400, 0xFFFFFFFF, false);
+        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.title"), 161, 48, 359, 0xFFFFFFFF, false);
         graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.dimension"), 120, 60, 400, 0xFFCCCCCC, false);
         graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.source"), 120, 114, 400, 0xFFCCCCCC, false);
         graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.target"), 120, 168, 400, 0xFFCCCCCC, false);

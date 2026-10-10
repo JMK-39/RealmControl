@@ -1,3 +1,15 @@
+2026年10月10日 — Navigation placement / 返回按钮位置
+
+- Back is now at the top left of the structure, biome, banned-block and replacement editors, including individual rule pages. Standalone replacement pages place Close in the same position.
+- Block grids, rule lists and editing fields keep their existing layout. Header titles and searches leave room for navigation, and long status text stays clear of nearby controls.
+- Navigation button labels use white text.
+
+- 结构、群系、禁用方块与替换编辑器的“返回”现在位于左上角，单条规则页面也保持一致。独立打开的替换页面在相同位置显示“关闭”。
+- 方块网格、规则列表与编辑字段保持现有布局。顶部标题与搜索为返回控件留出空间，过长状态文本不会压到相邻控件。
+- 返回类按钮的文字统一使用白色。
+
+---
+
 2026年10月08日 — Block preview spacing / 方块预览间距
 
 - Block generation and replacement editors show complete item icons on checker backgrounds, with space between cells and inside rule rows.

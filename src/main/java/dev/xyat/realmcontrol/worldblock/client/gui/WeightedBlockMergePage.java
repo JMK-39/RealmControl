@@ -187,9 +187,9 @@ public final class WeightedBlockMergePage extends KineticPage {
         rightContentH = Math.max(1, rightH - PANEL_INSET * 2);
         cols = Math.max(1, rightContentW / SLOT_PITCH);
 
-        leftSearch = ui().textField(leftX, 5, leftW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.search.hint")).build();
+        int buttonWidth = 62;
+        leftSearch = ui().textField(leftX + buttonWidth + 2, 5, leftW - buttonWidth - 2).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.search.hint")).build();
         leftSearch.onTextChange(ignored -> refreshLeft());
-int buttonWidth = 62;
         int closeX = rightX + rightW - buttonWidth;
         int saveX = closeX - gap - buttonWidth;
         int doneX = saveX - gap - buttonWidth;
@@ -201,7 +201,7 @@ int buttonWidth = 62;
 newButton = ui().button(newX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new")).onClick(() -> startNewRule()).build();
 doneButton = ui().button(doneX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done")).onClick(() -> finishTargets()).build();
 saveButton = ui().button(saveX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save")).onClick(() -> save()).build();
-backButton = ui().button(closeX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
+backButton = ui().button(leftX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
         // The weight label has a fixed 40 px area in every language, so the box after it never moves.
         int weightBoxX = rightX + 40 + 6;
         weightBox = ui().textField(weightBoxX, 31, 72).build();

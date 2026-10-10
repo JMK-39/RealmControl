@@ -119,8 +119,8 @@ public class WorldGenPage extends KineticPage {
         int backW = 60;
         int saveW = 80;
         int actionW = 88;
-        int backX = startX + panelW - backW;
-        int saveX = backX - gap - saveW;
+        int backX = startX;
+        int saveX = startX + panelW - backW - gap - saveW;
         int teleportX = saveX - gap - actionW;
         int locateX = teleportX - gap - actionW;
 
@@ -507,11 +507,11 @@ public class WorldGenPage extends KineticPage {
         int backW = 60;
         int saveW = 80;
         int actionW = 88;
-        int backX = 20 + panelW - backW;
-        int saveX = backX - gap - saveW;
+        int titleX = 20 + backW + gap;
+        int saveX = 20 + panelW - backW - gap - saveW;
         int teleportX = saveX - gap - actionW;
         int locateX = teleportX - gap - actionW;
-        g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.title"), 20, 22, Math.max(1, locateX - 26), 0xFFFFFFFF, false);
+        g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.title"), titleX, 22, Math.max(1, locateX - gap - titleX), 0xFFFFFFFF, false);
     }
 
     /**

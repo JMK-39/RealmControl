@@ -157,13 +157,14 @@ public class OreBannedPage extends KineticPage {
                         ? Math.max(
                                 80,
                                 contentW
+                                        - btnW
                                         - ruleBtnW
-                                        - 2
+                                        - 4
                         )
                         : 120;
 
         searchBox =
-                ui().textField(gridX, searchY, searchW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.search.hint")).build();
+                ui().textField(gridX + btnW + 2, searchY, searchW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.search.hint")).build();
 
         searchBox.setTextValue(lastSearchQuery);
         searchBox.setDefaultText(lastSearchQuery);
@@ -210,7 +211,7 @@ viewBtn =
                                     );
                                 }).build();
 closeBtn =
-                ui().button(closeX, buttonY, btnW).text(KineticI18n.translatable(
+                ui().button(gridX, searchY, btnW).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.back"
                                 )).onClick(() -> close()).build();
 infoY =
@@ -425,12 +426,15 @@ infoY =
     protected void renderForeground(KineticGraphics g, int smx, int smy, float pt) {
         int countX = searchBox.controlX() + searchBox.controlWidth() + 10;
         if (ruleBtn != null && isControlVisible(ruleBtn)) countX = ruleBtn.controlX() + ruleBtn.controlWidth() + 10;
+        if (compactToolbar) countX = gridX;
+        int countRight = compactToolbar ? gridX + contentW : saveBtn.controlX() - 2;
+        int countWidth = Math.max(1, countRight - countX);
 
         if (isAutoCompleteMode) {
             g.scrollingText(KineticTheme.muted(KineticI18n.translatable(
                             "gui.realmcontrol.worldblock.banitem.autocomplete.matches_count",
                             Component.literal(String.valueOf(autoCompleteList.size()))
-                    )), countX, 11, Math.max(1, width() - countX - 10), 0xFFFFFF, false);
+                    )), countX, infoY, countWidth, 0xFFFFFF, false);
             g.scissor(gridX,
                     gridY,
                     gridX + contentW,
@@ -457,7 +461,7 @@ infoY =
             }
         } else {
             g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.count", displayList.size(), currentSourceList.size()),
-                    countX, 11, Math.max(1, width() - countX - 10), KineticTheme.current().mutedText(), false);
+                    countX, infoY, countWidth, KineticTheme.current().mutedText(), false);
             g.scissor(gridX,
                     gridY,
                     gridX + contentW,

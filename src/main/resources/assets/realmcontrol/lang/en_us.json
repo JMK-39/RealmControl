@@ -46,7 +46,7 @@
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back": "Return to the previous screen.",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter": "§bWhen enabled, only blocks in the same group as the target are shown. Normal blocks without groups will show all blocks automatically.",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.set_target": "§aLeft-click to select this block as the final replacement target.",
-  "gui.realmcontrol.worldblock.banitem.btn.close": "§cClose",
+  "gui.realmcontrol.worldblock.banitem.btn.close": "§fClose",
   "gui.realmcontrol.worldblock.banitem.btn.save": "§aSave",
   "gui.realmcontrol.worldblock.banitem.merge_add": "§aAdd Rule",
   "gui.realmcontrol.worldblock.banitem.merge_overview_title": "§lItem Merge Rules Management",

@@ -254,14 +254,13 @@ public class OreMergePage extends KineticPage {
 
         fitRightPanelToWholeRows();
 
+        int buttonWidth = 60;
         leftSearchBox =
                 createLeftSearchBox(
-                        leftX,
+                        leftX + buttonWidth + 2,
                         searchY,
-                        leftW
+                        leftW - buttonWidth - 2
                 );
-
-        int buttonWidth = 60;
 
         int closeX =
                 rightX
@@ -331,7 +330,7 @@ public class OreMergePage extends KineticPage {
 
         closeBtn =
                 createCloseButton(
-                        closeX,
+                        leftX,
                         searchY,
                         buttonWidth
                 );
@@ -351,11 +350,12 @@ public class OreMergePage extends KineticPage {
         leftX = sidePadding;
         leftW = contentW;
 
+        int backWidth = 60;
         leftSearchBox =
                 createLeftSearchBox(
-                        leftX,
+                        leftX + backWidth + 2,
                         5,
-                        leftW
+                        leftW - backWidth - 2
                 );
 
         int buttonWidth =
@@ -400,11 +400,9 @@ public class OreMergePage extends KineticPage {
 
         closeBtn =
                 createCloseButton(
-                        leftX
-                                + buttonWidth
-                                + gap,
-                        55,
-                        buttonWidth
+                        leftX,
+                        5,
+                        backWidth
                 );
 
         leftY = 80;

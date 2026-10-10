@@ -46,7 +46,7 @@
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.back": "返回上一个界面。",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.btn.filter": "§b开启后只显示与主方块同类的方块。普通方块没有同类标签时会自动显示全部方块。",
   "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.set_target": "§a左键选择这个方块作为最终替换目标。",
-  "gui.realmcontrol.worldblock.banitem.btn.close": "§c关闭",
+  "gui.realmcontrol.worldblock.banitem.btn.close": "§f关闭",
   "gui.realmcontrol.worldblock.banitem.btn.save": "§a保存",
   "gui.realmcontrol.worldblock.banitem.merge_add": "§a新建规则",
   "gui.realmcontrol.worldblock.banitem.merge_overview_title": "§l物品合并规则管理",

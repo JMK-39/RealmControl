@@ -59,16 +59,16 @@ public final class BiomeControlPage extends KineticPage {
         int panelW = width() - 40;
         int topY = 16;
 
-        ui().button(startX, topY, 90).text(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.enable.tooltip")).onClick(button -> {
+        ui().button(startX + 65, topY, 90).text(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.enable.tooltip")).onClick(button -> {
                     enabled = !enabled;
                     button.setText(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled"));
                 }).build();
-        ui().button(startX + 95, topY, 80).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add.tooltip")).onClick(() -> openEditor(-1)).build();
+        ui().button(startX + 160, topY, 80).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add.tooltip")).onClick(() -> openEditor(-1)).build();
 
         int backW = 60;
         int saveW = 80;
-        int backX = startX + panelW - backW;
-        int saveX = backX - 5 - saveW;
+        int backX = startX;
+        int saveX = startX + panelW - backW - 5 - saveW;
         ui().button(saveX, topY, saveW).text(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.save_all")).onClick(() -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveBiomeControlPacket(enabled, new ArrayList<>(rules)))).build();
         ui().button(backX, topY, backW).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
 
@@ -187,7 +187,7 @@ public final class BiomeControlPage extends KineticPage {
     @Override
     protected void renderForeground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
         int titleRight = width() - 171;
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.title"), 210, 22, Math.max(1, titleRight - 210), 0xFFFFFFFF, false);
+        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.title"), 275, 22, Math.max(1, titleRight - 275), 0xFFFFFFFF, false);
     }
 
     /**

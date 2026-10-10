@@ -108,7 +108,7 @@ rows.add(new FieldRow("gui.realmcontrol.worldgen.structure_edit.spread_type", nu
         int buttonY = this.height() - 34;
         ui().button(158, buttonY, 100).text(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.save_current")).onClick(this::saveCurrent).build();
         ui().button(263, buttonY, 100).text(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.reset_default.tooltip")).onClick(this::resetDefault).build();
-        ui().button(368, buttonY, 72).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::back).build();
+        ui().button(20, 14, 72).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::back).build();
     }
 
     private KineticTextField addField(String labelKey, int x, int y, int width, String value, String original) {
@@ -197,7 +197,7 @@ rows.add(new FieldRow(labelKey, box, original, y));
     @Override
     protected void renderForeground(KineticGraphics g, int mx, int my, float pt) {
         Component title = KineticI18n.translatable("gui.realmcontrol.worldgen.structure_edit.title");
-        g.scrollingText(title, 26, 20, Math.max(1, width() - 52), 0xFFFFAA00, false);
+        g.scrollingText(title, 96, 20, Math.max(1, width() - 122), 0xFFFFAA00, false);
 
         Component structureLine = KineticI18n.translatable(
                 "gui.realmcontrol.worldgen.structure_edit.structure",

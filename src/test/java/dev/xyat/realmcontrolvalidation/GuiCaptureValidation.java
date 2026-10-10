@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 public final class GuiCaptureValidation {
     private static final Logger LOG=LoggerFactory.getLogger(GuiCaptureValidation.class);
     private static final String ROOT=System.getProperty("realmcontrol.guiValidation.output","D:/IDEAWork/RealmControl/.gradle/gui-capture/");
+    private static final boolean FULL_HD_ONLY=Boolean.getBoolean("realmcontrol.guiValidation.fullHdOnly");
     private static final String[] NAMES={"ore-banned","ore-merge","weighted-merge","worldgen","structure-rule","biome-control","biome-rule"};
     // The page each case waits for before it captures; child pages open from their parent once it is showing.
     private static final String[] PAGES={"OreBannedPage","OreMergePage","WeightedBlockMergePage","WorldGenPage","StructureRuleEditPage","BiomeControlPage","BiomeRuleEditPage"};
@@ -85,13 +86,15 @@ public final class GuiCaptureValidation {
     private static void nextPhase() {
         if(stressOriginal!=null){Language.inject(stressOriginal);stressOriginal=null;}
         phase++;page=-1;
-        if(phase>=5){finish();return;}
+        // Opt-in 1080p pass: English and Chinese; keep the usual phases by default.
+        if(phase>=(FULL_HD_ONLY?2:5)){finish();return;}
         var mc=Minecraft.getInstance();
         mc.setScreen(null);
-        String lang=phase==2 || phase==3?"zh_cn":"en_us";
+        String lang=(FULL_HD_ONLY?phase==1:phase==2 || phase==3)?"zh_cn":"en_us";
         mc.getLanguageManager().setSelected(lang);
         mc.options.languageCode=lang;
-        int width=phase==1 || phase==3?1920:854,height=phase==1 || phase==3?1080:480;
+        boolean fullHd=FULL_HD_ONLY || phase==1 || phase==3;
+        int width=fullHd?1920:854,height=fullHd?1080:480;
         mc.getWindow().setWindowed(width,height);mc.resizeDisplay();
         reload=mc.reloadResourcePacks();
         LOG.info("REALM_GUI_PHASE phase={} language={} requested={}x{} autoScale=true",phase,lang,width,height);
