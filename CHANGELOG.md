@@ -1,3 +1,10 @@
+2026年10月11日 — Replacement editor navigation / 替换编辑器返回按钮
+
+- Standalone block replacement editors now label the upper-left navigation button Back.
+- 独立打开方块替换编辑器时，左上角按钮统一显示“返回”。
+
+---
+
 2026年10月10日 — Navigation placement / 返回按钮位置
 
 - Back is now at the top left of the structure, biome, banned-block and replacement editors, including individual rule pages. Standalone replacement pages place Close in the same position.

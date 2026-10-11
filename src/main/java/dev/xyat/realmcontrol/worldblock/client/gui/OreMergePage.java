@@ -648,9 +648,7 @@ return button;
     ) {
         KineticButton button =
                 ui().button(x, y, width).text(KineticI18n.translatable(
-                                        !hasParentScreen
-                                                ? "gui.realmcontrol.worldblock.banitem.btn.close"
-                                                : "gui.realmcontrol.worldblock.config.back"
+                                        "gui.realmcontrol.worldblock.config.back"
                                 )).onClick(() -> closeScreen()).build();
 return button;
     }
