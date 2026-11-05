@@ -20,7 +20,9 @@ public record StructureRuleDescriptor(
         Integer originalCount,
         List<String> dimensionIds,
         StructureEntryRule entryRule,
-        StructurePlacementRule placementRule
+        StructurePlacementRule placementRule,
+        /** Published by the structure editor: its rules are its draft's, edited on the draft's generation page. */
+        boolean custom
 ) {
     public StructureRuleDescriptor {
         dimensionIds = dimensionIds == null ? List.of() : List.copyOf(dimensionIds);

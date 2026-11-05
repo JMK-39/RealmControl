@@ -41,6 +41,7 @@ public final class BeaconConfigGui {
                         List.of(0, 1, 2, 3),
                         KineticI18n.translatable("cfg.realmcontrol.beacon.beacon.radii.tooltip")
                 )
+                .listEditor("level_radii", BeaconRadiusEditor::open)
                 .divider()
                 .description(KineticI18n.translatable("cfg.realmcontrol.beacon.beacon.spawn.description"))
                 .booleanValue(
@@ -75,6 +76,8 @@ public final class BeaconConfigGui {
                         List.of("minecraft:zombie;A", "minecraft:skeleton;AE"),
                         KineticI18n.translatable("cfg.realmcontrol.beacon.beacon.spawn_rules.tooltip")
                 )
+                // A visual editor: pick mobs and tick the blocked spawn reasons; the "entity;codes" lines stay as they are.
+                .listEditor("spawn_rules", BeaconSpawnRuleEditor::open)
                 .divider()
                 .description(KineticI18n.translatable("cfg.realmcontrol.beacon.beacon.limits.description"))
                 .intValue(

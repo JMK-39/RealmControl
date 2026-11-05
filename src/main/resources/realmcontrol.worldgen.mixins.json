@@ -9,6 +9,11 @@
     "StructureSetAccessor",
     "ChunkGeneratorStructureStateAccessor",
     "MultiNoiseBiomeSourceAccessor",
-    "BiomeSourceAccessor"
+    "BiomeSourceAccessor",
+    "StructureTemplateMissingMixin",
+    "StructureTemplateAccessor",
+    "StructureTemplateManagerAccessor",
+    "MegaStructureSuppressMixin",
+    "MegaFeatureGuardMixin"
   ]
 }

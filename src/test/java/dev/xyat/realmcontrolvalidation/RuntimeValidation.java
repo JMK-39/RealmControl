@@ -19,6 +19,10 @@ public final class RuntimeValidation {
             dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> GuiCaptureValidation::install);
             return;
         }
+        if (Boolean.getBoolean("realmcontrolstructure.guiValidation")) {
+            dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> StructureEditorValidation::install);
+            return;
+        }
         // Item components are bound once registries freeze (after mod construction on 26.1), so validate on server start.
         MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent event) -> validate());
     }

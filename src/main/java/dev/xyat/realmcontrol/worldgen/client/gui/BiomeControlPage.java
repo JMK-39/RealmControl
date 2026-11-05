@@ -29,6 +29,7 @@ public final class BiomeControlPage extends KineticPage {
     private RuleListWidget ruleList;
     private String search = "";
     private int scroll;
+    private int selectedRule = -1;
 
     private record Snapshot(boolean enabled, List<BiomeReplacementRule> rules) {
     }
@@ -51,28 +52,32 @@ public final class BiomeControlPage extends KineticPage {
         );
     }
 
+    private static final int SWITCH_W = 80, LIST_Y = 46;
+
     @Override
     protected void build(KineticUi ui) {
+        bindDeleteAction(() -> selectedRule >= 0 && selectedRule < rules.size(), () -> removeRule(selectedRule));
         KineticTextField searchBox;
         ruleList = null;
-        int startX = 20;
-        int panelW = width() - 40;
-        int topY = 16;
+        int startX = 4;
+        int panelW = width() - 8;
+        int topY = 4;
 
-        ui().button(startX + 65, topY, 90).text(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.enable.tooltip")).onClick(button -> {
+        // Header: Back, the title, then the switch, Add and Save at the top right; the search row right under it.
+        int saveX = startX + panelW - 40;
+        int addX = saveX - 4 - 56;
+        int switchX = addX - 4 - SWITCH_W;
+        ui().button(switchX, topY, SWITCH_W).text(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.enable.tooltip")).onClick(button -> {
                     enabled = !enabled;
                     button.setText(KineticI18n.translatable(enabled ? "gui.realmcontrol.worldgen.biome.enabled" : "gui.realmcontrol.worldgen.biome.disabled"));
                 }).build();
-        ui().button(startX + 160, topY, 80).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add.tooltip")).onClick(() -> openEditor(-1)).build();
+        ui().button(addX, topY, 56).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.add.tooltip")).onClick(() -> openEditor(-1)).build();
 
-        int backW = 60;
-        int saveW = 80;
         int backX = startX;
-        int saveX = startX + panelW - backW - 5 - saveW;
-        ui().button(saveX, topY, saveW).text(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.save_all")).onClick(() -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveBiomeControlPacket(enabled, new ArrayList<>(rules)))).build();
-        ui().button(backX, topY, backW).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
+        ui().button(saveX, topY, 40).text(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.save_all")).onClick(() -> WorldGenNetwork.CHANNEL.sendToServer(new WorldGenNetwork.SaveBiomeControlPacket(enabled, new ArrayList<>(rules)))).build();
+        ui().button(backX, topY, 40).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
 
-        searchBox = ui().textField(startX, 47, panelW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.search")).build();
+        searchBox = ui().textField(startX, 28, panelW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.search")).build();
         searchBox.setTextValue(search);
         searchBox.setDefaultText(search);
         searchBox.onTextChange(value -> {
@@ -80,10 +85,9 @@ public final class BiomeControlPage extends KineticPage {
             if (ruleList != null) ruleList.refresh();
         });
 
-        int listY = 76;
-        int listH = height() - listY - 16;
-        // 原列表首行位于顶部下方 4px（原版列表内边距）/ Old rows started 4 px below the list top (vanilla list padding).
-        ruleList = ui.add(new RuleListWidget(startX, listY + 4, panelW, listH - 4));
+        int listY = LIST_Y;
+        int listH = height() - listY - 4;
+        ruleList = ui.add(new RuleListWidget(startX, listY + 2, panelW, listH - 2));
         ruleList.setScrollOffset(scroll);
     }
 
@@ -169,25 +173,25 @@ public final class BiomeControlPage extends KineticPage {
     private void removeRule(int index) {
         if (index < 0 || index >= rules.size()) return;
         rules.remove(index);
+        selectedRule = -1;
         if (ruleList != null) ruleList.refresh();
     }
 
     @Override
     protected void renderBackground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
         KineticTheme.shadow(graphics, width(), height());
-        KineticTheme.panel(graphics, 10, 8, width() - 20, height() - 16);
-        KineticTheme.separator(graphics, 16, 40, width() - 32);
-        KineticTheme.separator(graphics, 16, 71, width() - 32);
-        int listY = 76;
-        int listH = height() - listY - 16;
-        // 3 px outside the list on the sides and bottom, so the list keeps 2 px from the frame lines.
-        KineticTheme.panelAlt(graphics, 17, listY - 2, width() - 34, listH + 5);
+        KineticTheme.panel(graphics, 0, 0, width(), height());
+        KineticTheme.separator(graphics, 4, 24, width() - 8);
+        int listY = LIST_Y;
+        int listH = height() - listY - 4;
+        KineticTheme.surface(graphics, 4, listY, width() - 8, listH, KineticTheme.Surface.PANEL_ALT);
     }
 
     @Override
     protected void renderForeground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        int titleRight = width() - 171;
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.title"), 275, 22, Math.max(1, titleRight - 275), 0xFFFFFFFF, false);
+        int titleRight = width() - 4 - 40 - 4 - 56 - 4 - SWITCH_W - 4;
+        // Centred on the screen, clear of Back and the header buttons.
+        graphics.scrollingTextCentered(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.title"), width() / 2, 8, Math.max(1, 2 * Math.min(width() / 2 - 48, titleRight - width() / 2)), 0xFFFFAA00, false);
     }
 
     /**
@@ -196,7 +200,7 @@ public final class BiomeControlPage extends KineticPage {
      * in onRowClick.
      */
     private final class RuleListWidget extends KineticRowList<RuleRow> {
-        private static final int EDIT_W = 54;
+        private static final int EDIT_W = 40;
         private static final int EDIT_H = CONTROL_HEIGHT;
 
         RuleListWidget(int x, int y, int width, int height) {
@@ -254,8 +258,8 @@ public final class BiomeControlPage extends KineticPage {
                     contentH,
                     index % 2 == 0 ? KineticTheme.Surface.PANEL : KineticTheme.Surface.PANEL_ALT
             );
-            if (hovered) {
-                KineticTheme.stateOutline(graphics, left, top, width, contentH, false, true, false);
+            if (hovered || row.ruleIndex() == selectedRule) {
+                KineticTheme.stateOutline(graphics, left, top, width, contentH, row.ruleIndex() == selectedRule, hovered, false);
             } else {
                 KineticTheme.indicatorOutline(graphics, left, top, width, contentH, KineticTheme.Indicator.MUTED);
             }
@@ -282,6 +286,7 @@ public final class BiomeControlPage extends KineticPage {
 
         @Override
         protected boolean onRowClick(RuleRow row, int index, MouseInput input) {
+            selectedRule = row.ruleIndex();
             // 原行为：左键（含编辑按钮）打开编辑器，右键打开菜单 / Former behaviour: left click (edit button included) opens the editor, right click opens the menu.
             if (input.isLeft()) {
                 if (input.inside(editX(), editY(rowTop(index)), EDIT_W, EDIT_H)) {

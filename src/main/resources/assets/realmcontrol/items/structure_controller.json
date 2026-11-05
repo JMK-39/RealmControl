@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "realmcontrol:item/structure_controller"
+  }
+}

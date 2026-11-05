@@ -22,5 +22,6 @@ public final class RealmControl {
         new WorldGenModule();
         new BeaconModule();
         new TeleportModule();
+        new dev.xyat.realmcontrol.structure.StructureEditorModule();
     }
 }

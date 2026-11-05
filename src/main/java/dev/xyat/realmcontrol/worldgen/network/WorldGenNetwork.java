@@ -37,6 +37,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.structure.Structure;
 
+import dev.xyat.kineticcore.api.network.KineticBlobTransfer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,7 +51,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class WorldGenNetwork {
-    private static final String PROTOCOL_VERSION = "6";
+    private static final String PROTOCOL_VERSION = "8";
     private static final int MAX_COMPRESSED_PAYLOAD_BYTES = 8 * 1024 * 1024;
     private static final int MAX_DECOMPRESSED_PAYLOAD_BYTES = 32 * 1024 * 1024;
     private static final int MAX_STRING_LIST_SIZE = 65536;
@@ -100,6 +101,24 @@ public class WorldGenNetwork {
         CHANNEL.registerServerbound(11, SaveBiomeControlPacket.class,
                 NetworkCodec.of((buf, msg) -> msg.toBytes(buf), SaveBiomeControlPacket::decode),
                 SaveBiomeControlPacket::handle);
+        CHANNEL.registerServerbound(12, RequestStructurePreviewPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), RequestStructurePreviewPacket::new),
+                RequestStructurePreviewPacket::handle);
+        CHANNEL.registerClientbound(13, StructurePreviewStatusPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructurePreviewStatusPacket::decode),
+                StructurePreviewStatusPacket::handleClient);
+        CHANNEL.registerClientbound(14, StructurePreviewInfoPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructurePreviewInfoPacket::decode),
+                StructurePreviewInfoPacket::handleClient);
+        CHANNEL.registerClientbound(15, StructurePreviewPartPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructurePreviewPartPacket::decode),
+                StructurePreviewPartPacket::handleClient);
+        CHANNEL.registerServerbound(16, RequestStructureThumbnailsPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), RequestStructureThumbnailsPacket::decode),
+                RequestStructureThumbnailsPacket::handle);
+        CHANNEL.registerClientbound(17, StructureThumbnailPacket.class,
+                NetworkCodec.of((buf, msg) -> msg.toBytes(buf), StructureThumbnailPacket::decode),
+                StructureThumbnailPacket::handleClient);
         installEvents();
     }
 
@@ -107,6 +126,149 @@ public class WorldGenNetwork {
         if (eventsInstalled) return;
         eventsInstalled = true;
         KineticServerEvents.onAboutToStart(KineticEventPriority.NORMAL, server -> WorldGenConfig.load());
+        KineticServerEvents.onStopped(KineticEventPriority.NORMAL, server -> {
+            dev.xyat.realmcontrol.worldgen.preview.StructurePreviewService.clear();
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.stop();
+        });
+    }
+
+    /** Asks the server for a preview sample of a structure; {@code variant} picks another layout of the same one. */
+    public static void requestStructurePreview(int requestId, String structureId, int variant) {
+        CHANNEL.sendToServer(new RequestStructurePreviewPacket(requestId, structureId, variant));
+    }
+
+    /** Asks for the thumbnails of these structures; an empty list stops the ones still being made. */
+    public static void requestStructureThumbnails(List<String> structureIds) {
+        CHANNEL.sendToServer(new RequestStructureThumbnailsPacket(structureIds));
+    }
+
+    public record RequestStructureThumbnailsPacket(List<String> structureIds) {
+        static RequestStructureThumbnailsPacket decode(NetworkBuffer buf) {
+            int count = Math.min(buf.readVarInt(), dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.MAX_REQUEST);
+            List<String> ids = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) ids.add(buf.readUtf(32767));
+            return new RequestStructureThumbnailsPacket(ids);
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            int count = Math.min(structureIds.size(), dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.MAX_REQUEST);
+            buf.writeVarInt(count);
+            for (int i = 0; i < count; i++) buf.writeUtf(structureIds.get(i));
+        }
+
+        public void handle(ServerPacketContext context) {
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.request(context.sender(), structureIds);
+        }
+    }
+
+    /** A structure's thumbnail as a PNG; empty when the structure has no layout to show. */
+    public record StructureThumbnailPacket(String structureId, byte[] png) {
+        private static final int MAX_BYTES = 256 * 1024;
+
+        static StructureThumbnailPacket decode(NetworkBuffer buf) {
+            return new StructureThumbnailPacket(buf.readUtf(32767), buf.readByteArray(MAX_BYTES));
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            buf.writeUtf(structureId);
+            buf.writeByteArray(png.length > MAX_BYTES ? new byte[0] : png, MAX_BYTES);
+        }
+
+        public void handleClient() {
+            dev.xyat.realmcontrol.worldgen.preview.client.StructureThumbnailClient.handle(this);
+        }
+    }
+
+    public record RequestStructurePreviewPacket(int requestId, String structureId, int variant) {
+        public RequestStructurePreviewPacket(NetworkBuffer buf) {
+            this(buf.readVarInt(), buf.readUtf(32767), buf.readVarInt());
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            buf.writeVarInt(requestId);
+            buf.writeUtf(structureId == null ? "" : structureId);
+            buf.writeVarInt(variant);
+        }
+
+        public void handle(ServerPacketContext context) {
+            dev.xyat.realmcontrol.worldgen.preview.StructurePreviewService.request(context.sender(), requestId, structureId, variant);
+        }
+    }
+
+    /** Sampling progress from 0 to 1, or why no preview could be made ({@code error} not null). */
+    public record StructurePreviewStatusPacket(int requestId, float progress, Component error) {
+        static StructurePreviewStatusPacket decode(NetworkBuffer buf) {
+            int requestId = buf.readVarInt();
+            float progress = buf.readFloat();
+            return new StructurePreviewStatusPacket(requestId, progress, buf.readBoolean() ? buf.readComponent() : null);
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            buf.writeVarInt(requestId);
+            buf.writeFloat(progress);
+            buf.writeBoolean(error != null);
+            if (error != null) buf.writeComponent(error);
+        }
+
+        public void handleClient() {
+            dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient.handleStatus(this);
+        }
+    }
+
+    /** What a finished sample holds; the snapshot follows in {@code parts} parts. */
+    public record StructurePreviewInfoPacket(int requestId, String structureId, int pieces, int sizeX, int sizeY, int sizeZ,
+                                             Map<String, Integer> missing, int parts, int failedChunks) {
+        static StructurePreviewInfoPacket decode(NetworkBuffer buf) {
+            int requestId = buf.readVarInt();
+            String structureId = buf.readUtf(32767);
+            int pieces = buf.readVarInt(), sizeX = buf.readVarInt(), sizeY = buf.readVarInt(), sizeZ = buf.readVarInt();
+            int count = Math.min(buf.readVarInt(), 4096);
+            Map<String, Integer> missing = new LinkedHashMap<>();
+            for (int i = 0; i < count; i++) missing.put(buf.readUtf(32767), buf.readVarInt());
+            return new StructurePreviewInfoPacket(requestId, structureId, pieces, sizeX, sizeY, sizeZ, missing,
+                    buf.readVarInt(), buf.readVarInt());
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            buf.writeVarInt(requestId);
+            buf.writeUtf(structureId);
+            buf.writeVarInt(pieces);
+            buf.writeVarInt(sizeX);
+            buf.writeVarInt(sizeY);
+            buf.writeVarInt(sizeZ);
+            List<Map.Entry<String, Integer>> entries = new ArrayList<>(missing.entrySet());
+            int count = Math.min(entries.size(), 4096);
+            buf.writeVarInt(count);
+            for (int i = 0; i < count; i++) {
+                buf.writeUtf(entries.get(i).getKey());
+                buf.writeVarInt(entries.get(i).getValue());
+            }
+            buf.writeVarInt(parts);
+            buf.writeVarInt(failedChunks);
+        }
+
+        public void handleClient() {
+            dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient.handleInfo(this);
+        }
+    }
+
+    /** One part of an encoded snapshot. */
+    public record StructurePreviewPartPacket(int requestId, int index, int total, byte[] data) {
+        static StructurePreviewPartPacket decode(NetworkBuffer buf) {
+            return new StructurePreviewPartPacket(buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
+                    buf.readByteArray(KineticBlobTransfer.DEFAULT_PART_BYTES));
+        }
+
+        public void toBytes(NetworkBuffer buf) {
+            buf.writeVarInt(requestId);
+            buf.writeVarInt(index);
+            buf.writeVarInt(total);
+            buf.writeByteArray(data, KineticBlobTransfer.DEFAULT_PART_BYTES);
+        }
+
+        public void handleClient() {
+            dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient.handlePart(this);
+        }
     }
 
 
@@ -190,6 +352,9 @@ public class WorldGenNetwork {
 
     public static void requestStructureRegistryRefresh() {
         if (CHANNEL != null) {
+            // The server redraws previews and thumbnails on a refresh; drop the copies kept here as well.
+            dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient.clearCache();
+            dev.xyat.realmcontrol.worldgen.preview.client.StructureThumbnailClient.clear();
             CHANNEL.sendToServer(new RequestStructureRegistryPacket());
         }
     }
@@ -494,6 +659,9 @@ public class WorldGenNetwork {
             if (!player.hasPermissions(2)) {
                 return;
             }
+            // A refresh also redraws previews and thumbnails, for structures whose files changed in place.
+            dev.xyat.realmcontrol.worldgen.preview.StructurePreviewService.clear();
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.clear(player.getServer());
             CHANNEL.sendToPlayer(player, new StructureRegistryPacket(
                     getAllStructureIds(player.getServer()),
                     StructureGenerationControl.getDescriptors(player.getServer())
@@ -923,6 +1091,7 @@ public class WorldGenNetwork {
         if (descriptor.entryRule() != null) writeEntryRule(buf, descriptor.entryRule());
         buf.writeBoolean(descriptor.placementRule() != null);
         if (descriptor.placementRule() != null) writePlacementRule(buf, descriptor.placementRule());
+        buf.writeBoolean(descriptor.custom());
     }
 
     private static StructureRuleDescriptor readDescriptor(NetworkBuffer buf) {
@@ -941,11 +1110,12 @@ public class WorldGenNetwork {
         List<String> dimensionIds = readStringList(buf);
         StructureEntryRule entryRule = buf.readBoolean() ? readEntryRule(buf) : null;
         StructurePlacementRule placementRule = buf.readBoolean() ? readPlacementRule(buf) : null;
+        boolean custom = buf.readBoolean();
         return new StructureRuleDescriptor(
                 structureId, structureSetId, placementType, originalWeight, originalFrequency, originalSalt,
                 originalSpacing, originalSeparation, originalSpreadType,
                 originalDistance, originalSpread, originalCount,
-                dimensionIds, entryRule, placementRule
+                dimensionIds, entryRule, placementRule, custom
         );
     }
 

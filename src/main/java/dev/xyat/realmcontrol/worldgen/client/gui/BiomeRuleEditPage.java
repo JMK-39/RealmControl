@@ -13,6 +13,8 @@ import dev.xyat.realmcontrol.worldgen.config.BiomeReplacementRule;
 
 
 public final class BiomeRuleEditPage extends KineticPage {
+    private static final int PANEL_WIDTH = 480;
+    private static final int PANEL_HEIGHT = 158;
     private final BiomeControlPage parent;
     private int ruleIndex;
     private final BiomeReplacementRule original;
@@ -20,6 +22,8 @@ public final class BiomeRuleEditPage extends KineticPage {
     private KineticAutoCompleteField sourceBox;
     private KineticAutoCompleteField targetBox;
     private boolean removeTarget;
+    private int panelX;
+    private int panelY;
 
     BiomeRuleEditPage(BiomeControlPage parent, int ruleIndex, BiomeReplacementRule original) {
         super(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.title"));
@@ -32,13 +36,16 @@ public final class BiomeRuleEditPage extends KineticPage {
 
     @Override
     protected void build(KineticUi ui) {
-        int x = 120;
-        int width = 400;
-        int y = 70;
+        panelX = (width() - PANEL_WIDTH) / 2;
+        panelY = (height() - PANEL_HEIGHT) / 2;
+        // Header: Back, the title and Apply; then the three fields with their labels and the removal switch.
+        int x = panelX + 8;
+        int width = PANEL_WIDTH - 16;
+        int y = panelY + 39;
 
         dimensionBox = ui().autoComplete(x, y, width, parent::dimensionSuggestions).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.dimension.placeholder")).build();
-        sourceBox = ui().autoComplete(x, y + 54, width, parent::sourceSuggestions).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.source.placeholder")).build();
-        targetBox = ui().autoComplete(x, y + 108, width, parent::targetSuggestions).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.target.placeholder")).build();
+        sourceBox = ui().autoComplete(x, y + 36, width, parent::sourceSuggestions).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.source.placeholder")).build();
+        targetBox = ui().autoComplete(x, y + 72, width, parent::targetSuggestions).placeholder(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.target.placeholder")).build();
 
         dimensionBox.setTextValue(original == null ? BiomeReplacementRule.ALL_DIMENSIONS : original.dimensionId());
         sourceBox.setTextValue(original == null ? "" : original.source());
@@ -48,14 +55,14 @@ public final class BiomeRuleEditPage extends KineticPage {
         targetBox.setDefaultText(targetBox.textValue());
         setControlEnabled(targetBox, !removeTarget);
 
-        ui().toggle(x, y + 152, 150).value(removeTarget).labels(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.on"), KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.off")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.tooltip")).onChange(value -> {
+        ui().toggle(x, y + 96, 96).value(removeTarget).labels(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.on"), KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.off")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.remove.tooltip")).onChange(value -> {
                     removeTarget = value;
                     setControlEnabled(targetBox, !removeTarget);
                     if (removeTarget) blur(targetBox);
                 }).build();
 
-        ui().button(x + 240, y + 202, 80).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.save")).onClick(this::saveRule).build();
-        ui().button(84, 39, 75).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
+        ui().button(panelX + PANEL_WIDTH - 4 - 56, panelY + 4, 56).text(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.save")).onClick(this::saveRule).build();
+        ui().button(panelX + 4, panelY + 4, 40).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
     }
 
     private void saveRule() {
@@ -86,15 +93,16 @@ public final class BiomeRuleEditPage extends KineticPage {
     @Override
     protected void renderBackground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
         KineticTheme.shadow(graphics, width(), height());
-        KineticTheme.panel(graphics, 80, 35, 480, 290);
+        KineticTheme.panel(graphics, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT);
+        KineticTheme.separator(graphics, panelX + 4, panelY + 24, PANEL_WIDTH - 8);
     }
 
     @Override
     protected void renderForeground(KineticGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.title"), 161, 48, 359, 0xFFFFFFFF, false);
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.dimension"), 120, 60, 400, 0xFFCCCCCC, false);
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.source"), 120, 114, 400, 0xFFCCCCCC, false);
-        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.target"), 120, 168, 400, 0xFFCCCCCC, false);
+        graphics.scrollingTextCentered(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.editor.title"), panelX + PANEL_WIDTH / 2, panelY + 8, PANEL_WIDTH - 2 * (4 + 56 + 4), 0xFFFFFFFF, false);
+        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.dimension"), panelX + 8, panelY + 28, PANEL_WIDTH - 16, 0xFFCCCCCC, false);
+        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.source"), panelX + 8, panelY + 64, PANEL_WIDTH - 16, 0xFFCCCCCC, false);
+        graphics.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldgen.biome.target"), panelX + 8, panelY + 100, PANEL_WIDTH - 16, 0xFFCCCCCC, false);
     }
     private static boolean isControlVisible(KineticControl control) {
         return control != null && control.controlVisible();

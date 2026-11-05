@@ -46,6 +46,10 @@ public final class WeightedBlockMergePage extends KineticPage {
     private static final int CHANCE_LABEL_MAX_WIDTH = 110;
     private static final int PANEL_INSET = 3;
     private static final int SCROLLBAR_WIDTH = 4;
+    /** Header inside the right panel: the mode prompt, weight and chance controls, 2 px clear of the top line. */
+    private static final int RIGHT_HEADER = 20;
+    /** Fixed room for the weight label in every language; it scrolls when longer. */
+    private static final int WEIGHT_LABEL_WIDTH = 40;
     private static final int SCROLLBAR_MIN_THUMB = 20;
     private static final int SELECTED_OUTLINE_COLOR = 0xFF55FF55;
     private static final int HOVER_OUTLINE_COLOR = 0xFFAAAAAA;
@@ -162,19 +166,27 @@ public final class WeightedBlockMergePage extends KineticPage {
         this.allItems = new ArrayList<>(ItemSearchCache.getAllItems());
         useCanvas(CANVAS_WIDTH, CANVAS_HEIGHT, SAFE_MARGIN);
         configureStandaloneDraft(this::captureWeightedSnapshot, this::restoreWeightedSnapshot);
+        bindDeleteAction(() -> mode == Mode.SELECT_TARGETS && activeTarget != null && selectedTargets.containsKey(activeTarget)
+                        || selectedSource != null && rules.containsKey(selectedSource),
+                () -> {
+                    if (mode == Mode.SELECT_TARGETS && activeTarget != null && selectedTargets.containsKey(activeTarget)) removeTarget(activeTarget);
+                    else deleteRule(selectedSource);
+                });
     }
 
     @Override
     protected void build(KineticUi ui) {
-        int pad = 8;
+        // Both panels start under the top row and reach 4 px from the page edges; the mode prompt and the weight and
+        // chance controls live in the right panel's header, the browse help in the New Rule tooltip.
+        int pad = 4;
         int gap = 6;
-        leftW = Math.max(150, Math.min(190, width() / 3));
+        leftW = Math.max(120, Math.min(184, width() / 4 + 29));
         leftX = pad;
         rightX = leftX + leftW + gap;
         rightW = Math.max(180, width() - rightX - pad);
-        leftY = 58;
-        rightY = 58;
-        leftH = Math.max(100, height() - leftY - 10);
+        leftY = 24;
+        rightY = 24;
+        leftH = Math.max(100, height() - leftY - 4);
         rightH = leftH;
 
         leftContentX = leftX + PANEL_INSET;
@@ -182,43 +194,46 @@ public final class WeightedBlockMergePage extends KineticPage {
         leftContentW = Math.max(1, leftW - PANEL_INSET * 3 - SCROLLBAR_WIDTH);
         leftContentH = Math.max(1, leftH - PANEL_INSET * 2);
         rightContentX = rightX + PANEL_INSET;
-        rightContentY = rightY + PANEL_INSET;
+        rightContentY = rightY + RIGHT_HEADER;
         rightContentW = Math.max(1, rightW - PANEL_INSET * 2 - SCROLLBAR_WIDTH);
-        rightContentH = Math.max(1, rightH - PANEL_INSET * 2);
+        rightContentH = Math.max(1, rightH - RIGHT_HEADER - PANEL_INSET);
         cols = Math.max(1, rightContentW / SLOT_PITCH);
 
-        int buttonWidth = 62;
+        int buttonWidth = 40;
         leftSearch = ui().textField(leftX + buttonWidth + 2, 5, leftW - buttonWidth - 2).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.search.hint")).build();
         leftSearch.onTextChange(ignored -> refreshLeft());
-        int closeX = rightX + rightW - buttonWidth;
-        int saveX = closeX - gap - buttonWidth;
+        int loadedToggleWidth = 80;
+        int loadedToggleX = rightX + rightW - loadedToggleWidth;
+        int saveX = loadedToggleX - gap - buttonWidth;
         int doneX = saveX - gap - buttonWidth;
         int newX = doneX - gap - buttonWidth;
-        int searchWidth = Math.max(80, newX - rightX - gap);
+        int searchWidth = Math.min(186, Math.max(80, newX - rightX - gap));
 
         rightSearch = ui().textField(rightX, 5, searchWidth).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.search")).build();
         rightSearch.onTextChange(ignored -> refreshRight());
-newButton = ui().button(newX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new")).onClick(() -> startNewRule()).build();
-doneButton = ui().button(doneX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done")).onClick(() -> finishTargets()).build();
-saveButton = ui().button(saveX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save")).onClick(() -> save()).build();
-backButton = ui().button(leftX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
-        // The weight label has a fixed 40 px area in every language, so the box after it never moves.
-        int weightBoxX = rightX + 40 + 6;
-        weightBox = ui().textField(weightBoxX, 31, 72).build();
+newButton = ui().button(newX, 5, buttonWidth).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.new"))
+                .tooltip(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.browse")).onClick(() -> startNewRule()).build();
+doneButton = ui().button(doneX, 5, 40).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.done")).onClick(() -> finishTargets()).build();
+saveButton = ui().button(saveX, 5, 40).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.save")).onClick(() -> save()).build();
+backButton = ui().button(4, 4, 40).text(KineticI18n.translatable("gui.realmcontrol.worldblock.config.back")).onClick(() -> close()).build();
+        // Right header, right to left: chance field and its label, then + and -, the weight field and its label.
+        // Labels have fixed areas in every language, so the fields never move.
+        int controlY = rightY + 2;
+        int chanceBoxX = rightX + rightW - 48;
+        int plusX = chanceBoxX - 3 - chanceLabelWidth() - 6 - 42;
+        int minusX = plusX - 4 - 42;
+        int weightBoxX = minusX - 4 - 72;
+        weightBox = ui().textField(weightBoxX, controlY, 72).build();
         weightBox.limitTextLength(7);
         weightBox.setValidator(value -> value.isEmpty() || value.matches("\\d{1,7}"));
         weightBox.onTextChange(this::updateActiveWeightFromText);
-int minusX = weightBoxX + weightBox.controlWidth() + 4;
-        minusButton = ui().button(minusX, 31, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus")).onClick(() -> adjustWeight(-10)).build();
-plusButton = ui().button(minusX + 46, 31, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus")).onClick(() -> adjustWeight(10)).build();
-int chanceBoxX = rightX + rightW - 48;
-        chanceBox = ui().textField(chanceBoxX, 31, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
+        minusButton = ui().button(minusX, controlY, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.minus")).onClick(() -> adjustWeight(-10)).build();
+plusButton = ui().button(plusX, controlY, 42).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight.plus")).onClick(() -> adjustWeight(10)).build();
+        chanceBox = ui().textField(chanceBoxX, controlY, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
         chanceBox.limitTextLength(3);
         chanceBox.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         chanceBox.onTextChange(this::updateReplacementChance);
-int loadedToggleWidth = 80;
-        int loadedToggleX = chanceBoxX - chanceLabelWidth() - loadedToggleWidth - 10;
-        loadedChunksToggleBtn = ui().button(loadedToggleX, 31, loadedToggleWidth).text(getLoadedChunksToggleText()).onClick(() -> {
+        loadedChunksToggleBtn = ui().button(loadedToggleX, 5, loadedToggleWidth).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyWeightedToLoadedChunksOnce = !applyWeightedToLoadedChunksOnce;
                     loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
                 }).build();
@@ -595,9 +610,12 @@ refreshLeft();
 
     @Override
     protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, width(), height(), 0xFF222222, 0xFF111111);
-        KineticTheme.panel(g, leftX, leftY, leftW, leftH);
-        KineticTheme.panel(g, rightX, rightY, rightW, rightH);
+        KineticTheme.panel(g, 0, 0, width(), height());
+        KineticTheme.surface(g, leftX, leftY, leftW, leftH, KineticTheme.Surface.PANEL);
+        KineticTheme.surface(g, rightX, rightY, rightW, rightH, KineticTheme.Surface.PANEL);
+        KineticTheme.separator(g, 4, Math.min(leftY, rightY) - 2, width() - 8);
+        g.vLine((leftX + leftW + rightX) / 2, Math.min(leftY, rightY),
+                Math.max(leftY + leftH, rightY + rightH), KineticTheme.current().accentHover());
     }
 
     @Override
@@ -607,10 +625,15 @@ refreshLeft();
         renderHeader(g);
     }
 
+    /**
+     * The right panel's header: the selected source block and the prompt of the current step on the left, the weight
+     * and chance controls on the right. Browsing shows nothing here; its help is the New Rule tooltip.
+     */
     private void renderHeader(KineticGraphics g) {
-        int statusX = leftX;
+        int textY = rightY + 6;
+        int statusX = rightX + 6;
         Component status = switch (mode) {
-            case BROWSE -> KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.browse");
+            case BROWSE -> null;
             case SELECT_SOURCE -> KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.mode.source");
             case SELECT_TARGETS -> KineticI18n.translatable(
                     "gui.realmcontrol.worldblock.banitem.block.weighted.mode.targets",
@@ -619,29 +642,26 @@ refreshLeft();
         };
         if (mode == Mode.SELECT_TARGETS && selectedSource != null) {
             var sourceStack = WorldBlockConfig.parseItemStack(selectedSource);
-            KineticTheme.itemSlot(g, leftX, 32, SLOT_SIZE, 4, false);
+            int iconX = statusX;
+            KineticTheme.itemSlot(g, iconX, rightY + 2, 16, 4, false);
             ItemBanControl.withSkip(() -> {
-                KineticTheme.item(g, sourceStack, leftX, 32, SLOT_SIZE, 1.0F, false);
+                KineticTheme.item(g, sourceStack, iconX, rightY + 2, 16, 0.75F, false);
                 return null;
             });
-            statusX += SLOT_SIZE + 4;
+            statusX += 16 + 4;
         }
-        int statusRight = width() - 8;
-        // The status shares its row with the loaded-chunks toggle and the chance field; it stops 4 px before them.
-        if (isControlVisible(loadedChunksToggleBtn)) statusRight = Math.min(statusRight, loadedChunksToggleBtn.controlX() - 4);
-        if (chanceBox != null && isControlVisible(chanceBox)) {
-            statusRight = Math.min(statusRight, chanceBox.controlX() - 3 - chanceLabelWidth() - 4);
-        }
-        int statusWidth = mode == Mode.SELECT_TARGETS && activeTarget != null
-                ? Math.max(1, leftW - (statusX - leftX))
-                : Math.max(1, statusRight - statusX);
-        g.scrollingText(status, statusX, 36, statusWidth, 0xFFFFFFFF, false);
-        if (mode == Mode.SELECT_TARGETS && activeTarget != null) {
-            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"), rightX, 37, Math.max(1, weightBox.controlX() - rightX - 3), 0xFFFFFFFF, false);
+        boolean editWeight = weightBox != null && isControlVisible(weightBox);
+        int weightLabelX = editWeight ? weightBox.controlX() - 6 - WEIGHT_LABEL_WIDTH : 0;
+        int statusRight = rightX + rightW - 4;
+        if (editWeight) statusRight = weightLabelX - 4;
+        else if (chanceBox != null && isControlVisible(chanceBox)) statusRight = chanceBox.controlX() - 3 - chanceLabelWidth() - 4;
+        if (status != null) g.scrollingText(status, statusX, textY, Math.max(1, statusRight - statusX), 0xFFFFFFFF, false);
+        if (editWeight) {
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.weight"), weightLabelX, textY, WEIGHT_LABEL_WIDTH, 0xFFFFFFFF, false);
         }
         if (chanceBox != null && isControlVisible(chanceBox)) {
             Component chanceLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            g.scrollingTextRight(chanceLabel, chanceBox.controlX() - 3, 37, chanceLabelWidth(), 0xFFFFFFFF, false);
+            g.scrollingTextRight(chanceLabel, chanceBox.controlX() - 3, textY, chanceLabelWidth(), 0xFFFFFFFF, false);
         }
     }
 
@@ -816,16 +836,20 @@ refreshLeft();
             }
         }
         if (mode == Mode.SELECT_TARGETS && selectedSource != null
-                && smx >= leftX && smx < leftX + SLOT_SIZE
-                && smy >= 32 && smy < 32 + SLOT_SIZE) {
+                && KineticTheme.hovering(smx, smy, rightX + 6, rightY + 2, 16, 16)) {
             var sourceStack = WorldBlockConfig.parseItemStack(selectedSource);
-            showTooltip(List.of(ItemCacheHudRenderer.getDisplayNameCustom(sourceStack), Component.literal(selectedSource)));
+            showItemTooltip(sourceStack);
             return;
         }
         int leftRuleIndex = leftRuleAt(smx, smy);
         if (leftRuleIndex >= 0) {
             String source = visibleSources.get(leftRuleIndex);
             var sourceStack = WorldBlockConfig.parseItemStack(source);
+            int rowY = leftContentY + leftRuleIndex * SOURCE_ROW_PITCH - (int) Math.round(leftScroll.smoothOffset());
+            if (KineticTheme.hovering(smx, smy, leftContentX + 3, rowY + 3, SLOT_SIZE, SLOT_SIZE)) {
+                showItemTooltip(sourceStack);
+                return;
+            }
             showTooltip(List.of(
                             ItemCacheHudRenderer.getDisplayNameCustom(sourceStack),
                             Component.literal(source),
@@ -836,23 +860,7 @@ refreshLeft();
         int index = rightItemAt(smx, smy);
         if (index >= 0) {
             KineticItemSearch.CachedItem item = visibleItems.get(index);
-            List<Component> tooltip = new ArrayList<>();
-            tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
-            tooltip.add(Component.literal(item.id()));
-            if (mode == Mode.SELECT_SOURCE) {
-                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.source.tooltip"));
-            } else if (selectedTargets.containsKey(item.id())) {
-                long total = selectedTotalWeight();
-                tooltip.add(KineticI18n.translatable(
-                        "gui.realmcontrol.worldblock.banitem.block.weighted.target.selected.tooltip",
-                        selectedTargets.get(item.id()),
-                        formatProbability(selectedTargets.get(item.id()), total)
-                ));
-                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.remove.tooltip"));
-            } else {
-                tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.weighted.target.add.tooltip"));
-            }
-            showTooltip(tooltip);
+            showItemTooltip(item.stack());
         }
     }
 

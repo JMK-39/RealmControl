@@ -42,6 +42,9 @@ public class OreMergePage extends KineticPage {
     // A long chance label scrolls within this width instead of pushing the loaded-chunks toggle out of the panel.
     private static final int CHANCE_LABEL_MAX_WIDTH = 110;
     private static final int RIGHT_SCROLLBAR_INSET = 7;
+    private static final int LOADED_CHUNKS_WIDTH = 80;
+    /** Top-row position of the loaded-chunks switch in the wide layout; -1 in the compact layout. */
+    private int loadedChunksX = -1, loadedChunksY;
     private static String rememberedLeftSearch = "";
     private static String rememberedRightSearch = "";
 
@@ -57,6 +60,8 @@ public class OreMergePage extends KineticPage {
 
     private KineticTextField leftSearchBox;
     private KineticTextField searchBox;
+    private String selectedSourceTarget;
+    private String selectedSourceId;
     private KineticButton addBtn;
     private KineticButton filterBtn;
     private KineticButton doneBtn;
@@ -157,17 +162,15 @@ public class OreMergePage extends KineticPage {
         useCanvas(640, 360, 4);
         this.allItemsCache = new ArrayList<>(ItemSearchCache.getAllItems());
         configureStandaloneDraft(this::captureMergeSnapshot, this::restoreMergeSnapshot);
+        bindDeleteAction(() -> canDeleteSource() || selectedTarget != null && tempRules.containsKey(selectedTarget), () -> {
+            if (canDeleteSource()) deleteSource(selectedSourceTarget, selectedSourceId);
+            else deleteTarget(selectedTarget);
+        });
     }
 
     @Override
     protected void build(KineticUi ui) {
-        int sidePadding =
-                switch (layoutMetrics().level()) {
-                    case LARGE -> 14;
-                    case NORMAL -> 10;
-                    case SMALL -> 8;
-                    case COMPACT -> 6;
-                };
+        int sidePadding = 4;
 
         int gap = 5;
 
@@ -182,8 +185,9 @@ public class OreMergePage extends KineticPage {
                     gap
             );
         } else {
+            // The wide layout uses the whole page: 4 px to the page edges, the loaded-chunks switch in the top row.
             initWideLayout(
-                    sidePadding,
+                    4,
                     gap
             );
         }
@@ -204,15 +208,15 @@ public class OreMergePage extends KineticPage {
             int sidePadding,
             int gap
     ) {
-        int searchY = 5;
-        int panelY = 30;
+        int searchY = 4;
+        int panelY = 24;
 
         leftW =
                 Math.max(
                         120,
                         Math.min(
-                                170,
-                                width() / 4
+                                184,
+                                width() / 4 + 29
                         )
                 );
 
@@ -224,7 +228,7 @@ public class OreMergePage extends KineticPage {
                         80,
                         height()
                                 - panelY
-                                - 8
+                                - 4
                 );
 
         rightX =
@@ -254,7 +258,7 @@ public class OreMergePage extends KineticPage {
 
         fitRightPanelToWholeRows();
 
-        int buttonWidth = 60;
+        int buttonWidth = 40;
         leftSearchBox =
                 createLeftSearchBox(
                         leftX + buttonWidth + 2,
@@ -262,18 +266,13 @@ public class OreMergePage extends KineticPage {
                         leftW - buttonWidth - 2
                 );
 
-        int closeX =
-                rightX
-                        + rightW
-                        - buttonWidth;
-
-        int saveX =
-                closeX
-                        - gap
-                        - buttonWidth;
+        // Back sits at the left and Save at the right end of the top row, the loaded-chunks switch left of Save.
+        int saveX = rightX + rightW - buttonWidth;
+        loadedChunksX = saveX - gap - LOADED_CHUNKS_WIDTH;
+        loadedChunksY = searchY;
 
         int filterX =
-                saveX
+                loadedChunksX
                         - gap
                         - buttonWidth;
 
@@ -286,7 +285,7 @@ public class OreMergePage extends KineticPage {
                 Math.max(
                         80,
                         Math.min(
-                                140,
+                                180,
                                 addX
                                         - gap
                                         - rightX
@@ -340,6 +339,7 @@ public class OreMergePage extends KineticPage {
             int sidePadding,
             int gap
     ) {
+        loadedChunksX = -1;
         int contentW =
                 Math.max(
                         140,
@@ -350,7 +350,7 @@ public class OreMergePage extends KineticPage {
         leftX = sidePadding;
         leftW = contentW;
 
-        int backWidth = 60;
+        int backWidth = 40;
         leftSearchBox =
                 createLeftSearchBox(
                         leftX + backWidth + 2,
@@ -523,11 +523,13 @@ return box;
     }
 
     private KineticButton createLoadedChunksToggleButton() {
-        int width = 80;
-        int chanceBoxX = rightX + rightW - 48;
-        int x = chanceBoxX - chanceLabelWidth() - width - 10;
-        // 3 px under the panel's top line, 2 px clear of it.
-        int y = rightY + 3;
+        int width = LOADED_CHUNKS_WIDTH;
+        int x = loadedChunksX, y = loadedChunksY;
+        if (x < 0) {
+            // Compact layout: in the right panel's header, before the chance field, 2 px clear of the top line.
+            x = rightX + rightW - 48 - chanceLabelWidth() - width - 10;
+            y = rightY + 2;
+        }
         KineticButton button = ui().button(x, y, width).text(getLoadedChunksToggleText()).onClick(() -> {
                     applyToLoadedChunksOnce = !applyToLoadedChunksOnce;
                     loadedChunksToggleBtn.setText(getLoadedChunksToggleText());
@@ -544,7 +546,7 @@ return button;
     }
 
     private KineticTextField createReplacementChanceBox() {
-        KineticTextField box = ui().textField(rightX + rightW - 48, rightY + 3, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
+        KineticTextField box = ui().textField(rightX + rightW - 48, rightY + 2, 44).label(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance")).build();
         box.limitTextLength(3);
         box.setValidator(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         box.onTextChange(this::updateReplacementChance);
@@ -602,7 +604,7 @@ return button;
             int y,
             int width
     ) {
-        KineticButton button = ui().button(x, y, width).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done")).onClick(() -> {
+        KineticButton button = ui().button(x, y, 40).text(KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.merge.create.done")).onClick(() -> {
                     if (!isCreatingRule || selectingNewTarget || pendingSources.isEmpty()) return;
                     selectingNewTarget = true;
                     groupFilterEnabled = false;
@@ -635,7 +637,7 @@ return button;
             int width
     ) {
         KineticButton button =
-                ui().button(x, y, width).text(KineticI18n.translatable(
+                ui().button(x, y, 40).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.block.merge.save"
                                 )).onClick(() -> saveAndApply()).build();
 return button;
@@ -647,7 +649,7 @@ return button;
             int width
     ) {
         KineticButton button =
-                ui().button(x, y, width).text(KineticI18n.translatable(
+                ui().button(x, y, 40).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.config.back"
                                 )).onClick(() -> closeScreen()).build();
 return button;
@@ -907,9 +909,16 @@ return button;
 
     @Override
     protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
-        g.fillGradient(0, 0, width(), height(), 0xFF222222, 0xFF111111);
-        KineticTheme.panel(g, leftX, leftY, leftW, leftH);
-        KineticTheme.panel(g, rightX, rightY, rightW, rightH);
+        KineticTheme.panel(g, 0, 0, width(), height());
+        KineticTheme.surface(g, leftX, leftY, leftW, leftH, KineticTheme.Surface.PANEL);
+        KineticTheme.surface(g, rightX, rightY, rightW, rightH, KineticTheme.Surface.PANEL);
+        KineticTheme.separator(g, 4, Math.min(leftY, rightY) - 2, width() - 8);
+        if (rightX > leftX) {
+            g.vLine((leftX + leftW + rightX) / 2, Math.min(leftY, rightY),
+                    Math.max(leftY + leftH, rightY + rightH), KineticTheme.current().accentHover());
+        } else {
+            KineticTheme.separator(g, leftX, (leftY + leftH + rightY) / 2, Math.max(leftW, rightW));
+        }
     }
 
     @Override
@@ -955,7 +964,7 @@ return button;
     }
 
     private int getRightHeaderHeight() {
-        return 24;
+        return 20;
     }
 
     private int getRightGridY() {
@@ -994,13 +1003,13 @@ return button;
         int infoRight = replacementChanceBox != null && isControlVisible(replacementChanceBox)
                 ? replacementChanceBox.controlX() - chanceLabelWidth() - 6
                 : rightX + rightW - 4;
-        if (loadedChunksToggleBtn != null && isControlVisible(loadedChunksToggleBtn)) {
+        if (loadedChunksX < 0 && loadedChunksToggleBtn != null && isControlVisible(loadedChunksToggleBtn)) {
             infoRight = Math.min(infoRight, loadedChunksToggleBtn.controlX() - 6);
         }
-        g.scrollingText(info, rightX + 6, rightY + 8, Math.max(1, infoRight - (rightX + 6)), 0xFFFFFFFF, false);
+        g.scrollingText(info, rightX + 6, rightY + 6, Math.max(1, infoRight - (rightX + 6)), 0xFFFFFFFF, false);
         if (replacementChanceBox != null && isControlVisible(replacementChanceBox)) {
             Component chanceLabel = KineticI18n.translatable("gui.realmcontrol.worldblock.banitem.block.replace_chance");
-            g.scrollingTextRight(chanceLabel, replacementChanceBox.controlX() - 3, rightY + 8, chanceLabelWidth(), 0xFFFFFFFF, false);
+            g.scrollingTextRight(chanceLabel, replacementChanceBox.controlX() - 3, rightY + 6, chanceLabelWidth(), 0xFFFFFFFF, false);
         }
     }
 
@@ -1092,7 +1101,7 @@ return button;
             int currentY = leftY - (int) Math.round(leftScroll.smoothOffset());
             for (LeftEntry entry : leftEntries) {
                 if (currentY + entry.h >= leftY && currentY <= leftY + leftH && smx >= entry.x && smx < entry.x + entry.w && smy >= currentY && smy < currentY + entry.h) {
-                    entry.requestTooltip();
+                    entry.requestTooltip(smx, smy);
                     return;
                 }
                 currentY += entry.h + 2;
@@ -1102,18 +1111,7 @@ return button;
         int idx = getRightItemIndexAt(smx, smy);
         if (idx >= 0) {
             KineticItemSearch.CachedItem item = rightDisplayList.get(idx);
-            List<Component> tooltip = new ArrayList<>();
-            tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
-            tooltip.add(Component.literal(item.id()));
-            String actionKey = !isCreatingRule
-                    ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.add_source"
-                    : selectingNewTarget
-                    ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.set_final_target"
-                    : pendingSources.contains(item.id())
-                    ? "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.unselect_replaced"
-                    : "gui.realmcontrol.worldblock.banitem.block.merge.tooltip.select_replaced";
-            tooltip.add(KineticI18n.translatable(actionKey));
-            showTooltip(tooltip);
+            showItemTooltip(item.stack());
         }
     }
 
@@ -1202,6 +1200,8 @@ return button;
                     if (!sources.contains(source)) sources.add(source);
                 }
                 selectedTarget = id;
+                selectedSourceTarget = null;
+                selectedSourceId = null;
                 isCreatingRule = false;
                 selectingNewTarget = false;
                 pendingSources.clear();
@@ -1279,6 +1279,32 @@ return button;
         return false;
     }
 
+    private boolean canDeleteSource() {
+        if (selectedSourceTarget == null || selectedSourceId == null) return false;
+        List<String> sources = tempRules.get(selectedSourceTarget);
+        return selectedSourceId != null && sources != null && sources.contains(selectedSourceId);
+    }
+
+    private void deleteSource(String targetId, String sourceId) {
+        List<String> sources = tempRules.get(targetId);
+        if (sources == null || !sources.remove(sourceId)) return;
+        selectedSourceTarget = null;
+        selectedSourceId = null;
+        updateLeftEntries();
+        updateRightPanel();
+    }
+
+    private void deleteTarget(String id) {
+        if (id == null || !tempRules.containsKey(id)) return;
+        tempRules.remove(id);
+        replacementChances.remove(getBaseIdentifier(id));
+        if (id.equals(selectedTarget)) selectedTarget = null;
+        if (id.equals(selectedSourceTarget)) { selectedSourceTarget = null; selectedSourceId = null; }
+        expandedTargets.remove(id);
+        updateLeftEntries();
+        updateRightPanel();
+    }
+
     abstract static class LeftEntry {
         int x;
         int y;
@@ -1289,7 +1315,7 @@ return button;
 
         abstract boolean mouseClicked(MouseInput input);
 
-        abstract void requestTooltip();
+        abstract void requestTooltip(int mouseX, int mouseY);
     }
 
     class TargetEntry extends LeftEntry {
@@ -1325,6 +1351,8 @@ return button;
                 if (expandedTargets.contains(id)) expandedTargets.remove(id);
                 else expandedTargets.add(id);
                 selectedTarget = id;
+                selectedSourceTarget = null;
+                selectedSourceId = null;
                 isCreatingRule = false;
                 selectingNewTarget = false;
                 pendingSources.clear();
@@ -1334,19 +1362,18 @@ return button;
                 return true;
             }
             if (input.isRight()) {
-                tempRules.remove(id);
-                replacementChances.remove(getBaseIdentifier(id));
-                if (id.equals(selectedTarget)) selectedTarget = null;
-                expandedTargets.remove(id);
-                updateLeftEntries();
-                updateRightPanel();
+                deleteTarget(id);
                 return true;
             }
             return false;
         }
 
         @Override
-        void requestTooltip() {
+        void requestTooltip(int mouseX, int mouseY) {
+            if (KineticTheme.hovering(mouseX, mouseY, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE)) {
+                showItemTooltip(stack);
+                return;
+            }
             List<Component> tooltip = new ArrayList<>();
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(id));
@@ -1369,8 +1396,9 @@ return button;
         @Override
         void render(KineticGraphics g, int mx, int my) {
             boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-            KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, false, hover, false);
-            KineticTheme.itemSlot(g, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE, 4, false, hover, false);
+            boolean selected = targetId.equals(selectedSourceTarget) && sourceId.equals(selectedSourceId);
+            KineticTheme.stateSurface(g, x, y, w, h, KineticTheme.Surface.PANEL_ALT, selected, hover, false);
+            KineticTheme.itemSlot(g, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE, 4, selected, hover, false);
             ItemBanControl.withSkip(() -> {
                 KineticTheme.item(g, stack, x + 3, y + 3, SLOT_SIZE, 1.0F, false);
                 return null;
@@ -1379,18 +1407,24 @@ return button;
 
         @Override
         boolean mouseClicked(MouseInput input) {
+            if (input.isLeft()) {
+                selectedSourceTarget = targetId;
+                selectedSourceId = sourceId;
+                return true;
+            }
             if (input.isRight()) {
-                List<String> sources = tempRules.get(targetId);
-                if (sources != null) sources.remove(sourceId);
-                updateLeftEntries();
-                updateRightPanel();
+                deleteSource(targetId, sourceId);
                 return true;
             }
             return false;
         }
 
         @Override
-        void requestTooltip() {
+        void requestTooltip(int mouseX, int mouseY) {
+            if (KineticTheme.hovering(mouseX, mouseY, x + 3, y + 3, SLOT_SIZE, SLOT_SIZE)) {
+                showItemTooltip(stack);
+                return;
+            }
             List<Component> tooltip = new ArrayList<>();
             tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(stack));
             tooltip.add(Component.literal(sourceId));

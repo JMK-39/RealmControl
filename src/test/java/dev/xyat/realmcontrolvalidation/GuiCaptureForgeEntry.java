@@ -8,6 +8,9 @@ public final class GuiCaptureForgeEntry {
         if (Boolean.getBoolean("realmcontrol.guiValidation")) {
             dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> GuiCaptureValidation::install);
         }
+        if (Boolean.getBoolean("realmcontrolstructure.guiValidation")) {
+            dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> StructureEditorValidation::install);
+        }
     }
 }
 //?}

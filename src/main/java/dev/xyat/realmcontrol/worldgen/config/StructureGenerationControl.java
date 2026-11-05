@@ -80,16 +80,16 @@ public final class StructureGenerationControl {
 
         Registry<Structure> structureRegistry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
         Map<String, List<String>> structureDimensions = collectStructureDimensions(server, structureRegistry);
+        Set<String> custom = customStructures();
         List<StructureRuleDescriptor> result = new ArrayList<>();
         Set<String> described = new HashSet<>();
 
         for (Snapshot snapshot : SNAPSHOTS_BY_ID.values()) {
-            StructurePlacement placement = snapshot.originalPlacement();
             for (StructureSet.StructureSelectionEntry entry : snapshot.originalEntries()) {
                 String structureId = structureId(structureRegistry, entry.structure());
                 if (structureId == null) continue;
                 described.add(structureId);
-                result.add(toDescriptor(structureId, snapshot, entry, structureDimensions.getOrDefault(structureId, List.of())));
+                result.add(toDescriptor(structureId, snapshot, entry, structureDimensions.getOrDefault(structureId, List.of()), custom.contains(structureId)));
             }
         }
 
@@ -112,7 +112,8 @@ public final class StructureGenerationControl {
                     null,
                     structureDimensions.getOrDefault(structureId, List.of()),
                     entryRule,
-                    null
+                    null,
+                    custom.contains(structureId)
             ));
         }
 
@@ -210,11 +211,24 @@ public final class StructureGenerationControl {
         return snapshot == null ? "unassigned" : placementType(snapshot.originalPlacement());
     }
 
+    /**
+     * The structures the structure editor published (drafts that are not plain drafts). Their rules live in their
+     * drafts and published files, so the override rules of this panel leave them alone.
+     */
+    private static Set<String> customStructures() {
+        Set<String> ids = new HashSet<>();
+        for (dev.xyat.realmcontrol.structure.project.StructureProject project : dev.xyat.realmcontrol.structure.project.ProjectStore.list()) {
+            if (!"draft".equals(project.status)) ids.add(project.id);
+        }
+        return ids;
+    }
+
     private static StructureRuleDescriptor toDescriptor(
             String structureId,
             Snapshot snapshot,
             StructureSet.StructureSelectionEntry entry,
-            List<String> dimensionIds
+            List<String> dimensionIds,
+            boolean custom
     ) {
         StructurePlacement placement = snapshot.originalPlacement();
         Integer spacing = null;
@@ -248,8 +262,9 @@ public final class StructureGenerationControl {
                 spread,
                 count,
                 dimensionIds,
-                entryRules.get(structureId),
-                placementRules.get(snapshot.structureSetId())
+                custom ? null : entryRules.get(structureId),
+                custom ? null : placementRules.get(snapshot.structureSetId()),
+                custom
         );
     }
 
@@ -277,7 +292,10 @@ public final class StructureGenerationControl {
         if (!enabled) return;
 
         Registry<Structure> structureRegistry = registryAccess.registryOrThrow(Registries.STRUCTURE);
+        Set<String> custom = customStructures();
         for (Snapshot snapshot : SNAPSHOTS_BY_ID.values()) {
+            // A custom structure's set has the structure's id and generates as its files say.
+            if (custom.contains(snapshot.structureSetId())) continue;
             List<StructureSet.StructureSelectionEntry> enabledEntries = new ArrayList<>(snapshot.originalEntries().size());
             for (StructureSet.StructureSelectionEntry originalEntry : snapshot.originalEntries()) {
                 String id = structureId(structureRegistry, originalEntry.structure());
@@ -313,6 +331,17 @@ public final class StructureGenerationControl {
                 ? 0.0F
                 : validFrequency(rule == null ? null : rule.frequency(), snapshot.originalFrequency());
         int salt = rule != null && rule.salt() != null ? rule.salt() : ((StructurePlacementAccessor) original).realmcontrol_worldgen$getSalt();
+
+        if (original instanceof dev.xyat.realmcontrol.structure.mega.MegaPlacement mega) {
+            // A mega structure keeps its own placement type, which finds the starts of its parts.
+            int spacing = positiveOrDefault(rule == null ? null : rule.spacing(), mega.spacing());
+            int separation = nonNegativeOrDefault(rule == null ? null : rule.separation(), mega.separation());
+            if (separation >= spacing) {
+                spacing = mega.spacing();
+                separation = mega.separation();
+            }
+            return mega.with(frequency, salt, spacing, separation);
+        }
 
         if (original instanceof RandomSpreadStructurePlacement random) {
             int spacing = positiveOrDefault(rule == null ? null : rule.spacing(), random.spacing());

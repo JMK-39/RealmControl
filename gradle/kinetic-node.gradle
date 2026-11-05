@@ -175,7 +175,8 @@ ext.kineticConfigureReleaseJar = { TaskProvider<? extends Jar> releaseJar ->
                 destinationDirectory.set(rootProject.layout.buildDirectory.dir('libs'))
             } else {
                 // A relative path such as build/release is relative to the repository root, not to versions/<node>/.
-                destinationDirectory.set(rootProject.file(outputPath))
+                // Each Minecraft version gets its own folder (D:/NEWMODS/1.20.1, .../1.21.1, .../26.1.2).
+                destinationDirectory.set(new File(rootProject.file(outputPath), pMinecraft.toString()))
             }
         } else {
             destinationDirectory.set(rootProject.layout.buildDirectory.dir('libs'))
@@ -259,6 +260,14 @@ tasks.register('checkSavedDataRegression', JavaExec) {
 }
 tasks.named('check').configure { dependsOn 'checkSavedDataRegression' }
 
+tasks.register('checkBeaconSpawnRuleDraft', JavaExec) {
+    group = 'verification'
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.xyat.realmcontrol.beacon.config.BeaconSpawnRuleDraftRegression'
+}
+tasks.named('check').configure { dependsOn 'checkBeaconSpawnRuleDraft' }
+
 // MDG can retain Forge's original signatures after remapping its classes. Standalone
 // regression JVMs use unsigned copies, as in KineticCore; the game and release JARs
 // continue to use the original dependencies.
@@ -340,7 +349,7 @@ if (project.property('loader') == 'forge') {
     }
     def captureJar = tasks.register('guiCaptureValidationJar', Jar) {
         dependsOn 'testClasses', writeCaptureMetadata
-        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class' }
+        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class' }
         from captureMetadata
         archiveFileName = 'realmcontrol-gui-capture.jar'
     }

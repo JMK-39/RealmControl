@@ -41,6 +41,7 @@ public class OreBannedPage extends KineticPage {
     private static String lastSearchQuery = "";
 
     private KineticTextField searchBox;
+    private String selectedOre = "";
     private KineticButton ruleBtn;
     private KineticButton saveBtn;
     private KineticButton viewBtn;
@@ -67,6 +68,8 @@ public class OreBannedPage extends KineticPage {
     public OreBannedPage() {
         super(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.title"));
         useCanvas(640, 360, 4);
+        bindDeleteAction(() -> !selectedOre.isEmpty() && !WorldBlockConfig.isProtected(selectedOre)
+                && WorldBlockConfig.data.bannedOreGenerations.contains(selectedOre), this::removeSelectedOre);
         buildOreSources();
         configureStandaloneDraft(
                 WorldBlockConfig::getNetworkJson,
@@ -89,14 +92,14 @@ public class OreBannedPage extends KineticPage {
                         || isCompactLayout()
                         || width() < 520;
 
-        int searchY = 5;
+        int searchY = 4;
         int spacing = 5;
         int ruleBtnW = 60;
 
         gridY =
                 compactToolbar
                         ? 76
-                        : 30;
+                        : 28;
 
         int availableWidth =
                 Math.max(
@@ -106,6 +109,8 @@ public class OreBannedPage extends KineticPage {
                                 - 12
                 );
 
+        // Wide layout: the grid starts 3 px inside its surface and leaves only the scrollbar at the right.
+        if (!compactToolbar) availableWidth = width() - 7 - 6 - 4;
         gridCols =
                 Math.max(
                         1,
@@ -115,7 +120,7 @@ public class OreBannedPage extends KineticPage {
         contentW =
                 gridCols * SLOT_PITCH - 2;
 
-        gridX =
+        gridX = !compactToolbar ? 7 :
                 Math.max(
                         sidePadding,
                         (
@@ -150,7 +155,7 @@ public class OreBannedPage extends KineticPage {
                                                 - spacing * 2
                                 ) / 3
                         )
-                        : 80;
+                        : 64;
 
         int searchW =
                 compactToolbar
@@ -161,10 +166,10 @@ public class OreBannedPage extends KineticPage {
                                         - ruleBtnW
                                         - 4
                         )
-                        : 120;
+                        : 160;
 
         searchBox =
-                ui().textField(gridX + btnW + 2, searchY, searchW).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.search.hint")).build();
+                ui().textField(compactToolbar ? gridX + btnW + 2 : 48, compactToolbar ? searchY : 4, compactToolbar ? searchW : 200).placeholder(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.search.hint")).build();
 
         searchBox.setTextValue(lastSearchQuery);
         searchBox.setDefaultText(lastSearchQuery);
@@ -189,12 +194,13 @@ int buttonY =
             viewX = saveX + btnW + spacing;
             closeX = viewX + btnW + spacing;
         } else {
-            closeX = rightEdge - btnW;
-            viewX = closeX - spacing - btnW;
-            saveX = viewX - spacing - btnW;
+            // Save at the top right, the view toggle left of it.
+            saveX = width() - 4 - 40;
+            viewX = saveX - 4 - btnW;
+            closeX = 4;
         }
         saveBtn =
-                ui().button(saveX, buttonY, btnW).text(KineticI18n.translatable(
+                ui().button(saveX, buttonY, 40).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.save"
                                 )).onClick(() -> save()).build();
 viewBtn =
@@ -211,13 +217,13 @@ viewBtn =
                                     );
                                 }).build();
 closeBtn =
-                ui().button(gridX, searchY, btnW).text(KineticI18n.translatable(
+                ui().button(4, 4, 40).text(KineticI18n.translatable(
                                         "gui.realmcontrol.worldblock.banitem.btn.back"
                                 )).onClick(() -> close()).build();
 infoY =
                 compactToolbar
                         ? 57
-                        : 11;
+                        : 8;
 
         updateSearch(lastSearchQuery);
         ItemSearchCache.prepareCache(() -> {
@@ -256,6 +262,13 @@ infoY =
 
     private Component getViewModeText() {
         return KineticI18n.translatable(viewMode == 0 ? "gui.realmcontrol.worldblock.banblock.view.all" : "gui.realmcontrol.worldblock.banblock.view.banned");
+    }
+
+    private void removeSelectedOre() {
+        if (WorldBlockConfig.isProtected(selectedOre) || !WorldBlockConfig.data.bannedOreGenerations.remove(selectedOre)) return;
+        WorldBlockConfig.rebuildCache();
+        ItemSearchCache.markRulesChanged();
+        updateSearch(searchBox == null ? "" : searchBox.textValue());
     }
 
     private void toggleRuleFromSearch() {
@@ -419,7 +432,9 @@ infoY =
     @Override
     protected void renderBackground(KineticGraphics g, int smx, int smy, float pt) {
         KineticTheme.canvasBackground(g, width(), height());
-        KineticTheme.panelAlt(g, gridX - 3, gridY - 3, contentW + 12, contentH + 6);
+        KineticTheme.panel(g, 0, 0, width(), height());
+        KineticTheme.surface(g, gridX - 3, gridY - 3, contentW + 9, contentH + 6, KineticTheme.Surface.PANEL_ALT);
+        KineticTheme.separator(g, gridX - 3, gridY - 4, contentW + 9);
     }
 
     @Override
@@ -427,7 +442,7 @@ infoY =
         int countX = searchBox.controlX() + searchBox.controlWidth() + 10;
         if (ruleBtn != null && isControlVisible(ruleBtn)) countX = ruleBtn.controlX() + ruleBtn.controlWidth() + 10;
         if (compactToolbar) countX = gridX;
-        int countRight = compactToolbar ? gridX + contentW : saveBtn.controlX() - 2;
+        int countRight = compactToolbar ? gridX + contentW : viewBtn.controlX() - 4;
         int countWidth = Math.max(1, countRight - countX);
 
         if (isAutoCompleteMode) {
@@ -467,6 +482,8 @@ infoY =
                     gridX + contentW,
                     gridY + contentH
             );
+            // All icons of the grid are drawn together (one batch instead of one draw call each).
+            g.batchItems(() -> {
             for (int i = 0; i < displayList.size(); i++) {
                 KineticItemSearch.CachedItem item = displayList.get(i);
                 int col = i % gridCols;
@@ -476,7 +493,7 @@ infoY =
                 if (y + SLOT_SIZE > gridY && y < gridY + contentH) {
                     boolean hovered = smx >= x && smx < x + SLOT_SIZE
                             && smy >= y && smy < y + SLOT_SIZE;
-                    KineticTheme.itemSlot(g, x, y, SLOT_SIZE, 4, hovered);
+                    KineticTheme.itemSlot(g, x, y, SLOT_SIZE, SLOT_SIZE, 4, item.id().equals(selectedOre), hovered, false);
                     ItemBanControl.withSkip(() -> {
                         KineticTheme.item(g, item.stack(), x, y, SLOT_SIZE, 1.0F, true);
                         return null;
@@ -486,6 +503,7 @@ infoY =
                     }
                 }
             }
+            });
         }
         g.endScissor();
         renderScrollbar(g, smx, smy);
@@ -548,9 +566,8 @@ infoY =
                 tooltip.add(KineticI18n.translatable(item.id().startsWith("@") ? "gui.realmcontrol.worldblock.banblock.tooltip.mod_rule" : "gui.realmcontrol.worldblock.banblock.tooltip.tag_rule"));
                 tooltip.add(KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban_rule"));
             } else {
-                tooltip.add(ItemCacheHudRenderer.getDisplayNameCustom(item.stack()));
-                tooltip.add(Component.literal(item.id()));
-                tooltip.add(WorldBlockConfig.isOreGenerationBanned(item.stack()) ? KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.right_unban") : KineticI18n.translatable("gui.realmcontrol.worldblock.banblock.tooltip.left_ban"));
+                showItemTooltip(item.stack());
+                return null;
             }
             showTooltip(tooltip);
             return null;
@@ -592,6 +609,7 @@ infoY =
                 int idx = row * gridCols + col;
                 if (col >= 0 && col < gridCols && idx >= 0 && idx < displayList.size()) {
                     KineticItemSearch.CachedItem item = displayList.get(idx);
+                    selectedOre = item.id();
                     if (item.id().startsWith("@") || item.id().startsWith("#")) {
                         if (input.isRight()) toggleOreRule(item.id());
                         return true;
@@ -604,10 +622,7 @@ infoY =
                         ItemSearchCache.markRulesChanged();
                         updateSearch(searchBox.textValue());
                     } else if (input.isRight() && WorldBlockConfig.data.bannedOreGenerations.contains(item.id())) {
-                        WorldBlockConfig.data.bannedOreGenerations.remove(item.id());
-                        WorldBlockConfig.rebuildCache();
-                        ItemSearchCache.markRulesChanged();
-                        updateSearch(searchBox.textValue());
+                        removeSelectedOre();
                     }
                     return true;
                 }
@@ -644,6 +659,7 @@ infoY =
 
     @Override
     protected boolean onMouseScroll(ScrollInput input) {
+        if (!input.inside(gridX, gridY, contentW + 6, contentH)) return false;
         double d = input.deltaY();
         if (gridScroll.scroll(d, isAutoCompleteMode ? TEXT_ROW_HEIGHT : SLOT_PITCH)) {
             rememberedScrollOffset = gridScroll.offset();
