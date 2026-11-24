@@ -25,6 +25,8 @@ public final class StructureThumbnailClient {
     /** Known structures; a {@code null} texture means the structure has no layout to show. */
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>(64, 0.75F, true);
     private static final Set<String> SHOWN = new LinkedHashSet<>();
+    /** Structures whose picture may have changed: the old one stays up until the new one arrives. */
+    private static final Set<String> STALE = new java.util.HashSet<>();
     private static List<String> requested = List.of();
     private static long lastRequest;
     private static int nextTexture;
@@ -43,8 +45,13 @@ public final class StructureThumbnailClient {
     @Nullable
     public static KineticTexture get(String structureId) {
         Entry entry = ENTRIES.get(structureId);
-        if (entry == null) SHOWN.add(structureId);
+        if (entry == null || STALE.contains(structureId)) SHOWN.add(structureId);
         return entry == null ? null : entry.texture();
+    }
+
+    /** Asks for a structure's picture again the next time a row shows it, after the structure changed. */
+    public static void refresh(String structureId) {
+        if (ENTRIES.containsKey(structureId)) STALE.add(structureId);
     }
 
     /** Whether a structure's thumbnail is here, without noting the structure as shown. */
@@ -67,7 +74,7 @@ public final class StructureThumbnailClient {
         List<String> shown = new ArrayList<>(SHOWN);
         // Pictures that arrived since the last request are not a change; the server drops them by itself.
         List<String> stillMissing = new ArrayList<>(requested);
-        stillMissing.removeIf(ENTRIES::containsKey);
+        stillMissing.removeIf(id -> ENTRIES.containsKey(id) && !STALE.contains(id));
         if (shown.equals(stillMissing)) {
             SHOWN.clear();
             return;
@@ -95,12 +102,14 @@ public final class StructureThumbnailClient {
         }
         ENTRIES.clear();
         SHOWN.clear();
+        STALE.clear();
         requested = List.of();
     }
 
     public static void handle(WorldGenNetwork.StructureThumbnailPacket packet) {
         KineticTexture texture = packet.png().length == 0 ? null
                 : KineticRuntimeTextures.upload("realmcontrol", "structure_thumbnail/" + nextTexture++, packet.png());
+        STALE.remove(packet.structureId());
         Entry previous = ENTRIES.put(packet.structureId(), new Entry(texture));
         if (previous != null && previous.texture() != null) KineticRuntimeTextures.release(previous.texture());
         for (Iterator<Entry> it = ENTRIES.values().iterator(); ENTRIES.size() > CACHED && it.hasNext(); ) {

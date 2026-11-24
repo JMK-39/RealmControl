@@ -1,6 +1,5 @@
 package dev.xyat.realmcontrol.structure.client;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
@@ -20,15 +19,12 @@ import net.minecraft.network.chat.Component;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What the client knows of the structure editor: the selection in this dimension, the projects, running scans and
- * publishes, the biome catalog, the loot tables, the markers of the drafts around the player and the markers the
- * controller has gathered for one batch edit. Arriving data is handed to the open editor page.
+ * publishes, the biome catalog and the loot tables. Arriving data is handed to the open editor page.
  */
 public final class EditorClient {
     private static Selection selection = new Selection();
@@ -36,17 +32,10 @@ public final class EditorClient {
     private static final Map<String, StructureEditorNetwork.ScanProgressPacket> TASKS = new HashMap<>();
     @Nullable private static JsonObject biomes;
     @Nullable private static List<String> lootTables;
-    private static final List<NearbyProject> NEARBY = new ArrayList<>();
-    /** Marker keys the controller gathered with Shift + right click, by draft; the next markers page selects them. */
-    private static final Map<String, Set<String>> BATCH = new HashMap<>();
     @Nullable private static TestPlacementInfo testPlacement;
     /** The draft whose publish leaves and enters the world again once it succeeds. */
     @Nullable private static String rejoinAfter;
     private static boolean rejoinNow;
-
-    /** A draft scanned around the player, with its markers. */
-    public record NearbyProject(StructureProject project, Markers markers) {
-    }
 
     /** A project as the list shows it. */
     public record ProjectEntry(StructureProject project, int cutoutCount, boolean scanning) {
@@ -75,6 +64,10 @@ public final class EditorClient {
 
         default void lootTablesArrived(List<String> ids) {
         }
+
+        /** The answer to {@link StructureEditorNetwork#editEntity}: {@code key}, then {@code data} or {@code problem}. */
+        default void entityDataArrived(String projectId, JsonObject answer) {
+        }
     }
 
     static {
@@ -84,8 +77,6 @@ public final class EditorClient {
             TASKS.clear();
             biomes = null;
             lootTables = null;
-            NEARBY.clear();
-            BATCH.clear();
             testPlacement = null;
             rejoinAfter = null;
         });
@@ -124,15 +115,6 @@ public final class EditorClient {
         return lootTables;
     }
 
-    public static List<NearbyProject> nearby() {
-        return NEARBY;
-    }
-
-    /** The batch of one draft, changed in place. */
-    public static Set<String> batch(String id) {
-        return BATCH.computeIfAbsent(id, key -> new LinkedHashSet<>());
-    }
-
     public static void selection(Selection value) {
         selection = value;
     }
@@ -159,6 +141,10 @@ public final class EditorClient {
                     entry.get("scanning").getAsBoolean()));
         }
         String focus = json.get("focus").getAsString();
+        // The draft a scan, save or publish just changed: its row picture is asked for again.
+        if (!focus.isBlank()) {
+            dev.xyat.realmcontrol.worldgen.preview.client.StructureThumbnailClient.refresh(dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX + focus);
+        }
         if (json.get("open").getAsBoolean() && KineticGui.findPage(StructureEditorPage.class) == null) {
             KineticGui.openChild(new StructureEditorPage(focus.isBlank() ? null : focus));
             return;
@@ -194,7 +180,6 @@ public final class EditorClient {
 
     public static void markers(StructureProject project, Markers markers, JsonObject tables, String focus, boolean open) {
         if (open) {
-            BATCH.remove(project.id);
             KineticGui.openChild(new MarkersPage(project, markers, tables, focus));
             return;
         }
@@ -206,12 +191,11 @@ public final class EditorClient {
         if (listener() instanceof Listener listener) listener.lootTablesArrived(ids);
     }
 
-    public static void nearby(JsonArray list) {
-        NEARBY.clear();
-        for (JsonElement element : list) {
-            JsonObject entry = element.getAsJsonObject();
-            NEARBY.add(new NearbyProject(StructureProject.fromJson(entry.getAsJsonObject("project")), Markers.fromJson(entry.getAsJsonObject("markers"))));
-        }
+    public static void entityData(String projectId, JsonObject answer) {
+        if (answer.has("problem")) KineticOverlays.toast(dev.xyat.kineticcore.api.text.KineticI18n.translatable(answer.get("problem").getAsString()));
+        // The 3D editor hears it even while a picker it opened is in front.
+        MarkersPage page = KineticGui.findPage(MarkersPage.class);
+        if (page != null) page.entityDataArrived(projectId, answer);
     }
 
     public static void result(Component message, boolean success) {

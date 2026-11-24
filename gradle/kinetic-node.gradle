@@ -351,7 +351,7 @@ if (project.property('loader') == 'forge') {
     }
     def captureJar = tasks.register('guiCaptureValidationJar', Jar) {
         dependsOn 'testClasses', writeCaptureMetadata
-        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class' }
+        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class', 'dev/xyat/realmcontrolvalidation/PreviewDragValidation*.class' }
         from captureMetadata
         archiveFileName = 'realmcontrol-gui-capture.jar'
     }

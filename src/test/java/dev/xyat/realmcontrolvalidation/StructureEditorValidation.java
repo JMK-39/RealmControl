@@ -7,7 +7,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import dev.xyat.realmcontrol.structure.StructureEditorModule;
-import dev.xyat.realmcontrol.structure.client.ControllerClient;
 import dev.xyat.realmcontrol.structure.client.EditorClient;
 import dev.xyat.realmcontrol.structure.client.gui.BiomePickerPage;
 import dev.xyat.realmcontrol.structure.client.gui.CutoutPage;
@@ -23,6 +22,7 @@ import dev.xyat.realmcontrol.structure.client.gui.StructureEditorPage;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.client.gui.widget.KineticStructureView;
 import dev.xyat.realmcontrol.structure.mega.MegaLayout;
 import dev.xyat.realmcontrol.structure.mega.MegaStats;
 import dev.xyat.realmcontrol.structure.mega.MegaStructure;
@@ -63,6 +63,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import javax.annotation.Nullable;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.CrossCollisionBlock;
@@ -192,9 +193,13 @@ public final class StructureEditorValidation {
     private static UUID sourceStand;
     private static BoundingBox generated;
     private static long due, deadline;
+    private static final String STAND_NAME = "Validation Stand";
+    @Nullable private static String standKey;
     private static String originalLanguage;
     private static int originalWidth, originalHeight;
     private static java.util.concurrent.CompletableFuture<Void> reload;
+    /** The client's draft list, taken away while the editor without drafts is captured. */
+    @Nullable private static List<EditorClient.ProjectEntry> hiddenProjects;
     private static final StringBuilder details = new StringBuilder();
 
     private StructureEditorValidation() {
@@ -204,6 +209,8 @@ public final class StructureEditorValidation {
         List<String> pages = new ArrayList<>(List.of("editor", "new", "settings", "cutouts", "generation", "biomes", "markers", "loot_picker",
                 "new_table", "spawner", "markers_entities", "save", "save_medium", "save_mega"));
         if (KineticPlatform.isModLoaded("contentstudio")) pages.add("contentstudio");
+        // Last: the editor as a world without drafts shows it.
+        pages.add("editor_empty");
         return pages;
     }
 
@@ -237,6 +244,7 @@ public final class StructureEditorValidation {
                     originalHeight = mc.getWindow().getHeight();
                     onServer(() -> {
                         MinecraftServer server = mc.getSingleplayerServer();
+                        checkPolishRegressions(server);
                         removeFiles();
                         // Creative: the views from above must not end in a fall.
                         command(server, "gamemode creative " + mc.player.getGameProfile().getName());
@@ -298,6 +306,8 @@ public final class StructureEditorValidation {
                         return null;
                     });
                     mc.setScreen(null);
+                    // The keys show for a while after the controller is taken up; an earlier run left it in the hand.
+                    dev.xyat.realmcontrol.structure.client.ControllerClient.showKeys();
                     due = now + 4000L;
                     step = 3;
                 }
@@ -305,21 +315,101 @@ public final class StructureEditorValidation {
                     if (now < due) return;
                     mc.gui.getChat().clearMessages(false);
                     capture("hud");
-                    // The container mode looking straight down on the house: the containers' boxes show through the roof, with their counts in the status line.
-                    onServer(() -> {
-                        MinecraftServer server = mc.getSingleplayerServer();
-                        command(server, "tp " + mc.player.getGameProfile().getName() + " " + (ORIGIN.getX() + 16.5D) + " " + (ORIGIN.getY() + 26) + " " + (ORIGIN.getZ() + 16.5D) + " 0 90");
-                        return null;
-                    });
-                    ControllerClient.setMode(ControllerClient.Mode.CONTAINER);
+                    mc.getWindow().setWindowed(960, 720);
+                    mc.resizeDisplay();
+                    due = now + 1500L;
+                    step = 29;
+                }
+                case 29 -> {
+                    if (now < due) return;
+                    capture("hud_compact");
+                    mc.getWindow().setWindowed(1920, 1080);
+                    mc.resizeDisplay();
+                    // The 3D editor, opened as the editor's button does.
+                    StructureEditorNetwork.request(StructureEditorNetwork.ProjectRequestPacket.Kind.OPEN_MARKERS, ID, "");
+                    due = now + 5000L;
+                    deadline = now + 90_000L;
+                    step = 31;
+                }
+                case 31 -> {
+                    if (now < due) return;
+                    // The armor stand is found in the 3D view, its walls cut down to the floor's layer.
+                    MarkersPage editor = KineticGui.findPage(MarkersPage.class);
+                    KineticStructureView view = editor == null ? null : (KineticStructureView) reflect(editor, "view");
+                    if (view == null || view.snapshot() == null) {
+                        require(now < deadline, "the 3D editor did not show the draft");
+                        return;
+                    }
+                    for (Markers.EntityMark mark : ((Markers) reflect(editor, "markers")).entities) {
+                        if (mark.type.equals("minecraft:armor_stand")) standKey = mark.key();
+                    }
+                    require(standKey != null, "the 3D editor lists the armor stand");
+                    view.setCutY(2);
+                    for (KineticStructureView.Marker marker : view.markers()) {
+                        if (marker.key().equals(standKey)) view.lookAt((marker.minX() + marker.maxX()) / 2D, marker.minY() + 1D, (marker.minZ() + marker.maxZ()) / 2D);
+                    }
+                    due = now + 2000L;
+                    step = 32;
+                }
+                case 32 -> {
+                    if (now < due) return;
+                    MarkersPage editor = KineticGui.findPage(MarkersPage.class);
+                    KineticStructureView view = (KineticStructureView) reflect(editor, "view");
+                    if (dev.xyat.kineticcore.internal.client.render.structure.StructurePreviewRuntime.progress(view.snapshot(), view.cutY()) < 1F) {
+                        require(now < deadline, "the cut 3D view was not built");
+                        return;
+                    }
+                    double[] point = find(view, standKey);
+                    require(point != null, "the armor stand can be pointed at in the 3D view");
+                    // A click with the mouse, as a player makes it.
+                    click(point[0], point[1]);
+                    due = now + 1500L;
+                    step = 33;
+                }
+                case 33 -> {
+                    if (now < due) return;
+                    MarkersPage editor = KineticGui.findPage(MarkersPage.class);
+                    require(standKey.equals(reflect(editor, "current")), "a click in the view selects the armor stand: " + reflect(editor, "current"));
+                    if (!((java.util.Map<?, ?>) reflect(editor, "scannedData")).containsKey(standKey)) {
+                        require(now < deadline, "the armor stand's data did not arrive");
+                        return;
+                    }
+                    capture("markers_entity");
+                    // Typing a name and a health, and a sword put in its hand.
+                    ((dev.xyat.kineticcore.api.client.gui.widget.KineticTextField) reflect(editor, "nameField")).setTextValue(STAND_NAME);
+                    ((dev.xyat.kineticcore.api.client.gui.widget.KineticTextField) reflect(editor, "healthField")).setTextValue("30");
+                    var equip = MarkersPage.class.getDeclaredMethod("applyEquipment", net.minecraft.world.entity.EquipmentSlot.class, String.class);
+                    equip.setAccessible(true);
+                    equip.invoke(editor, net.minecraft.world.entity.EquipmentSlot.MAINHAND, "minecraft:iron_sword");
                     due = now + 3000L;
+                    step = 34;
+                }
+                case 34 -> {
+                    if (now < due) return;
+                    MarkersPage editor = KineticGui.findPage(MarkersPage.class);
+                    Markers.EntityMark mark = ((Markers) reflect(editor, "markers")).entityByKey(standKey);
+                    boolean settled = ((java.util.Set<?>) reflect(editor, "inFlight")).isEmpty() && ((java.util.Map<?, ?>) reflect(editor, "queued")).isEmpty()
+                            && !(boolean) reflect(editor, "nameTyped") && !(boolean) reflect(editor, "healthTyped");
+                    if (!settled || mark.data == null || !mark.data.contains(STAND_NAME) || !mark.data.contains("iron_sword")) {
+                        require(now < deadline, "the armor stand's edits did not come back: " + mark.data);
+                        return;
+                    }
+                    capture("markers_entity_edit");
+                    var save = MarkersPage.class.getDeclaredMethod("save");
+                    save.setAccessible(true);
+                    save.invoke(editor);
+                    due = now + 3000L;
+                    step = 35;
+                }
+                case 35 -> {
+                    if (now < due) return;
+                    onServer(StructureEditorValidation::checkEntityEdits);
+                    mc.setScreen(null);
+                    due = now;
                     step = 30;
                 }
                 case 30 -> {
                     if (now < due) return;
-                    mc.gui.getChat().clearMessages(false);
-                    capture("hud_container");
-                    ControllerClient.setMode(ControllerClient.Mode.SELECT);
                     // Test placement: the player flies to open ground and stands on it.
                     onServer(() -> {
                         MinecraftServer server = mc.getSingleplayerServer();
@@ -390,6 +480,10 @@ public final class StructureEditorValidation {
                     if (page >= 0) capture(PAGES.get(page));
                     page++;
                     if (page >= PAGES.size()) {
+                        if (hiddenProjects != null) {
+                            EditorClient.projects().addAll(hiddenProjects);
+                            hiddenProjects = null;
+                        }
                         mc.setScreen(null);
                         // Publish and Rejoin, as the save options page does: the world is left and opened again.
                         rejoinServer = mc.getSingleplayerServer();
@@ -424,6 +518,12 @@ public final class StructureEditorValidation {
                 case 5 -> {
                     if (mc.level != null || mc.getSingleplayerServer() != null) {
                         require(now < deadline, "leaving the test world took more than a minute");
+                        return;
+                    }
+                    if (GEN_WORLD.equals("none")) {
+                        // -Drealmcontrolstructure.genWorld=none: a game folder without the generation test world ends here.
+                        LOG.info("REALM_STRUCTURE_STEP natural generation and the structure panel skipped (no generation test world)");
+                        finish(null);
                         return;
                     }
                     require(Files.isRegularFile(mc.gameDirectory.toPath().resolve("saves").resolve(GEN_WORLD).resolve("level.dat")),
@@ -803,6 +903,8 @@ public final class StructureEditorValidation {
         generation.spacing = 6;
         generation.separation = 3;
         generation.frequency = 1F;
+        // Scans choose a random salt for real drafts; the fixture needs the same placement on every run.
+        generation.salt = 734104;
         generation.include = new ArrayList<>(List.of("#minecraft:is_overworld"));
         generation.exclude = new ArrayList<>(List.of("#minecraft:is_ocean", "#minecraft:is_deep_ocean", "#minecraft:is_river", "#minecraft:is_beach"));
         // Courtyards start every six chunks; none may start where it would overlap the medium structure.
@@ -1138,6 +1240,14 @@ public final class StructureEditorValidation {
     }
 
     private static void openPage(int index) {
+        if (PAGES.get(index).equals("editor_empty")) {
+            // No drafts and no selection: the three steps to the first draft, the first one done (the controller is held).
+            hiddenProjects = new ArrayList<>(EditorClient.projects());
+            EditorClient.projects().clear();
+            Minecraft.getInstance().setScreen(null);
+            KineticGui.open(new StructureEditorPage(null));
+            return;
+        }
         StructureProject project = EditorClient.projects().stream().map(EditorClient.ProjectEntry::project)
                 .filter(entry -> entry.id.equals(ID)).findFirst().orElse(null);
         switch (index) {
@@ -1159,7 +1269,8 @@ public final class StructureEditorValidation {
             case 7 -> KineticGui.openChild(new LootTablePickerPage(TABLE, id -> { }));
             case 8 -> KineticGui.openChild(new NewLootTablePage(openMarkers(), ProjectStore.markers(ID).container(16, 1, 3)));
             case 9 -> KineticGui.openChild(new SpawnerPage(openMarkers(), List.of(ProjectStore.markers(ID).spawner(4, 1, 4))));
-            case 10 -> KineticGui.openChild(markersPage(project, "e:minecraft:iron_golem"));
+            case 10 -> KineticGui.openChild(markersPage(project, ProjectStore.markers(ID).entities.stream()
+                    .filter(mark -> mark.type.equals("minecraft:iron_golem")).findFirst().map(Markers.EntityMark::key).orElse("e:minecraft:iron_golem")));
             case 11 -> KineticGui.openChild(new PublishPage(project));
             case 12 -> KineticGui.openChild(new PublishPage(EditorClient.projects().stream().map(EditorClient.ProjectEntry::project)
                     .filter(entry -> entry.id.equals(MEDIUM)).findFirst().orElseThrow()));
@@ -1239,6 +1350,29 @@ public final class StructureEditorValidation {
      * (the cut-out courtyard, open-sky air) what was there; the chest names its table, the other keeps its gold, the
      * spawner spawns skeletons, the armor stand came with the tag and the golem stayed out.
      */
+    /**
+     * The 3D editor's save reached the draft: the armor stand's data names it and holds the sword. A mob's own fields
+     * go through the same server path: no AI, staying, health and name.
+     */
+    private static Void checkEntityEdits() throws Exception {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        Markers.EntityMark mark = ProjectStore.markers(ID).entityByKey(standKey);
+        require(mark != null && mark.data != null && mark.data.contains(STAND_NAME) && mark.data.contains("iron_sword"),
+                "the saved markers hold the armor stand's edits: " + (mark == null ? null : mark.data));
+        com.google.gson.JsonObject fields = new com.google.gson.JsonObject();
+        fields.addProperty("name", "Validation Golem");
+        fields.addProperty("health", 50);
+        fields.addProperty("no_ai", true);
+        fields.addProperty("persistent", true);
+        CompoundTag edited = dev.xyat.realmcontrol.structure.project.EntityEdits.apply(server.overworld(), "minecraft:iron_golem", new CompoundTag(), fields);
+        var made = dev.xyat.realmcontrol.structure.project.EntityEdits.entity(server.overworld(), "minecraft:iron_golem", edited);
+        require(made instanceof net.minecraft.world.entity.Mob mob && mob.isNoAi() && mob.isPersistenceRequired()
+                && Math.abs(mob.getMaxHealth() - 50F) < 0.01F && Math.abs(mob.getHealth() - 50F) < 0.01F
+                && mob.getCustomName() != null && mob.getCustomName().getString().equals("Validation Golem"), "a mob's fields apply: " + edited);
+        checks += 5;
+        return null;
+    }
+
     private static Void checkTestPlacement() throws Exception {
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
         ServerLevel level = server.overworld();
@@ -1280,6 +1414,13 @@ public final class StructureEditorValidation {
         require("minecraft:skeleton".equals(tag.getString("id")), "the test placement's spawner spawns skeletons: " + tag);
         List<ArmorStand> stands = level.getEntitiesOfClass(ArmorStand.class, testBox());
         require(stands.size() == 1 && TestPlacement.tagged(stands.get(0)), "one armor stand, tagged as placed by the test: " + stands.size());
+        ArmorStand placedStand = stands.get(0);
+        require(placedStand.getCustomName() != null && STAND_NAME.equals(placedStand.getCustomName().getString())
+                        && placedStand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND).is(Items.IRON_SWORD)
+                        && Math.abs(placedStand.getMaxHealth() - 30F) < 0.01F,
+                "the placed armor stand has the 3D editor's name, sword and health: " + placedStand.getCustomName() + " "
+                        + placedStand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND) + " " + placedStand.getMaxHealth());
+        checks++;
         require(level.getEntities(EntityType.IRON_GOLEM, testBox(), entity -> true).isEmpty(), "the iron golem is left out");
         // One test placement at a time.
         TestPlacement.place(server.getPlayerList().getPlayers().get(0), ID);
@@ -1331,6 +1472,45 @@ public final class StructureEditorValidation {
         MarkersPage markers = KineticGui.findPage(MarkersPage.class);
         require(markers != null, "markers page open");
         return markers;
+    }
+
+    private static Object reflect(Object target, String name) throws ReflectiveOperationException {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    /** The middle of the points of the view where a marker is picked, in page units; {@code null} if there are none. */
+    @Nullable
+    private static double[] find(KineticStructureView view, String key) {
+        double sumX = 0, sumY = 0;
+        int found = 0;
+        for (int y = view.controlY() + 1; y < view.controlY() + view.controlHeight() - 1; y += 2) {
+            for (int x = view.controlX() + 1; x < view.controlX() + view.controlWidth() - 1; x += 2) {
+                KineticStructureView.Marker marker = view.markerAt(x, y);
+                if (marker != null && marker.key().equals(key)) {
+                    sumX += x;
+                    sumY += y;
+                    found++;
+                }
+            }
+        }
+        return found == 0 ? null : new double[] {sumX / found, sumY / found};
+    }
+
+    /** A left click at a point of the page, through the screen as the mouse sends it. */
+    private static void click(double x, double y) {
+        var screen = Minecraft.getInstance().screen;
+        var host = (dev.xyat.kineticcore.internal.client.gui.screen.KineticScreenHost) screen;
+        double sx = host.toScreenX(x), sy = host.toScreenY(y);
+        //? if >=26.1 {
+        /*var event = new net.minecraft.client.input.MouseButtonEvent(sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0));
+        screen.mouseClicked(event, false);
+        screen.mouseReleased(event);
+        *///?} else {
+        screen.mouseClicked(sx, sy, 0);
+        screen.mouseReleased(sx, sy, 0);
+        //?}
     }
 
     private static void capture(String name) throws Exception {
@@ -1598,7 +1778,7 @@ public final class StructureEditorValidation {
                             BlockState expected = BlockStates.parse(tile.state(x, y, z)).rotate(rotation), actual = level.getBlockState(world);
                             if (dry(actual).equals(dry(expected))) continue;
                             if (dry(actual).equals(dry(Block.updateFromNeighbourShapes(expected, level, world)))
-                                    || decorated(expected, actual, level, world)) {
+                                    || decorated(expected, actual, level, world) || connectionOnly(expected, actual)) {
                                 reshaped++;
                             } else if (ground) {
                                 groundDiffers++;
@@ -1815,8 +1995,8 @@ public final class StructureEditorValidation {
         final String label;
         final long millis;
         final Set<StructureStart> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        int row, compared, skipped, mismatches, reshaped, groundChanged, clearColumns, unclearedColumns, standing, founded, cutBlocks, startsInside, overlapping, badTiles;
-        String first = "", startedInside = "";
+        int row, compared, skipped, mismatches, reshaped, groundChanged, edgeChanged, clearColumns, unclearedColumns, standing, founded, cutBlocks, startsInside, overlapping, badTiles;
+        String first = "", startedInside = "", edgeFirst = "";
         final StringBuilder groundIssues = new StringBuilder();
 
         MegaCheck(MegaInstance instance, String label, long millis) {
@@ -1901,13 +2081,19 @@ public final class StructureEditorValidation {
                         if (ground) groundCompared++;
                         BlockState expected = BlockStates.parse(tile.state(x, y, z)).rotate(rotation), actual = level.getBlockState(world);
                         if (dry(actual).equals(dry(expected))) continue;
-                        if (dry(actual).equals(dry(Block.updateFromNeighbourShapes(expected, level, world))) || decorated(expected, actual, level, world)) {
+                        if (dry(actual).equals(dry(Block.updateFromNeighbourShapes(expected, level, world))) || decorated(expected, actual, level, world)
+                                || connectionOnly(expected, actual)) {
                             check.reshaped++;
                         } else if (ground) {
                             if (groundDiffers++ < 3) {
                                 groundExamples.append(' ').append(world.toShortString()).append(' ').append(actual.getBlock()).append(" in ")
                                         .append(level.getBiome(world).unwrapKey().map(key -> key.location().toString()).orElse("?"));
                             }
+                        } else if (rock(actual) && (ox + x < 2 || oz + z < 2 || ox + x >= project.size[0] - 2 || oz + z >= project.size[2] - 2)) {
+                            // Natural ground in the copy's outermost cells: a feature of a neighbouring chunk that generated
+                            // after the structure (the soil a tree lays under its trunk, for one) reaches into the edge, as
+                            // it does into a vanilla structure. Which chunk generates first differs from run to run.
+                            if (check.edgeChanged++ == 0) check.edgeFirst = " (first " + expected + " is " + actual + " at " + world + ")";
                         } else if (check.mismatches++ < 6) {
                             check.first += "; at " + (ox + x) + "," + y + "," + (oz + z) + " (" + world + "): " + expected + " is " + actual;
                         }
@@ -1961,6 +2147,7 @@ public final class StructureEditorValidation {
         require(check.startsInside == 0, check.startsInside + " other structures start inside mega copy " + label + ":" + check.startedInside);
         require(check.badTiles == 0, check.badTiles + " tiles of mega copy " + label + " have more than 2 in 100 ground cells changed" + check.groundIssues);
         require(check.mismatches == 0, check.mismatches + " of " + check.compared + " cells of mega copy " + label + " differ from the draft (rotation " + rotation + ")" + check.first);
+        require(check.edgeChanged <= 32, check.edgeChanged + " cells at the edge of mega copy " + label + " turned to natural ground" + check.edgeFirst);
         require(check.compared * 4L >= (check.compared + check.skipped) * 3L, "only " + check.compared + " of " + (check.compared + check.skipped) + " mega cells could be compared");
         require(check.unclearedColumns * 100 <= check.clearColumns, check.unclearedColumns + " of " + check.clearColumns + " mega columns have ground left above them");
         require(check.founded * 100 >= check.standing * 99, "only " + check.founded + " of " + check.standing + " mega columns stand on a foundation");
@@ -1996,9 +2183,9 @@ public final class StructureEditorValidation {
         require(level.getBlockEntity(chest) instanceof Container container && container.getItem(0).is(Items.EMERALD) && container.getItem(0).getCount() == 7,
                 "the chest on the mega group seam has its emeralds");
         checks += 8;
-        String report = String.format(java.util.Locale.ROOT, "%s at %s rotation %s: %d chunks in %.0f s, %d cells compared (%d reshaped, %d ground changed, %d skipped, "
+        String report = String.format(java.util.Locale.ROOT, "%s at %s rotation %s: %d chunks in %.0f s, %d cells compared (%d reshaped, %d ground changed, %d edge cells natural ground%s, %d skipped, "
                         + "%d overlapping pieces), courtyard %d columns (%d of %d with ground above the floor emptied), cleared %d/%d, foundation %d/%d", label, anchor, rotation,
-                generatedChunks, check.millis / 1000D, check.compared, check.reshaped, check.groundChanged, check.skipped, check.overlapping, sampled, cleared, groundCells,
+                generatedChunks, check.millis / 1000D, check.compared, check.reshaped, check.groundChanged, check.edgeChanged, check.edgeFirst, check.skipped, check.overlapping, sampled, cleared, groundCells,
                 check.clearColumns - check.unclearedColumns,
                 check.clearColumns, check.founded, check.standing);
         details.append("MEGA ").append(report).append(System.lineSeparator());
@@ -2012,6 +2199,21 @@ public final class StructureEditorValidation {
      */
     private static boolean decorated(BlockState expected, BlockState actual, ServerLevel level, BlockPos pos) {
         return expected.isAir() && actual.getCollisionShape(level, pos).isEmpty();
+    }
+
+    /**
+     * A fence, pane, bars or wall that differs only in which sides it connects to: a neighbour placed by a chunk that
+     * generated later (a tree, a boulder) joined it and was gone again, as it can happen to any vanilla structure.
+     */
+    private static boolean connectionOnly(BlockState expected, BlockState actual) {
+        if (expected.getBlock() != actual.getBlock()
+                || !(expected.getBlock() instanceof CrossCollisionBlock || expected.getBlock() instanceof net.minecraft.world.level.block.WallBlock)) return false;
+        for (var property : expected.getProperties()) {
+            String name = property.getName();
+            if (name.equals("north") || name.equals("east") || name.equals("south") || name.equals("west") || name.equals("up")) continue;
+            if (!expected.getValue(property).equals(actual.getValue(property))) return false;
+        }
+        return true;
     }
 
     /** Natural ground a terrain feature leaves: stone of the overworld, dirt, sand, gravel, mossy cobblestone. */
@@ -2048,6 +2250,68 @@ public final class StructureEditorValidation {
         int count = 0;
         for (int y = box.minY(); y <= box.maxY(); y++) if (level.getBlockState(new BlockPos(x, y, z)).is(block)) count++;
         return count;
+    }
+
+    /** The next-click outline and draft cache must agree with edits, including edits made in another world. */
+    private static void checkPolishRegressions(MinecraftServer server) throws Exception {
+        List<String> problems = new ArrayList<>();
+        Class<?> overlay = Class.forName("dev.xyat.realmcontrol.structure.client.SelectionOverlay");
+        Class<?> mode = Class.forName("dev.xyat.realmcontrol.structure.client.ControllerClient$Mode");
+        Object select = mode.getField("SELECT").get(null), cutout = mode.getField("CUTOUT").get(null);
+        var preview = overlay.getDeclaredMethod("preview", Selection.class, mode, BlockPos.class, boolean.class);
+        preview.setAccessible(true);
+        BlockPos a = new BlockPos(1, 2, 3), b = new BlockPos(4, 5, 6), target = new BlockPos(9, 8, 7);
+        Selection onlyA = new Selection(), onlyB = new Selection(), both = new Selection(), cut = new Selection();
+        onlyA.a = a;
+        onlyB.b = b;
+        both.a = a;
+        both.b = b;
+        cut.cutA = a;
+        Object[][] cases = {
+                {"A only, plain click moves A", onlyA, select, false, null},
+                {"A only, Shift completes B", onlyA, select, true, new Selection.Box(a, target)},
+                {"B only, plain click completes A", onlyB, select, false, new Selection.Box(b, target)},
+                {"B only, Shift moves B", onlyB, select, true, null},
+                {"both corners, plain click moves A", both, select, false, new Selection.Box(b, target)},
+                {"both corners, Shift moves B", both, select, true, new Selection.Box(a, target)},
+                {"cut-out plain click moves its first corner", cut, cutout, false, null},
+                {"cut-out Shift completes its box", cut, cutout, true, new Selection.Box(a, target)}
+        };
+        for (Object[] test : cases) {
+            Object actual = preview.invoke(null, test[1], test[2], target, test[3]);
+            if (!java.util.Objects.equals(test[4], actual)) problems.add(test[0].toString());
+        }
+
+        Class<?> thumbnails = dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.class;
+        var folderMethod = thumbnails.getDeclaredMethod("folder", MinecraftServer.class);
+        folderMethod.setAccessible(true);
+        Path current = (Path) folderMethod.invoke(null, server);
+        Files.createDirectories(current.getParent());
+        Path other = Files.createTempDirectory(current.getParent(), "validation-thumbnail-");
+        String namespace = "validation_" + UUID.randomUUID().toString().replace("-", "");
+        String draftId = "project:" + namespace + ":draft";
+        Path here = current.resolve("+drafts").resolve(namespace).resolve("draft.png");
+        Path there = other.resolve("+drafts").resolve(namespace).resolve("draft.png");
+        Path untouched = other.resolve(namespace).resolve("draft.png");
+        try {
+            for (Path file : List.of(here, there, untouched)) {
+                Files.createDirectories(file.getParent());
+                Files.write(file, new byte[]{1, 2, 3});
+            }
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forgetPicture(server, draftId);
+            if (Files.exists(here)) problems.add("draft picture in current world was not invalidated");
+            if (Files.exists(there)) problems.add("draft picture in another world was not invalidated");
+            if (!Files.exists(untouched) || !java.util.Arrays.equals(Files.readAllBytes(untouched), new byte[]{1, 2, 3})) {
+                problems.add("draft invalidation changed an unrelated structure picture");
+            }
+        } finally {
+            for (Path file : List.of(here, there, untouched)) Files.deleteIfExists(file);
+            for (Path directory : List.of(here.getParent(), there.getParent(), untouched.getParent(), other.resolve("+drafts"), other)) {
+                Files.deleteIfExists(directory);
+            }
+        }
+        require(problems.isEmpty(), "Structure polish regressions: " + String.join("; ", problems));
+        checks += cases.length + 3;
     }
 
     // ---- helpers ----

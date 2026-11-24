@@ -3,14 +3,15 @@ package dev.xyat.realmcontrol.teleport.config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import dev.xyat.realmcontrol.teleport.TeleportModule;
-import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.kineticcore.api.runtime.KineticPaths;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 public final class TpdConfig {
-    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/teleport.toml");
+    private static final String CONFIG_FILE = "kineticcore/realmcontrol/teleport.toml";
+    private static final Path CONFIG_PATH = KineticPaths.configFile(CONFIG_FILE);
     private static CommentedFileConfig configData;
 
     public static boolean enableTpModify = true;
@@ -23,6 +24,10 @@ public final class TpdConfig {
 
     public static void load() {
         try {
+            KineticPaths.migrateConfigFile("kineticcore/teleport.toml", CONFIG_FILE);
+            KineticPaths.migrateConfigFile("kineticcore/teleport.toml.save-backup",
+                    CONFIG_FILE + ".save-backup");
+            KineticPaths.ensureConfigDirectory("kineticcore/realmcontrol");
             if (configData == null) {
                 configData = CommentedFileConfig.builder(CONFIG_PATH)
                         .sync()

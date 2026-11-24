@@ -22,6 +22,8 @@ public final class NewProjectPage extends KineticPage {
     private final StructureEditorPage parent;
     private KineticTextField nameField;
     private KineticTextField idField;
+    /** Widths of the selection's tiles: size, volume, tier, cut-out boxes, first and last corner. */
+    private static final int[] TILE_W = {80, 70, 50, 50, 110, 110};
     private KineticButton startButton;
     private String name = "";
     private String id = "";
@@ -116,19 +118,41 @@ public final class NewProjectPage extends KineticPage {
             g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.new.id_taken"), FIELD_X + FIELD_W + 8, ROW_Y + ROW_GAP + 4,
                     width() - 12 - FIELD_X - FIELD_W - 8, 0xFFFF5555, false);
         }
-        int y = ROW_Y + 2 * ROW_GAP + 8;
+        int y = ROW_Y + 2 * ROW_GAP + 6;
         Selection selection = EditorClient.selection();
-        List<Component> facts = StructureEditorPage.selectionFacts(selection);
-        String problem = Selection.problem(selection.region());
-        for (Component fact : facts) {
-            g.scrollingText(fact, LABEL_X, y, width() - 2 * LABEL_X, 0xFFCCCCCC, false);
-            y += 12;
+        Selection.Box region = selection.region();
+        if (region == null) {
+            g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.new.no_selection"), LABEL_X, y, width() - 2 * LABEL_X, 0xFFCCCCCC, false);
+            y += 14;
+        } else {
+            // The selection's figures in tiles, as the editor shows a draft's.
+            String problem = Selection.problem(region);
+            String tier = StructureEditorPage.tierOf(region);
+            String[] keys = {"size", "volume", "tier", "cutouts", "from", "to"};
+            Component[] values = {
+                    Component.literal(region.sizeX() + "×" + region.sizeY() + "×" + region.sizeZ()),
+                    Component.literal(String.format(Locale.ROOT, "%,d", region.volume())),
+                    KineticI18n.translatable("gui.realmcontrol.structure.tier." + tier),
+                    Component.literal(String.valueOf(selection.cutouts.size())),
+                    Component.literal(region.min().getX() + ", " + region.min().getY() + ", " + region.min().getZ()),
+                    Component.literal(region.max().getX() + ", " + region.max().getY() + ", " + region.max().getZ())
+            };
+            int x = LABEL_X;
+            for (int i = 0; i < keys.length; i++) {
+                StructureEditorPage.statTile(g, x, y, TILE_W[i], KineticI18n.translatable("gui.realmcontrol.structure.stat." + keys[i]), values[i],
+                        i == 0 && problem != null ? 0xFFFF5555 : 0xFFFFFFFF);
+                x += TILE_W[i] + 2;
+            }
+            y += StructureEditorPage.STAT_H + 4;
+            if (problem != null) {
+                g.scrollingText(KineticI18n.translatable(problem, Selection.MAX_FOOTPRINT), LABEL_X, y, width() - 2 * LABEL_X, 0xFFFF5555, false);
+            } else {
+                // What a structure of this size becomes when it is published.
+                g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.new.tier." + tier,
+                        "small".equals(tier) ? StructureProject.SMALL_LIMIT : StructureProject.MEDIUM_LIMIT), LABEL_X, y, width() - 2 * LABEL_X, 0xFFCCCCCC, false);
+            }
+            y += 14;
         }
-        if (problem != null && selection.region() != null) {
-            g.scrollingText(KineticI18n.translatable(problem, Selection.MAX_FOOTPRINT), LABEL_X, y, width() - 2 * LABEL_X, 0xFFFF5555, false);
-            y += 12;
-        }
-        y += 6;
         g.wrappedText(KineticI18n.translatable("gui.realmcontrol.structure.new.help"), LABEL_X, y, width() - 2 * LABEL_X, 0xFF9AA4B2);
     }
 }

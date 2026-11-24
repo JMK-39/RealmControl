@@ -3,13 +3,14 @@ package dev.xyat.realmcontrol.beacon.config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import dev.xyat.realmcontrol.beacon.BeaconModule;
-import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.kineticcore.api.runtime.KineticPaths;
 
 import java.nio.file.Path;
 import java.util.*;
 
 public class BeaconConfig {
-    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/beacon.toml");
+    private static final String CONFIG_FILE = "kineticcore/realmcontrol/beacon.toml";
+    private static final Path CONFIG_PATH = KineticPaths.configFile(CONFIG_FILE);
     private static CommentedFileConfig configData;
 
     public static final Set<String> BEACON_SPAWN_WHITELIST_CACHE = new HashSet<>();
@@ -33,6 +34,8 @@ public class BeaconConfig {
 
     public static void load() {
         try {
+            KineticPaths.migrateConfigFile("kineticcore/beacon.toml", CONFIG_FILE);
+            KineticPaths.ensureConfigDirectory("kineticcore/realmcontrol");
             configData = CommentedFileConfig.builder(CONFIG_PATH)
                     .sync().preserveInsertionOrder().writingMode(WritingMode.REPLACE).build();
             configData.load();

@@ -1,3 +1,27 @@
+2026年11月14日 — 26.11.14 — Structure editor look / 结构编辑器外观
+- The controller's next-click outline follows the actual A/B and Shift actions, and its status panel wraps on smaller screens. Editing a shared draft invalidates its thumbnails in every world's cache, so returning to another world shows the updated picture.
+- 控制器的下一次点击预览与实际的 A/B、Shift 操作保持一致，状态面板在较小窗口中自动换行。修改共用草稿会同时清除各世界中的旧缩略图，切回其他世界也能显示新图片。
+- The structure editor's first page is laid out anew. Each draft row shows a small picture of the draft as it generates, its name with its tier and state as coloured tags (draft blue, modified yellow, published green, missing blocks red) and its id and size below. The selected draft's buttons above the preview follow the order a draft is worked on (Settings, Cut-outs, 3D Edit, Generation), with Test Place and Publish at the right end and Publish in green; Rescan, Delete (in red) and New from region sit in the header. Size, blocks, containers, entities and cut-outs are tiles under the preview, and the first draft is shown when the editor opens. With no draft yet, the page shows the three steps to the first one, the done steps in green and the next one in yellow.
+- 结构编辑器首页重新排版。每个草稿行显示它生成后的样子的小图、名称以及彩色的档位和状态标签（草稿蓝色、已修改黄色、已发布绿色、缺方块红色），下方是 ID 和尺寸。预览上方是选中草稿的按钮，按编辑顺序排列（设置、剔除、3D 编辑、生成规则），右端是测试放置和绿色的发布；重新扫描、红色的删除和从选区新建放在标题栏。尺寸、方块、容器、实体和剔除数量显示为预览下方的小卡片，打开编辑器时直接显示第一个草稿。还没有草稿时，页面显示做出第一个结构的三个步骤，已完成的步骤为绿色，下一步为黄色。
+- New from region shows the selection's size, volume, tier, cut-out boxes and corners as tiles, and what its tier becomes when published.
+- “从选区新建”页以小卡片显示选区的尺寸、体积、档位、剔除框数量和两个角点，并说明这个档位发布后是什么样的结构。
+- The structure controller draws the selection as building tools do: the region and its cut-out boxes as tinted volumes with outlines seen through blocks, the face Ctrl + wheel moves in yellow, the corners in green, the block the next click picks, and the box that click would make while one is being drawn. Labels follow the world: A and B on the corners, the region's size along its three edges nearest you, and the size of the box being drawn or of the newest cut-out box. The status line is a panel with the mode as a tag, the size, block count, tier, cut-out boxes and the block looked at; the keys show below it for ten seconds after the controller is taken in hand or the mode is switched.
+- 结构控制器像建筑工具一样显示选区：选区和剔除框是带颜色的半透明方块和隔墙可见的线框，Ctrl + 滚轮推拉的面为黄色，角点为绿色，并标出下一次点击会选中的方块，以及正在画的框点击后的范围。世界里有跟随位置的标签：角点上的 A、B，选区最靠近你的三条边上的尺寸，以及正在画的框或最新剔除框的尺寸。状态行改为面板，显示模式标签、尺寸、格数、档位、剔除框数量和所指方块；拿起控制器或切换模式后，下方会显示按键说明十秒。
+- Needs KineticCore 26.11.14 or newer.
+- 需要 KineticCore 26.11.14 或更新版本。
+
+2026年11月10日 — 26.11.10 — 3D editor / 3D 编辑
+- The structure editor's Markers page is now a 3D editor: the draft in a 3D view on the left, handled like a modelling program, and an inspector on the right. Containers, spawners and entities are outlined under the pointer and named in the view's corner; a click selects one and the inspector edits it, Ctrl + click selects several, a double-click brings the camera to it and a click on empty space goes back to the list. Set-up markers are outlined blue and left-out entities red, also through walls.
+- 结构编辑器的“标记”页改为 3D 编辑：左侧是像建模软件一样操作的 3D 视图，右侧是属性面板。鼠标指向的容器、刷怪笼和实体会描边并在视图角落显示名称；单击选中后在属性面板中编辑，Ctrl + 单击可多选，双击把镜头移到它面前，单击空白处回到列表。已设置的标记显示蓝色描边，丢弃的实体显示红色描边，隔着墙也能看到。
+- Entities of a draft get a name, maximum health, AI on or off, whether they may despawn and their hand and armour equipment in the 3D editor, or any of their data in the NBT editor. The changes show at once in the 3D view, are written the way the game itself saves entities, apply to publishing and test placement, and survive a new scan.
+- 草稿中的实体可以在 3D 编辑中设置名字、最大生命、有无 AI、是否会消失，以及手持和盔甲装备，也可以在 NBT 编辑器中修改全部数据。修改会立刻显示在 3D 视图里，按游戏自身保存实体的方式写入，发布和测试放置时生效，重新扫描后也会保留。
+- Double-clicking a container, spawner or entity in the structure editor's preview opens the 3D editor on it.
+- 在结构编辑器的预览中双击容器、刷怪笼或实体，会直接打开 3D 编辑并选中它。
+- The structure controller keeps only its region and cut-out modes; containers, spawners and entities are edited in the 3D editor.
+- 结构控制器只保留选区和剔除两种模式，容器、刷怪笼和实体改在 3D 编辑中修改。
+- Needs KineticCore 26.11.10 or newer.
+- 需要 KineticCore 26.11.10 或更新版本。
+
 2026年11月4日 — 26.11.4 — Mega structures and test placement / 巨型结构与测试放置
 - Test Place in the structure editor puts a copy of a small or medium draft (up to 256×256) around the player, set into the ground by its embedding, as it generates: cut-outs, loot tables, spawners and kept entities applied, mobs set up as vanilla does. The box is saved as a snapshot in the world folder first, and Undo Test puts every block and container back and removes the entities it placed. Both run a slice per tick with a percentage and can be stopped; one test placement per world, never over the place the draft was scanned from.
 - 结构编辑器新增“测试放置”：把小型或中型草稿（256×256 以内）以玩家为中心放一份，底部按嵌入深度埋进地面，效果与生成时相同：剔除区域、战利品表、刷怪笼和保留的实体都按设置写入，生物按原版做生成初始化。放置前先把整个范围存成快照（在存档文件夹里），“撤销测试”把方块和容器全部恢复，并移除测试放下的实体。放置和撤销都按 tick 分片进行，显示百分比，可以停止；一个世界同时只有一个测试放置，也不会放在草稿扫描时的原址上。

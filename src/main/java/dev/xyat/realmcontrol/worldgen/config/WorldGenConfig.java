@@ -3,7 +3,7 @@ package dev.xyat.realmcontrol.worldgen.config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import dev.xyat.realmcontrol.worldgen.WorldGenModule;
-import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.kineticcore.api.runtime.KineticPaths;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 public class WorldGenConfig {
-    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldgen.toml");
+    private static final String CONFIG_FILE = "kineticcore/realmcontrol/worldgen.toml";
+    private static final Path CONFIG_PATH = KineticPaths.configFile(CONFIG_FILE);
     private static CommentedFileConfig configData;
 
     public static boolean enableStructureBlocking = true;
@@ -27,6 +28,10 @@ public class WorldGenConfig {
 
     public static void load() {
         try {
+            KineticPaths.migrateConfigFile("kineticcore/worldgen.toml", CONFIG_FILE);
+            KineticPaths.migrateConfigFile("kineticcore/worldgen.toml.save-backup",
+                    CONFIG_FILE + ".save-backup");
+            KineticPaths.ensureConfigDirectory("kineticcore/realmcontrol");
             if (configData != null) {
                 configData.close();
             }

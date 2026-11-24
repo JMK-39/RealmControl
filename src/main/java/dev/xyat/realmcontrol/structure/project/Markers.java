@@ -135,12 +135,23 @@ public final class Markers {
         }
     }
 
-    /** One scanned entity; {@code keep} overrides its type's setting when set. */
+    /**
+     * One scanned entity; {@code keep} overrides its type's setting when set, {@code data} replaces the scanned data
+     * when set (as SNBT, without position or UUID, which the placement gives).
+     */
     public static final class EntityMark {
+        /** Longest edited data kept, in characters. */
+        public static final int MAX_DATA = 65_536;
         public String type = "";
         public double x, y, z;
         public String name = "";
         @Nullable public Boolean keep;
+        @Nullable public String data;
+
+        /** The marker key of this entity: its type and position, as editor pages and requests name it. */
+        public String key() {
+            return "e:" + type + "@" + x + "," + y + "," + z;
+        }
 
         JsonObject toJson() {
             JsonObject json = new JsonObject();
@@ -152,6 +163,7 @@ public final class Markers {
             json.add("pos", pos);
             if (!name.isEmpty()) json.addProperty("name", name);
             if (keep != null) json.addProperty("keep", keep);
+            if (data != null) json.addProperty("data", data);
             return json;
         }
 
@@ -164,6 +176,8 @@ public final class Markers {
             mark.z = pos.get(2).getAsDouble();
             mark.name = StructureProject.stringOf(json, "name", "");
             mark.keep = json.has("keep") ? json.get("keep").getAsBoolean() : null;
+            String data = StructureProject.stringOf(json, "data", "");
+            mark.data = data.isEmpty() || data.length() > MAX_DATA ? null : data;
             return mark;
         }
     }
@@ -204,6 +218,21 @@ public final class Markers {
         return null;
     }
 
+    /** The entity a key from {@link EntityMark#key()} names, or {@code null}. */
+    @Nullable
+    public EntityMark entityByKey(String key) {
+        if (!key.startsWith("e:")) return null;
+        int at = key.lastIndexOf('@');
+        if (at < 0) return null;
+        String[] pos = key.substring(at + 1).split(",");
+        if (pos.length != 3) return null;
+        try {
+            return entity(key.substring(2, at), Double.parseDouble(pos[0]), Double.parseDouble(pos[1]), Double.parseDouble(pos[2]));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     public int keptEntities() {
         int kept = 0;
         for (EntityMark mark : entities) if (keeps(mark)) kept++;
@@ -219,8 +248,8 @@ public final class Markers {
 
     /**
      * This scan's markers with the settings of {@code old} carried over: a container or spawner in the same place
-     * with the same block keeps its settings, an entity of the same type within a block keeps its choice, and type
-     * settings stay.
+     * with the same block keeps its settings, an entity of the same type within a block keeps its choice and edited
+     * data, and type settings stay.
      */
     public void carryOver(Markers old) {
         for (Container container : containers) {
@@ -244,12 +273,15 @@ public final class Markers {
         }
         entityTypes = new LinkedHashMap<>(old.entityTypes);
         Map<String, List<EntityMark>> byType = new HashMap<>();
-        for (EntityMark mark : old.entities) if (mark.keep != null) byType.computeIfAbsent(mark.type, type -> new ArrayList<>()).add(mark);
+        for (EntityMark mark : old.entities) {
+            if (mark.keep != null || mark.data != null) byType.computeIfAbsent(mark.type, type -> new ArrayList<>()).add(mark);
+        }
         for (EntityMark mark : entities) {
             for (EntityMark before : byType.getOrDefault(mark.type, List.of())) {
                 double dx = before.x - mark.x, dy = before.y - mark.y, dz = before.z - mark.z;
                 if (dx * dx + dy * dy + dz * dz < 1.0D) {
                     mark.keep = before.keep;
+                    mark.data = before.data;
                     break;
                 }
             }

@@ -17,7 +17,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import dev.xyat.kineticcore.api.registry.KineticRegistries;
-import dev.xyat.kineticcore.api.runtime.KineticPlatform;
+import dev.xyat.kineticcore.api.runtime.KineticPaths;
 import dev.xyat.realmcontrol.util.Nbt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,8 +34,10 @@ import java.util.stream.Collectors;
 public class WorldBlockConfig {
     private static final Logger LOGGER = LogManager.getLogger("realmcontrol/WorldBlockConfig");
     public static final String VOID_ID = "realmcontrol:void_placeholder";
-    public static final Path PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.json");
-    public static final Path BACKUP_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.old.json");
+    private static final String CONFIG_FILE = "kineticcore/realmcontrol/worldblock.json";
+    private static final String BACKUP_FILE = "kineticcore/realmcontrol/worldblock.old.json";
+    public static final Path PATH = KineticPaths.configFile(CONFIG_FILE);
+    public static final Path BACKUP_PATH = KineticPaths.configFile(BACKUP_FILE);
     public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     public static volatile Data data = new Data();
     public static volatile Map<ItemRule, String> ruleReplacementMap = new HashMap<>();
@@ -626,7 +628,14 @@ public class WorldBlockConfig {
             return "";
         }
     }
+
+    public static void migrateConfigFiles() {
+        KineticPaths.migrateConfigFile("kineticcore/worldblock.json", CONFIG_FILE);
+        KineticPaths.migrateConfigFile("kineticcore/worldblock.old.json", BACKUP_FILE);
+    }
+
     public static void load() {
+        migrateConfigFiles();
         try {
             if (Files.exists(PATH)) {
                 String json = Files.readString(PATH);

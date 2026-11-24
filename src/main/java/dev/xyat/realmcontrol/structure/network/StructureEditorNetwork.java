@@ -26,6 +26,7 @@ import dev.xyat.realmcontrol.structure.selection.Selection;
 import dev.xyat.realmcontrol.structure.selection.SelectionStore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -68,10 +69,10 @@ public final class StructureEditorNetwork {
         CHANNEL.registerClientbound(8, ResultPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), ResultPacket::read), ResultPacket::handleClient);
         CHANNEL.registerServerbound(9, SaveMarkersPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), SaveMarkersPacket::read), SaveMarkersPacket::handle);
         CHANNEL.registerServerbound(10, CreateTablePacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), CreateTablePacket::read), CreateTablePacket::handle);
-        CHANNEL.registerServerbound(11, ToggleEntityPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), ToggleEntityPacket::read), ToggleEntityPacket::handle);
+        CHANNEL.registerServerbound(11, EntityEditPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), EntityEditPacket::read), EntityEditPacket::handle);
         CHANNEL.registerClientbound(12, MarkersPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), MarkersPacket::read), MarkersPacket::handleClient);
         CHANNEL.registerClientbound(13, LootTablesPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), LootTablesPacket::read), LootTablesPacket::handleClient);
-        CHANNEL.registerClientbound(14, NearbyMarkersPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), NearbyMarkersPacket::read), NearbyMarkersPacket::handleClient);
+        CHANNEL.registerClientbound(14, EntityDataPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), EntityDataPacket::read), EntityDataPacket::handleClient);
     }
 
     // ---- client side senders ----
@@ -98,8 +99,18 @@ public final class StructureEditorNetwork {
         CHANNEL.sendToServer(new CreateTablePacket(projectId, table, kind, source, pos[0], pos[1], pos[2]));
     }
 
-    public static void toggleEntity(int entityId) {
-        CHANNEL.sendToServer(new ToggleEntityPacket(entityId));
+    /**
+     * Asks for an entity's data: as it is ({@code fields} {@code null} and {@code raw} empty), with the editor's common
+     * fields applied, or replaced by {@code raw} SNBT. {@code base} is the data the editor shows, empty for the saved
+     * data. The answer comes as an {@link EntityDataPacket}; nothing is saved until the markers are.
+     */
+    public static void editEntity(String projectId, String key, String base, @Nullable JsonObject fields, String raw) {
+        JsonObject json = new JsonObject();
+        json.addProperty("key", key);
+        json.addProperty("base", base);
+        if (fields != null) json.add("fields", fields);
+        json.addProperty("raw", raw);
+        CHANNEL.sendToServer(new EntityEditPacket(projectId, json.toString()));
     }
 
     // ---- server side ----
@@ -173,25 +184,47 @@ public final class StructureEditorNetwork {
         return states;
     }
 
-    /** The markers of the drafts scanned around the player, for the controller to draw. */
-    private static void sendNearby(ServerPlayer player) {
-        JsonArray list = new JsonArray();
-        String dimension = player.level().dimension().location().toString();
-        for (StructureProject project : ProjectStore.list()) {
-            if (!project.dimension.equals(dimension) || !near(project, player.getX(), player.getY(), player.getZ(), 48)) continue;
-            JsonObject entry = new JsonObject();
-            entry.addProperty("id", project.id);
-            entry.add("project", project.toJson());
-            entry.add("markers", ProjectStore.markers(project.id).toJson());
-            list.add(entry);
+    /**
+     * Answers an entity request of the 3D editor (see {@link #editEntity}): the entity's data, with the fields applied
+     * or the raw data checked, and the data the scan saw. Problems come back as a message key in {@code problem}.
+     */
+    private static void editEntity(ServerPlayer player, String id, String json) {
+        JsonObject request = JsonParser.parseString(json).getAsJsonObject();
+        String key = request.get("key").getAsString();
+        JsonObject answer = new JsonObject();
+        answer.addProperty("key", key);
+        StructureProject project = ProjectStore.load(id);
+        Markers.EntityMark mark = project == null ? null : ProjectStore.markers(id).entityByKey(key);
+        try {
+            CompoundTag scanned = mark == null ? null : dev.xyat.realmcontrol.structure.project.EntityEdits.scanned(project, mark);
+            if (scanned == null) {
+                answer.addProperty("problem", "msg.realmcontrol.structure.entity.missing");
+            } else {
+                String base = request.get("base").getAsString(), raw = request.get("raw").getAsString();
+                CompoundTag data = base.isEmpty() ? dev.xyat.realmcontrol.structure.project.EntityEdits.published(scanned, mark)
+                        : dev.xyat.realmcontrol.structure.project.EntityEdits.parse(base);
+                ServerLevel level = (ServerLevel) player.level();
+                if (!raw.isEmpty()) {
+                    data = dev.xyat.realmcontrol.structure.project.EntityEdits.parse(raw);
+                    if (data != null && !dev.xyat.realmcontrol.structure.project.EntityEdits.loads(level, mark.type, data)) data = null;
+                } else if (data != null && request.has("fields")) {
+                    data = dev.xyat.realmcontrol.structure.project.EntityEdits.apply(level, mark.type, data, request.getAsJsonObject("fields"));
+                }
+                String text = data == null ? null : dev.xyat.realmcontrol.structure.project.EntityEdits.clean(data);
+                if (text == null) {
+                    answer.addProperty("problem", "msg.realmcontrol.structure.entity.invalid");
+                } else if (text.length() > Markers.EntityMark.MAX_DATA) {
+                    answer.addProperty("problem", "msg.realmcontrol.structure.entity.too_large");
+                } else {
+                    answer.addProperty("data", text);
+                    answer.addProperty("changed", !raw.isEmpty() || request.has("fields"));
+                }
+                answer.addProperty("scanned", dev.xyat.realmcontrol.structure.project.EntityEdits.clean(scanned));
+            }
+        } catch (IOException | RuntimeException e) {
+            answer.addProperty("problem", "msg.realmcontrol.structure.entity.invalid");
         }
-        CHANNEL.sendToPlayer(player, new NearbyMarkersPacket(list.toString()));
-    }
-
-    private static boolean near(StructureProject project, double x, double y, double z, int margin) {
-        return x >= project.origin[0] - margin && x <= project.origin[0] + project.size[0] + margin
-                && y >= project.origin[1] - margin && y <= project.origin[1] + project.size[1] + margin
-                && z >= project.origin[2] - margin && z <= project.origin[2] + project.size[2] + margin;
+        CHANNEL.sendToPlayer(player, new EntityDataPacket(id, answer.toString()));
     }
 
     /** Takes the editor's settings for the markers the server has; what the scan found stays as it is. */
@@ -225,7 +258,11 @@ public final class StructureEditorNetwork {
         markers.entityTypes = edited.entityTypes;
         for (Markers.EntityMark mark : markers.entities) {
             Markers.EntityMark change = edited.entity(mark.type, mark.x, mark.y, mark.z);
-            if (change != null) mark.keep = change.keep;
+            if (change == null) continue;
+            mark.keep = change.keep;
+            // Data the editor's page got from the server; anything that no longer reads as data is dropped.
+            mark.data = change.data == null || change.data.length() > Markers.EntityMark.MAX_DATA
+                    || dev.xyat.realmcontrol.structure.project.EntityEdits.parse(change.data) == null ? null : change.data;
         }
         try {
             ProjectStore.saveMarkers(id, markers);
@@ -239,53 +276,7 @@ public final class StructureEditorNetwork {
         }
         result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.saved", project.name), true);
         sendMarkers(player, id, "", false);
-        sendNearby(player);
         sendProjects(player, null);
-    }
-
-    /**
-     * The controller's entity mode: switches whether the entity looked at is published. It must still be about
-     * where the scan saw it (within two blocks).
-     */
-    private static void toggleEntity(ServerPlayer player, int entityId) {
-        net.minecraft.world.entity.Entity entity = player.level().getEntity(entityId);
-        if (entity == null || entity.distanceToSqr(player) > 200 * 200) return;
-        String dimension = player.level().dimension().location().toString();
-        String type = net.minecraft.world.entity.EntityType.getKey(entity.getType()).toString();
-        for (StructureProject project : ProjectStore.list()) {
-            if (!project.dimension.equals(dimension) || !near(project, entity.getX(), entity.getY(), entity.getZ(), 0)) continue;
-            Markers markers = ProjectStore.markers(project.id);
-            double x = entity.getX() - project.origin[0], y = entity.getY() - project.origin[1], z = entity.getZ() - project.origin[2];
-            Markers.EntityMark best = null;
-            double bestDistance = 4.0D;
-            for (Markers.EntityMark mark : markers.entities) {
-                double distance = (mark.x - x) * (mark.x - x) + (mark.y - y) * (mark.y - y) + (mark.z - z) * (mark.z - z);
-                if (mark.type.equals(type) && distance < bestDistance) {
-                    best = mark;
-                    bestDistance = distance;
-                }
-            }
-            if (best == null) {
-                Component message = KineticI18n.translatable("msg.realmcontrol.structure.marker.entity_unknown");
-                player.displayClientMessage(message, true);
-                return;
-            }
-            boolean keep = !markers.keeps(best);
-            best.keep = keep == markers.keepsType(type) ? null : keep;
-            try {
-                ProjectStore.saveMarkers(project.id, markers);
-            } catch (IOException e) {
-                result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.save_failed", String.valueOf(e.getMessage())), false);
-                return;
-            }
-            Component message = KineticI18n.translatable(keep ? "msg.realmcontrol.structure.marker.entity_kept" : "msg.realmcontrol.structure.marker.entity_dropped",
-                    entity.getType().getDescription(), project.name);
-            player.displayClientMessage(message, true);
-            sendNearby(player);
-            return;
-        }
-        Component message = KineticI18n.translatable("msg.realmcontrol.structure.marker.no_project");
-        player.displayClientMessage(message, true);
     }
 
     private static void startScan(ServerPlayer player, String id, String name, boolean rescan) {
@@ -385,6 +376,8 @@ public final class StructureEditorNetwork {
         boolean templates = !project.air.equals(edited.air) || !project.ignoreBlocks.equals(edited.ignoreBlocks)
                 || !project.save.toJson().equals(edited.save.toJson()) || !cutoutsJson.isEmpty();
         boolean rules = !project.generation.toJson().equals(edited.generation.toJson()) || project.embed != edited.embed;
+        // The row picture shows the draft as it generates: with its cut-outs, when they are saved with it.
+        boolean picture = !cutoutsJson.isEmpty() || project.save.cutouts != edited.save.cutouts;
         project.name = edited.name.isBlank() ? project.id : edited.name;
         project.embed = Math.max(0, Math.min(project.size[1], edited.embed));
         project.air = edited.air;
@@ -397,6 +390,7 @@ public final class StructureEditorNetwork {
             if (synced != null && !synced.success()) return synced;
             ProjectStore.save(project);
             if (!cutoutsJson.isEmpty()) ProjectStore.saveCutouts(project.id, Cutouts.fromJson(JsonParser.parseString(cutoutsJson).getAsJsonObject()));
+            if (picture) dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forgetPicture(server, dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX + project.id);
             if (synced != null) return synced;
         } catch (IOException e) {
             return new Publisher.Outcome(false, KineticI18n.translatable("msg.realmcontrol.structure.project.save_failed", String.valueOf(e.getMessage())));
@@ -425,6 +419,7 @@ public final class StructureEditorNetwork {
             return;
         }
         result(player, KineticI18n.translatable("msg.realmcontrol.structure.cutout.imported", added), added > 0);
+        if (added > 0) dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forgetPicture(player.getServer(), dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX + id);
         sendDetail(player, id);
     }
 
@@ -468,7 +463,7 @@ public final class StructureEditorNetwork {
             /** A draft's markers; {@code name} is the focus. */
             MARKERS,
             /** Opens the markers page of a draft; {@code name} is the focus. */
-            OPEN_MARKERS, LOOT_TABLES, NEARBY_MARKERS,
+            OPEN_MARKERS, LOOT_TABLES,
             /** Opens the generation page of a draft, from the structure panel. */
             OPEN_GENERATION,
             /** Places a draft around the player for a test. */
@@ -507,6 +502,7 @@ public final class StructureEditorNetwork {
                     }
                     try {
                         ProjectStore.delete(id);
+                        dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(player.getServer(), dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX + id);
                         result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.deleted", id), true);
                     } catch (IOException e) {
                         result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.save_failed", String.valueOf(e.getMessage())), false);
@@ -526,7 +522,6 @@ public final class StructureEditorNetwork {
                     LootTables.ids(player.getServer()).forEach(ids::add);
                     CHANNEL.sendToPlayer(player, new LootTablesPacket(ids.toString()));
                 }
-                case NEARBY_MARKERS -> sendNearby(player);
                 case OPEN_GENERATION -> sendDetail(player, id, true);
                 case TEST_PLACE -> TestPlacement.place(player, id);
                 case TEST_UNDO -> TestPlacement.undo(player);
@@ -609,19 +604,21 @@ public final class StructureEditorNetwork {
         }
     }
 
-    public record ToggleEntityPacket(int entityId) {
-        static ToggleEntityPacket read(NetworkBuffer buf) {
-            return new ToggleEntityPacket(buf.readVarInt());
+    /** A request of the 3D editor about one entity; see {@link #editEntity}. */
+    public record EntityEditPacket(String id, String json) {
+        static EntityEditPacket read(NetworkBuffer buf) {
+            return new EntityEditPacket(buf.readUtf(256), readJson(buf));
         }
 
         void write(NetworkBuffer buf) {
-            buf.writeVarInt(entityId);
+            buf.writeUtf(id, 256);
+            writeJson(buf, json);
         }
 
         void handle(ServerPacketContext context) {
             ServerPlayer player = context.sender();
             if (denied(player)) return;
-            toggleEntity(player, entityId);
+            editEntity(player, id, json);
         }
     }
 
@@ -661,17 +658,19 @@ public final class StructureEditorNetwork {
         }
     }
 
-    public record NearbyMarkersPacket(String json) {
-        static NearbyMarkersPacket read(NetworkBuffer buf) {
-            return new NearbyMarkersPacket(readJson(buf));
+    /** The answer to an {@link EntityEditPacket}. */
+    public record EntityDataPacket(String id, String json) {
+        static EntityDataPacket read(NetworkBuffer buf) {
+            return new EntityDataPacket(buf.readUtf(256), readJson(buf));
         }
 
         void write(NetworkBuffer buf) {
+            buf.writeUtf(id, 256);
             writeJson(buf, json);
         }
 
         void handleClient() {
-            EditorClient.nearby(JsonParser.parseString(json).getAsJsonArray());
+            EditorClient.entityData(id, JsonParser.parseString(json).getAsJsonObject());
         }
     }
 

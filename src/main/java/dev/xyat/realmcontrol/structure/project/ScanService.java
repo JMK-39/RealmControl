@@ -409,7 +409,7 @@ public final class ScanService {
                 finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(e.getMessage())));
                 return;
             }
-            StructurePreviewService.forget(ProjectPreview.PREFIX + id);
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(server, ProjectPreview.PREFIX + id);
             done = total;
             sendProgress(server, true);
             ServerPlayer player = server.getPlayerList().getPlayer(owner);

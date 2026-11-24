@@ -3,17 +3,15 @@ package dev.xyat.realmcontrol.worldblock.event;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
-import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.kineticcore.api.world.event.KineticWorldEvents;
+import dev.xyat.realmcontrol.worldblock.config.WorldBlockConfig;
 
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 public final class LoadedChunkRewriteBootstrap {
-    private static final Path CONFIG_PATH = KineticPlatform.configDirectory().resolve("kineticcore/worldblock.json");
     private static final StartupMode STARTUP_MODE = readStartupMode();
 
     private LoadedChunkRewriteBootstrap() {
@@ -37,8 +35,9 @@ public final class LoadedChunkRewriteBootstrap {
     }
 
     private static StartupMode readStartupMode() {
-        if (!Files.isRegularFile(CONFIG_PATH)) return StartupMode.DISABLED;
-        try (BufferedReader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
+        WorldBlockConfig.migrateConfigFiles();
+        if (!Files.isRegularFile(WorldBlockConfig.PATH)) return StartupMode.DISABLED;
+        try (BufferedReader reader = Files.newBufferedReader(WorldBlockConfig.PATH, StandardCharsets.UTF_8)) {
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
             boolean fixed = root.has("applyBlockReplacementToLoadedChunksOnce")
                     && root.get("applyBlockReplacementToLoadedChunksOnce").getAsBoolean();

@@ -188,6 +188,17 @@ public final class StructurePreviewService {
      */
     @Nullable
     static KineticBlockSnapshot sampleForThumbnail(MinecraftServer server, String structureId, BooleanSupplier cancelled) {
+        String draftPrefix = dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX;
+        if (structureId.startsWith(draftPrefix)) {
+            // A draft of the structure editor, as it will generate: its cut-outs left out.
+            try {
+                var draft = dev.xyat.realmcontrol.structure.project.ProjectPreview.read(structureId.substring(draftPrefix.length()), share -> { }, cancelled, true);
+                return draft == null ? null : draft.snapshot();
+            } catch (java.io.IOException | RuntimeException e) {
+                LOGGER.debug("Thumbnail of draft {} failed", structureId, e);
+                return null;
+            }
+        }
         Holder.Reference<Structure> structure = structure(server, structureId);
         if (structure == null) return null;
         if (structure.value() instanceof dev.xyat.realmcontrol.structure.mega.MegaStructure) {

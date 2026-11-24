@@ -88,20 +88,42 @@ public final class StructureThumbnailService {
         send(server, owner, structureId, png);
     }
 
-    /** Forgets every picture of the current world, datapacks and mods, in memory and on disk. */
-    /** Forgets one structure's picture, in memory and on disk, after its files changed. */
+    /** Forgets one structure's picture and kept preview samples, in memory and on disk, after its files changed. */
     public static void forget(MinecraftServer server, String structureId) {
+        forgetPicture(server, structureId);
+        StructurePreviewService.forget(structureId);
+    }
+
+    /**
+     * Forgets only the picture of a structure or draft ({@code project:<id>}), after something changed that the
+     * picture shows but the preview sample does not hold, such as a draft's cut-outs.
+     */
+    public static void forgetPicture(MinecraftServer server, String structureId) {
         MEMORY.remove(structureId);
         NONE.remove(structureId);
-        Path file = file(folder(server), structureId);
+        Path current = folder(server);
+        if (structureId.startsWith(dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX)) {
+            // Drafts are shared by every world in this game directory; each seed can have a cached picture of one.
+            try (var folders = Files.list(current.getParent())) {
+                folders.filter(Files::isDirectory).forEach(folder -> deletePicture(folder, structureId));
+            } catch (IOException ignored) {
+                // No pictures have been cached yet.
+            }
+        } else {
+            deletePicture(current, structureId);
+        }
+    }
+
+    private static void deletePicture(Path folder, String structureId) {
+        Path file = file(folder, structureId);
         try {
             if (file != null) Files.deleteIfExists(file);
         } catch (IOException ignored) {
             // A file another process holds is replaced when the picture is made again.
         }
-        StructurePreviewService.forget(structureId);
     }
 
+    /** Forgets every picture of the current world, datapacks and mods, in memory and on disk. */
     public static void clear(MinecraftServer server) {
         MEMORY.clear();
         NONE.clear();
@@ -201,9 +223,13 @@ public final class StructureThumbnailService {
 
     @Nullable
     private static Path file(Path folder, String structureId) {
-        int colon = structureId.indexOf(':');
-        if (colon <= 0 || !structureId.matches("[a-z0-9_.-]+:[a-z0-9_./-]+") || structureId.contains("..")) return null;
-        return folder.resolve(structureId.substring(0, colon)).resolve(structureId.substring(colon + 1) + ".png");
+        // Drafts of the structure editor (project:<id>) are kept apart, in a folder no namespace can be named like.
+        String draftPrefix = dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX;
+        boolean draft = structureId.startsWith(draftPrefix);
+        String id = draft ? structureId.substring(draftPrefix.length()) : structureId;
+        int colon = id.indexOf(':');
+        if (colon <= 0 || !id.matches("[a-z0-9_.-]+:[a-z0-9_./-]+") || id.contains("..")) return null;
+        return (draft ? folder.resolve("+drafts") : folder).resolve(id.substring(0, colon)).resolve(id.substring(colon + 1) + ".png");
     }
 
     /** The cache folder for this world seed, these datapacks and these mods. */

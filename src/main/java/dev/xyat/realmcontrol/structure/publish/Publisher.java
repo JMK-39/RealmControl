@@ -470,7 +470,10 @@ public final class Publisher {
         return keep;
     }
 
-    /** The entities of a tile that are published: not in a cut-out and not left out by the markers. */
+    /**
+     * The entities of a tile that are published: not in a cut-out and not left out by the markers, with the data the
+     * editor gave them.
+     */
     static List<Tile.EntityData> entitiesToWrite(Tile tile, Cutouts cutouts, Markers markers, StructureProject.SaveOptions options, int ox, int oz) {
         List<Tile.EntityData> entities = new ArrayList<>();
         if (!options.entities) return entities;
@@ -478,7 +481,11 @@ public final class Publisher {
             double x = ox + entity.x(), z = oz + entity.z();
             if (cutouts.isCut((int) Math.floor(x), (int) Math.floor(entity.y()), (int) Math.floor(z))) continue;
             CompoundTag data = entity.tag();
-            if (markers.keeps(data.getString("id"), x, entity.y(), z)) entities.add(entity);
+            String type = data.getString("id");
+            if (!markers.keeps(type, x, entity.y(), z)) continue;
+            Markers.EntityMark mark = markers.entity(type, x, entity.y(), z);
+            entities.add(mark == null || mark.data == null ? entity
+                    : new Tile.EntityData(entity.x(), entity.y(), entity.z(), dev.xyat.realmcontrol.structure.project.EntityEdits.published(data, mark)));
         }
         return entities;
     }
