@@ -13,6 +13,7 @@ import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadType;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacementType;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,7 +27,8 @@ public class MegaPlacement extends RandomSpreadStructurePlacement {
     public static final MapCodec<MegaPlacement> CODEC = RecordCodecBuilder.mapCodec(i -> placementCodec(i).and(i.group(
             Codec.intRange(0, 4096).fieldOf("spacing").forGetter(MegaPlacement::spacing),
             Codec.intRange(0, 4096).fieldOf("separation").forGetter(MegaPlacement::separation),
-            Codec.INT.listOf().fieldOf("size").forGetter(placement -> List.of(placement.layout.sizeX, placement.layout.sizeZ))
+            Codec.intRange(1, MegaLayout.MAX_DIMENSION).listOf().fieldOf("size")
+                    .forGetter(placement -> List.of(placement.layout.sizeX, placement.layout.sizeZ))
     )).apply(i, MegaPlacement::new));
 
     private final MegaLayout layout;
@@ -52,18 +54,16 @@ public class MegaPlacement extends RandomSpreadStructurePlacement {
     /** The instance and group whose start is chunk ({@code x}, {@code z}), if any; by vanilla's anchors alone, before frequency and exclusion. */
     @Nullable
     public Match match(long seed, int x, int z) {
-        int spacing = spacing(), reach = layout.maxGroupOffset() / Math.max(1, spacing) + 1;
-        int regionX = Math.floorDiv(x, spacing), regionZ = Math.floorDiv(z, spacing);
-        for (int dx = -reach; dx <= reach; dx++) {
-            for (int dz = -reach; dz <= reach; dz++) {
-                ChunkPos anchor = getPotentialStructureChunk(seed, (regionX + dx) * spacing, (regionZ + dz) * spacing);
+        int spacing = spacing(), reach = layout.maxGroupOffset();
+        int lastRegionX = Math.floorDiv(x + reach, spacing), lastRegionZ = Math.floorDiv(z + reach, spacing);
+        for (int rx = Math.floorDiv(x - reach, spacing); rx <= lastRegionX; rx++) {
+            for (int rz = Math.floorDiv(z - reach, spacing); rz <= lastRegionZ; rz++) {
+                ChunkPos anchor = getPotentialStructureChunk(seed, rx * spacing, rz * spacing);
                 int offsetX = x - MegaLayout.chunkX(anchor), offsetZ = z - MegaLayout.chunkZ(anchor);
-                if (Math.abs(offsetX) > layout.maxGroupOffset() || Math.abs(offsetZ) > layout.maxGroupOffset()) continue;
+                if (Math.abs(offsetX) > reach || Math.abs(offsetZ) > reach) continue;
                 Rotation rotation = MegaLayout.rotation(seed, MegaLayout.chunkX(anchor), MegaLayout.chunkZ(anchor));
-                for (int[] group : layout.groups()) {
-                    BlockPos offset = MegaLayout.groupOffset(rotation, group[0], group[1]);
-                    if (offset.getX() == offsetX && offset.getZ() == offsetZ) return new Match(anchor, rotation, group[0], group[1]);
-                }
+                BlockPos group = layout.groupAtOffset(offsetX, offsetZ, rotation);
+                if (group != null) return new Match(anchor, rotation, group.getX(), group.getZ());
             }
         }
         return null;
@@ -71,14 +71,13 @@ public class MegaPlacement extends RandomSpreadStructurePlacement {
 
     /** The anchors of the instances whose footprint, grown by {@code margin} blocks, may reach chunk ({@code x}, {@code z}). */
     public List<ChunkPos> anchorsNear(long seed, int x, int z, int margin) {
-        int spacing = spacing(), half = (Math.max(layout.sizeX, layout.sizeZ) + margin) / 16 + 2;
-        int reach = half / Math.max(1, spacing) + 1;
-        int regionX = Math.floorDiv(x, spacing), regionZ = Math.floorDiv(z, spacing);
-        java.util.ArrayList<ChunkPos> anchors = new java.util.ArrayList<>();
-        for (int dx = -reach; dx <= reach; dx++) {
-            for (int dz = -reach; dz <= reach; dz++) {
-                ChunkPos anchor = getPotentialStructureChunk(seed, (regionX + dx) * spacing, (regionZ + dz) * spacing);
-                if (Math.abs(x - MegaLayout.chunkX(anchor)) <= half && Math.abs(z - MegaLayout.chunkZ(anchor)) <= half) anchors.add(anchor);
+        int spacing = spacing(), reach = layout.anchorReach(margin);
+        int lastRegionX = Math.floorDiv(x + reach, spacing), lastRegionZ = Math.floorDiv(z + reach, spacing);
+        List<ChunkPos> anchors = new ArrayList<>();
+        for (int rx = Math.floorDiv(x - reach, spacing); rx <= lastRegionX; rx++) {
+            for (int rz = Math.floorDiv(z - reach, spacing); rz <= lastRegionZ; rz++) {
+                ChunkPos anchor = getPotentialStructureChunk(seed, rx * spacing, rz * spacing);
+                if (Math.abs(x - MegaLayout.chunkX(anchor)) <= reach && Math.abs(z - MegaLayout.chunkZ(anchor)) <= reach) anchors.add(anchor);
             }
         }
         return anchors;

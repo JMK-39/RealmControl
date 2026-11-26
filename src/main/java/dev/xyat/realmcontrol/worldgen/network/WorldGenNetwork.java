@@ -217,14 +217,14 @@ public class WorldGenNetwork {
 
     /** What a finished sample holds; the snapshot follows in {@code parts} parts. */
     public record StructurePreviewInfoPacket(int requestId, String structureId, int pieces, int sizeX, int sizeY, int sizeZ,
-                                             Map<String, Integer> missing, int parts, int failedChunks) {
+                                             Map<String, Long> missing, int parts, int failedChunks) {
         static StructurePreviewInfoPacket decode(NetworkBuffer buf) {
             int requestId = buf.readVarInt();
             String structureId = buf.readUtf(32767);
             int pieces = buf.readVarInt(), sizeX = buf.readVarInt(), sizeY = buf.readVarInt(), sizeZ = buf.readVarInt();
             int count = Math.min(buf.readVarInt(), 4096);
-            Map<String, Integer> missing = new LinkedHashMap<>();
-            for (int i = 0; i < count; i++) missing.put(buf.readUtf(32767), buf.readVarInt());
+            Map<String, Long> missing = new LinkedHashMap<>();
+            for (int i = 0; i < count; i++) missing.put(buf.readUtf(32767), buf.readVarLong());
             return new StructurePreviewInfoPacket(requestId, structureId, pieces, sizeX, sizeY, sizeZ, missing,
                     buf.readVarInt(), buf.readVarInt());
         }
@@ -236,12 +236,12 @@ public class WorldGenNetwork {
             buf.writeVarInt(sizeX);
             buf.writeVarInt(sizeY);
             buf.writeVarInt(sizeZ);
-            List<Map.Entry<String, Integer>> entries = new ArrayList<>(missing.entrySet());
+            List<Map.Entry<String, Long>> entries = new ArrayList<>(missing.entrySet());
             int count = Math.min(entries.size(), 4096);
             buf.writeVarInt(count);
             for (int i = 0; i < count; i++) {
                 buf.writeUtf(entries.get(i).getKey());
-                buf.writeVarInt(entries.get(i).getValue());
+                buf.writeVarLong(entries.get(i).getValue());
             }
             buf.writeVarInt(parts);
             buf.writeVarInt(failedChunks);

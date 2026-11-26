@@ -3,7 +3,10 @@ package dev.xyat.realmcontrol.structure.publish;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.structure.project.BlockStates;
@@ -24,18 +27,25 @@ import net.minecraft.world.level.storage.LevelResource;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Publishes a draft as vanilla data pack files, by default into KineticCore's data pack folder, pack
@@ -50,7 +60,7 @@ import java.util.regex.Pattern;
  * where it was scanned, because the jigsaw pairs line up exactly and only one rotation fits.</li>
  * </ul>
  * Both come with a jigsaw structure, a random-spread structure set and the biome tag {@code has_structure/<path>}.
- * A mega structure (up to 1024×1024) needs RealmControl: its 32×32 tiles become templates, its structure has the type
+ * A mega structure (up to 4096×4096) needs RealmControl: its 32×32 tiles become templates, its structure has the type
  * {@code realmcontrol:mega} and its set the placement {@code realmcontrol:mega_spread}; it is published only into the
  * KineticCore pack, which leaves those files out (and the world loads) when RealmControl is not installed.
  * Markers apply as it is written: containers get their loot tables, custom spawners their mobs, and left-out entities
@@ -59,6 +69,8 @@ import java.util.regex.Pattern;
  * load when a world is entered, and only new chunks get them.
  */
 public final class Publisher {
+    private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
+    private static final Set<String> WRITING = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     public static final String PACK = "realmcontrol";
     private static final Pattern TILE_FILE = Pattern.compile("t_\\d+_\\d+\\.(nbt|json)");
@@ -95,8 +107,40 @@ public final class Publisher {
 
     /** Publishes project {@code id}; runs off the server thread, {@code progress} gets 0 to 1. */
     public static Outcome publish(MinecraftServer server, String id, Consumer<Float> progress) throws IOException {
-        StructureProject project = ProjectStore.load(id);
-        if (project == null) return failure("msg.realmcontrol.structure.publish.unknown", id);
+        if (!WRITING.add(id)) return failure("msg.realmcontrol.structure.publish.busy", id);
+        List<Path[]> moves = new ArrayList<>();
+        Path zipStaging = null;
+        try (ProjectStore.Draft draft = ProjectStore.openDraft(id)) {
+            if (draft == null) return failure("msg.realmcontrol.structure.publish.unknown", id);
+            Path root = target(server, draft.project());
+            Path archive = null;
+            if ("zip".equals(draft.project().save.target)) {
+                archive = exportFolder().resolve(root.getFileName() + ".zip");
+                Files.createDirectories(root.getParent());
+                zipStaging = Files.createTempDirectory(root.getParent(), ".realm-export-");
+                root = zipStaging;
+            }
+            return publish(server, draft, progress, root, archive, moves);
+        } finally {
+            try {
+                discard(moves);
+                if (zipStaging != null) {
+                    try {
+                        ProjectStore.deleteTree(zipStaging);
+                    } catch (IOException | RuntimeException error) {
+                        LOGGER.warn("Could not remove structure ZIP staging {}", zipStaging, error);
+                    }
+                }
+            } finally {
+                WRITING.remove(id);
+            }
+        }
+    }
+
+    private static Outcome publish(MinecraftServer server, ProjectStore.Draft draft, Consumer<Float> progress,
+                                   Path root, @Nullable Path archive, List<Path[]> moves) throws IOException {
+        StructureProject project = draft.project();
+        String id = project.id;
         boolean medium = "medium".equals(project.tier()), mega = "mega".equals(project.tier());
         StructureProject.Generation generation = project.generation;
         if (generation.separation >= generation.spacing) return failure("msg.realmcontrol.structure.publish.spacing");
@@ -107,25 +151,23 @@ public final class Publisher {
         BiomeFilter.Result biomes = BiomeFilter.resolve(server, generation);
         if (biomes.values().isEmpty()) return failure("msg.realmcontrol.structure.publish.no_biomes");
         StructureProject.SaveOptions options = project.save;
-        Markers markers = ProjectStore.markers(id);
+        Markers markers = draft.markers();
         List<String> unknownTables = options.loot ? LootTables.unknownTables(server, markers) : List.of();
         if (!unknownTables.isEmpty()) return failure("msg.realmcontrol.structure.publish.unknown_tables", String.join("、", unknownTables));
         progress.accept(0.05F);
 
-        Cutouts cutouts = options.cutouts ? ProjectStore.cutouts(id) : new Cutouts();
+        Cutouts cutouts = options.cutouts ? draft.cutouts() : new Cutouts();
         String namespace = project.namespace(), path = project.path();
-        Path root = target(server, project);
         Path data = root.resolve("data").resolve(namespace);
-        List<Path[]> moves = new ArrayList<>();
         List<String> absent = new ArrayList<>();
         if (mega) {
-            Outcome problem = stageMegaTiles(project, cutouts, markers, data, moves, progress, absent);
+            Outcome problem = stageMegaTiles(draft, project, cutouts, markers, data, moves, progress, absent);
             if (problem != null) return problem;
         } else if (medium) {
-            Outcome problem = stageTiles(project, cutouts, markers, data, moves, progress);
+            Outcome problem = stageTiles(draft, project, cutouts, markers, data, moves, progress);
             if (problem != null) return problem;
         } else {
-            Tile tile = ProjectStore.readTile(id, 0, 0);
+            Tile tile = readTile(draft, 0, 0);
             if (tile == null) return failure("msg.realmcontrol.structure.publish.no_tiles");
             boolean[] keep = cellsToWrite(project, tile, cutouts, 0, 0);
             progress.accept(0.25F);
@@ -140,26 +182,34 @@ public final class Publisher {
         if (options.loot) stageTables(root, markers, options, moves);
         Path meta = root.resolve("pack.mcmeta");
         if (!Files.exists(meta) || options.bothFormats) writeJson(staged(meta, moves), packMeta(options.bothFormats));
-        for (Path[] move : moves) Files.move(move[0], move[1], StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        Set<Path> written = new HashSet<>();
-        for (Path[] move : moves) written.add(move[1]);
-        removeStale(data, path, written);
-        Path published = root;
-        if ("zip".equals(options.target)) published = zip(root, exportFolder().resolve(root.getFileName() + ".zip"));
+        if (archive != null) {
+            List<Path[]> entries = List.copyOf(moves);
+            writeArchive(root, staged(archive, moves), entries);
+        }
         progress.accept(0.95F);
+        if (!ProjectStore.beginInstall(draft)) return failure("msg.realmcontrol.structure.publish.changed", id);
 
-        project.status = "published";
-        project.publishedAt = System.currentTimeMillis();
-        // A ZIP is not loaded from where it was written, so later rule changes have nothing to update.
-        project.publishedRoot = "zip".equals(options.target) ? "" : root.toAbsolutePath().toString();
-        ProjectStore.save(project);
-        dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(server, id);
+        Commit savePublication = () -> {
+            if (!ProjectStore.updateIfCurrent(draft, current -> {
+                current.status = "published";
+                current.publishedAt = System.currentTimeMillis();
+                current.publishedRoot = archive == null ? root.toAbsolutePath().toString() : "";
+            })) throw new IOException("Draft changed before publication completed: " + id);
+        };
+        if (archive == null) installPack(data, path, moves, savePublication);
+        else install(List.<Path[]>of(moves.get(moves.size() - 1)), List.of(), savePublication);
+
+        try {
+            dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(server, id);
+        } catch (RuntimeException error) {
+            LOGGER.warn("Could not refresh the thumbnail of published structure {}", id, error);
+        }
         String doneKey = switch (options.target) {
             case "world" -> "msg.realmcontrol.structure.publish.done_world";
             case "zip" -> "msg.realmcontrol.structure.publish.done_zip";
             default -> "msg.realmcontrol.structure.publish.done";
         };
-        return new Outcome(true, KineticI18n.translatable(doneKey, id, biomes.count(), published.toString()));
+        return new Outcome(true, KineticI18n.translatable(doneKey, id, biomes.count(), (archive == null ? root : archive).toString()));
     }
 
     /**
@@ -169,7 +219,41 @@ public final class Publisher {
      * structure was not published into a folder that still holds it.
      */
     @Nullable
-    public static Outcome syncGeneration(MinecraftServer server, StructureProject project) throws IOException {
+    public static Outcome saveEdits(MinecraftServer server, StructureProject project, boolean rules, @Nullable Cutouts cutouts) throws IOException {
+        if (!WRITING.add(project.id)) return failure("msg.realmcontrol.structure.publish.busy", project.id);
+        List<Path[]> moves = new ArrayList<>();
+        try {
+            Outcome result = rules ? stageGenerationEdit(server, project, moves) : null;
+            if (result != null && !result.success()) return result;
+            install(moves, List.of(), () -> saveEditMetadata(project, cutouts));
+            return result;
+        } finally {
+            discard(moves);
+            WRITING.remove(project.id);
+        }
+    }
+
+    private static void saveEditMetadata(StructureProject project, @Nullable Cutouts cutouts) throws IOException {
+        if (cutouts == null) {
+            ProjectStore.save(project);
+            return;
+        }
+        Cutouts previous = ProjectStore.cutouts(project.id);
+        ProjectStore.saveCutouts(project.id, cutouts);
+        try {
+            ProjectStore.save(project);
+        } catch (IOException | RuntimeException failure) {
+            try {
+                ProjectStore.saveCutouts(project.id, previous);
+            } catch (IOException | RuntimeException rollbackError) {
+                failure.addSuppressed(rollbackError);
+            }
+            throw failure;
+        }
+    }
+
+    @Nullable
+    private static Outcome stageGenerationEdit(MinecraftServer server, StructureProject project, List<Path[]> moves) throws IOException {
         if (project.publishedRoot.isBlank() || "draft".equals(project.status)) return null;
         Path data = Path.of(project.publishedRoot).resolve("data").resolve(project.namespace());
         if (!Files.isRegularFile(data.resolve("worldgen/structure_set/" + project.path() + ".json"))) return null;
@@ -180,9 +264,7 @@ public final class Publisher {
         }
         BiomeFilter.Result biomes = BiomeFilter.resolve(server, generation);
         if (biomes.values().isEmpty()) return failure("msg.realmcontrol.structure.publish.no_biomes");
-        List<Path[]> moves = new ArrayList<>();
         stageGeneration(project, biomes, data, moves, publishedAbsent(project, data));
-        for (Path[] move : moves) Files.move(move[0], move[1], StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         return new Outcome(true, KineticI18n.translatable("msg.realmcontrol.structure.generation.synced", project.name, biomes.count()));
     }
 
@@ -198,6 +280,15 @@ public final class Publisher {
         writeJson(staged(data.resolve("tags/worldgen/biome/has_structure/" + path + ".json"), moves), tag);
     }
 
+    /** Explicit air tiles still carve terrain when the editor asks to keep air. */
+    private static Tile readTile(ProjectStore.Draft draft, int tx, int tz) throws IOException {
+        if (!draft.isEmptyTile(tx, tz)) return draft.readTile(tx, tz);
+        StructureProject project = draft.project();
+        int size = project.tileSize;
+        return new Tile(Math.min(size, project.size[0] - tx * size), project.size[1],
+                Math.min(size, project.size[2] - tz * size));
+    }
+
     /**
      * A medium structure: every tile that keeps anything becomes a template with one jigsaw block and a pool of its
      * own, and the frame template gets the anchor and one jigsaw per tile. A frame jigsaw at {@code P} faces east
@@ -206,7 +297,7 @@ public final class Publisher {
      * turns into what that cell held: nothing for a cell the template leaves to the world, air, or the block itself.
      */
     @Nullable
-    private static Outcome stageTiles(StructureProject project, Cutouts cutouts, Markers markers, Path data, List<Path[]> moves,
+    private static Outcome stageTiles(ProjectStore.Draft draft, StructureProject project, Cutouts cutouts, Markers markers, Path data, List<Path[]> moves,
                                       Consumer<Float> progress) throws IOException {
         StructureProject.SaveOptions options = project.save;
         String path = project.path(), prefix = project.id + "/";
@@ -219,7 +310,7 @@ public final class Publisher {
         frame.add(new Jigsaw(anchorX, 0, anchorZ, "minecraft:jigsaw[orientation=up_north]", jigsawData(prefix + "anchor", EMPTY, EMPTY, STRUCTURE_VOID)));
         for (int tz = 0; tz < tilesZ; tz++) {
             for (int tx = 0; tx < tilesX; tx++) {
-                Tile tile = ProjectStore.readTile(project.id, tx, tz);
+                Tile tile = readTile(draft, tx, tz);
                 if (tile == null) return failure("msg.realmcontrol.structure.publish.no_tiles");
                 int ox = tx * size, oz = tz * size;
                 boolean[] keep = cellsToWrite(project, tile, cutouts, ox, oz);
@@ -256,21 +347,33 @@ public final class Publisher {
      * {@code absent} instead.
      */
     @Nullable
-    private static Outcome stageMegaTiles(StructureProject project, Cutouts cutouts, Markers markers, Path data, List<Path[]> moves,
+    private static Outcome stageMegaTiles(ProjectStore.Draft draft, StructureProject project, Cutouts cutouts, Markers markers, Path data, List<Path[]> moves,
                                           Consumer<Float> progress, List<String> absent) throws IOException {
         StructureProject.SaveOptions options = project.save;
         String path = project.path();
         int size = project.tileSize, tilesX = project.tilesX(), tilesZ = project.tilesZ();
         if (size != dev.xyat.realmcontrol.structure.mega.MegaLayout.TILE) return failure("msg.realmcontrol.structure.publish.no_tiles");
         int written = 0;
+        boolean keepEmptyAir = "keep".equals(project.air) && !project.ignoreBlocks.contains(BlockStates.AIR);
         for (int tz = 0; tz < tilesZ; tz++) {
             for (int tx = 0; tx < tilesX; tx++) {
-                Tile tile = ProjectStore.readTile(project.id, tx, tz);
+                progress.accept(0.05F + 0.7F * (tz * tilesX + tx) / (tilesX * tilesZ));
+                if (draft.isEmptyTile(tx, tz) && !keepEmptyAir) {
+                    absent.add(tx + "_" + tz);
+                    continue;
+                }
+                Tile tile = readTile(draft, tx, tz);
                 if (tile == null) return failure("msg.realmcontrol.structure.publish.no_tiles");
                 int ox = tx * size, oz = tz * size;
+                if (tile.palette.size() == 1 && !keepEmptyAir && tile.entities.isEmpty()) {
+                    absent.add(tx + "_" + tz);
+                    continue;
+                }
                 boolean[] keep = cellsToWrite(project, tile, cutouts, ox, oz);
                 boolean any = false;
-                for (boolean cell : keep) any |= cell;
+                for (boolean cell : keep) {
+                    if (cell) { any = true; break; }
+                }
                 if (!any && entitiesToWrite(tile, cutouts, markers, options, ox, oz).isEmpty()) {
                     absent.add(tx + "_" + tz);
                     continue;
@@ -279,20 +382,40 @@ public final class Publisher {
                 writeTemplate(stageTemplate(data, file, moves), project, tile, keep, cutouts, markers, ox, oz, null);
                 copyToOtherFormat(data, file, options, moves);
                 written++;
-                progress.accept(0.05F + 0.7F * (tz * tilesX + tx + 1) / (tilesX * tilesZ));
             }
         }
         return written == 0 ? failure("msg.realmcontrol.structure.publish.no_tiles") : null;
     }
 
-    /** The tiles of a published mega structure that have no template, read from the folder it was published to. */
-    private static List<String> publishedAbsent(StructureProject project, Path data) {
+    /** The published definition is authoritative. Older definitions without an absent list use their tile files. */
+    static List<String> publishedAbsent(StructureProject project, Path data) throws IOException {
         List<String> absent = new ArrayList<>();
         if (!"mega".equals(project.tier())) return absent;
+        Path definition = data.resolve("worldgen/structure").resolve(project.path() + ".json");
+        try {
+            JsonObject json = JsonParser.parseString(Files.readString(definition, StandardCharsets.UTF_8)).getAsJsonObject();
+            if (json.has("absent")) {
+                JsonElement value = json.get("absent");
+                if (!value.isJsonArray()) throw new IOException("Invalid absent tile list in " + definition);
+                for (JsonElement element : value.getAsJsonArray()) {
+                    if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+                        throw new IOException("Invalid absent tile in " + definition);
+                    }
+                    absent.add(element.getAsString());
+                }
+                return absent;
+            }
+        } catch (NoSuchFileException missing) {
+            // The legacy generation files may be missing the separate structure definition.
+        } catch (JsonParseException | IllegalStateException malformed) {
+            throw new IOException("Invalid structure definition " + definition, malformed);
+        }
         Path tiles = data.resolve(templateFolder()).resolve(project.path());
+        Set<String> present = new HashSet<>();
+        for (Path tile : tileFiles(tiles)) present.add(tile.getFileName().toString());
         for (int tz = 0; tz < project.tilesZ(); tz++) {
             for (int tx = 0; tx < project.tilesX(); tx++) {
-                if (!Files.isRegularFile(tiles.resolve("t_" + tx + "_" + tz + ".nbt"))) absent.add(tx + "_" + tz);
+                if (!present.contains("t_" + tx + "_" + tz + ".nbt")) absent.add(tx + "_" + tz);
             }
         }
         return absent;
@@ -362,7 +485,9 @@ public final class Publisher {
      * Removes the templates and tile pools of this structure that the publish did not write: those of the other
      * tier, of tiles that are now cut out entirely, and of the other format when it is no longer written.
      */
-    private static void removeStale(Path data, String path, Set<Path> written) throws IOException {
+    static void installPack(Path data, String path, List<Path[]> moves, Commit metadata) throws IOException {
+        Set<Path> written = new HashSet<>();
+        for (Path[] move : moves) written.add(move[1]);
         List<Path> candidates = new ArrayList<>();
         for (String folder : List.of(templateFolder(), otherTemplateFolder())) {
             Path templates = data.resolve(folder);
@@ -372,23 +497,25 @@ public final class Publisher {
         }
         candidates.addAll(tileFiles(data.resolve("worldgen/template_pool").resolve(path)));
         candidates.add(data.resolve("worldgen/template_pool").resolve(path).resolve("start.json"));
-        for (Path file : candidates) {
-            if (!written.contains(file)) Files.deleteIfExists(file);
-        }
+        candidates.removeIf(written::contains);
+        install(moves, candidates, metadata);
         for (String folder : List.of(templateFolder(), otherTemplateFolder())) {
             Path tiles = data.resolve(folder).resolve(path);
-            if (Files.isDirectory(tiles)) {
-                try (var entries = Files.list(tiles)) {
-                    if (entries.findAny().isEmpty()) Files.delete(tiles);
-                }
+            try {
+                if (Files.isDirectory(tiles, LinkOption.NOFOLLOW_LINKS)) Files.deleteIfExists(tiles);
+            } catch (DirectoryNotEmptyException expected) {
+                // This publication still has tiles there.
+            } catch (IOException | RuntimeException error) {
+                LOGGER.warn("Could not remove empty structure tile directory {}", tiles, error);
             }
         }
     }
 
     private static List<Path> tileFiles(Path folder) throws IOException {
-        if (!Files.isDirectory(folder)) return List.of();
         try (var files = Files.list(folder)) {
             return files.filter(file -> TILE_FILE.matcher(file.getFileName().toString()).matches()).toList();
+        } catch (NoSuchFileException missing) {
+            return List.of();
         }
     }
 
@@ -409,21 +536,16 @@ public final class Publisher {
         }
     }
 
-    /** Packs the staged folder into {@code zip}, then removes the folder. */
-    private static Path zip(Path folder, Path zip) throws IOException {
-        Files.createDirectories(zip.getParent());
-        Path temp = zip.resolveSibling(zip.getFileName() + ".tmp");
-        try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(temp));
-             java.util.stream.Stream<Path> files = Files.walk(folder)) {
-            for (Path file : files.filter(Files::isRegularFile).sorted().toList()) {
-                out.putNextEntry(new java.util.zip.ZipEntry(folder.relativize(file).toString().replace('\\', '/')));
-                Files.copy(file, out);
+    /** Builds a complete archive from staged data with their final pack-relative names. */
+    static void writeArchive(Path folder, Path archive, List<Path[]> stagedEntries) throws IOException {
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(archive))) {
+            for (Path[] entry : stagedEntries.stream().sorted(Comparator.comparing(move -> move[1])).toList()) {
+                String name = folder.relativize(entry[1]).toString().replace('\\', '/');
+                out.putNextEntry(new ZipEntry(name));
+                Files.copy(entry[0], out);
                 out.closeEntry();
             }
         }
-        Files.move(temp, zip, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        ProjectStore.deleteTree(folder);
-        return zip;
     }
 
     /** Writes {@code pack.mcmeta} into a pack folder that has none yet. */
@@ -442,10 +564,11 @@ public final class Publisher {
      */
     public static boolean[] cellsToWrite(StructureProject project, Tile tile, Cutouts cutouts, int ox, int oz) {
         boolean[] keep = new boolean[tile.cells.length];
-        Set<Integer> ignored = new HashSet<>();
+        boolean[] ignored = new boolean[tile.palette.size()];
+        BitSet cut = cutouts.tileMask(ox, oz, tile.sizeX, tile.sizeY, tile.sizeZ);
         Set<String> ignoredIds = new HashSet<>(project.ignoreBlocks);
         for (int i = 0; i < tile.palette.size(); i++) {
-            if (ignoredIds.contains(BlockStates.blockId(tile.palette.get(i)))) ignored.add(i);
+            ignored[i] = ignoredIds.contains(BlockStates.blockId(tile.palette.get(i)));
         }
         for (int z = 0; z < tile.sizeZ; z++) {
             for (int x = 0; x < tile.sizeX; x++) {
@@ -453,7 +576,7 @@ public final class Publisher {
                 for (int y = tile.sizeY - 1; y >= 0; y--) {
                     int cell = tile.cell(x, y, z);
                     int index = tile.cells[cell] & 0xFFFF;
-                    if (cutouts.isCut(ox + x, y, oz + z) || ignored.contains(index)) continue;
+                    if (ignored[index] || cut.get((x + tile.sizeX * z) * tile.sizeY + y)) continue;
                     if (index != 0) {
                         keep[cell] = true;
                         covered = true;
@@ -494,16 +617,18 @@ public final class Publisher {
                                       int ox, int oz, @Nullable Jigsaw jigsaw) throws IOException {
         StructureProject.SaveOptions options = project.save;
         int jigsawCell = jigsaw == null ? -1 : tile.cell(jigsaw.x(), jigsaw.y(), jigsaw.z());
-        Map<Integer, Integer> remap = new HashMap<>();
+        int[] remap = new int[tile.palette.size()];
+        Arrays.fill(remap, -1);
         List<String> palette = new ArrayList<>();
         int blocks = 0;
         for (int cell = 0; cell < keep.length; cell++) {
             if (!keep[cell] || cell == jigsawCell) continue;
             blocks++;
-            remap.computeIfAbsent(tile.cells[cell] & 0xFFFF, index -> {
+            int index = tile.cells[cell] & 0xFFFF;
+            if (remap[index] == -1) {
+                remap[index] = palette.size();
                 palette.add(tile.palette.get(index));
-                return palette.size() - 1;
-            });
+            }
         }
         if (jigsaw != null) {
             blocks++;
@@ -516,8 +641,8 @@ public final class Publisher {
                     for (int x = 0; x < tile.sizeX; x++) {
                         int cell = tile.cell(x, y, z);
                         if (cell == jigsawCell) writer.block(x, y, z, palette.size() - 1, jigsaw.nbt());
-                        else if (keep[cell]) writer.block(x, y, z, remap.get(tile.cells[cell] & 0xFFFF),
-                                blockEntity(tile.blockEntities.get(cell), ox + x, y, oz + z, markers, options));
+                        else if (keep[cell]) writer.block(x, y, z, remap[tile.cells[cell] & 0xFFFF],
+                                tile.blockEntities.isEmpty() ? null : blockEntity(tile.blockEntities.get(cell), ox + x, y, oz + z, markers, options));
                     }
                 }
             }
@@ -742,11 +867,102 @@ public final class Publisher {
     }
 
     /** A temporary file beside {@code target}, noted to be moved onto it once everything is written. */
-    private static Path staged(Path target, List<Path[]> moves) throws IOException {
+    static Path staged(Path target, List<Path[]> moves) throws IOException {
         Files.createDirectories(target.getParent());
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        Path temp = Files.createTempFile(target.getParent(), ".realm-", ".tmp");
         moves.add(new Path[]{temp, target});
         return temp;
+    }
+
+    @FunctionalInterface
+    interface Commit {
+        void run() throws IOException;
+    }
+
+    private record InstalledFile(Path target, @Nullable Path backup) { }
+
+    /** A metadata write is the final step. Until it succeeds, both replaced and removed files can be restored. */
+    static void install(List<Path[]> moves, List<Path> stale, Commit metadata) throws IOException {
+        List<InstalledFile> installed = new ArrayList<>();
+        try {
+            for (Path[] move : moves) {
+                Path temp = move[0], target = move[1];
+                Path backup = regularFileExists(target) ? backup(target, temp) : null;
+                try {
+                    replace(temp, target);
+                } catch (IOException | RuntimeException failure) {
+                    if (backup != null) removeTemp(backup);
+                    throw failure;
+                }
+                installed.add(new InstalledFile(target, backup));
+            }
+            for (Path target : stale) {
+                if (!regularFileExists(target)) continue;
+                Path backup = Files.createTempFile(target.getParent(), ".realm-", ".backup");
+                try {
+                    replace(target, backup);
+                } catch (IOException | RuntimeException failure) {
+                    removeTemp(backup);
+                    throw failure;
+                }
+                installed.add(new InstalledFile(target, backup));
+            }
+            metadata.run();
+        } catch (IOException | RuntimeException failure) {
+            for (int i = installed.size() - 1; i >= 0; i--) {
+                InstalledFile file = installed.get(i);
+                try {
+                    if (file.backup() == null) Files.deleteIfExists(file.target());
+                    else replace(file.backup(), file.target());
+                } catch (IOException | RuntimeException rollbackError) {
+                    failure.addSuppressed(rollbackError);
+                }
+            }
+            throw failure;
+        }
+        for (InstalledFile file : installed) if (file.backup() != null) removeTemp(file.backup());
+    }
+
+    private static boolean regularFileExists(Path file) throws IOException {
+        try {
+            if (!Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).isRegularFile()) {
+                throw new IOException("Expected a regular file at " + file);
+            }
+            return true;
+        } catch (NoSuchFileException missing) {
+            return false;
+        }
+    }
+
+    private static Path backup(Path target, Path temp) throws IOException {
+        Path backup = temp.resolveSibling(temp.getFileName() + ".backup");
+        try {
+            try {
+                Files.createLink(backup, target);
+            } catch (IOException | UnsupportedOperationException noLinks) {
+                Files.copy(target, backup);
+            }
+            return backup;
+        } catch (IOException | RuntimeException failure) {
+            removeTemp(backup);
+            throw failure;
+        }
+    }
+
+    private static void replace(Path source, Path target) throws IOException {
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    static void discard(List<Path[]> moves) {
+        for (Path[] move : moves) removeTemp(move[0]);
+    }
+
+    private static void removeTemp(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warn("Could not remove structure publish staging file {}", file, e);
+        }
     }
 
     private static void writeJson(Path file, JsonObject json) throws IOException {

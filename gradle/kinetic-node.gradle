@@ -262,6 +262,21 @@ tasks.register('checkSavedDataRegression', JavaExec) {
 }
 tasks.named('check').configure { dependsOn 'checkSavedDataRegression' }
 
+def structureRegressions = [
+        checkGiantDraftRegression: 'dev.xyat.realmcontrol.structure.project.GiantDraftRegression',
+        checkMegaGenerationRegression: 'dev.xyat.realmcontrol.structure.mega.MegaGenerationRegression',
+        checkStructureScanRegression: 'dev.xyat.realmcontrol.structure.project.StructureScanRegression'
+]
+structureRegressions.each { taskName, suite ->
+    tasks.register(taskName, JavaExec) {
+        group = 'verification'
+        dependsOn 'testClasses'
+        classpath = sourceSets.test.runtimeClasspath
+        mainClass = suite
+    }
+}
+tasks.named('check').configure { dependsOn structureRegressions.keySet() }
+
 tasks.register('checkBeaconSpawnRuleDraft', JavaExec) {
     group = 'verification'
     dependsOn 'testClasses'
@@ -301,7 +316,7 @@ if (pLoader == 'forge') {
             }
         }
     }
-    ['test', 'checkSavedDataRegression'].each { String taskName ->
+    (['test', 'checkSavedDataRegression'] + structureRegressions.keySet()).each { String taskName ->
         tasks.named(taskName).configure {
             dependsOn unsignedClasspath
             doFirst {
@@ -334,6 +349,24 @@ if (pLoader == 'neoforge') {
     }
 }
 
+def verifyFixturePackages = { Jar fixture ->
+    def own = sourceSets.main.output.classesDirs.files.findAll { it.isDirectory() }.collectMany { dir ->
+        fileTree(dir).matching { include '**/*.class' }.files.collect {
+            dir.toPath().relativize(it.toPath()).getParent().toString().replace(File.separatorChar, '/' as char)
+        }
+    }.toSet()
+    new java.util.zip.ZipFile(fixture.archiveFile.get().asFile).withCloseable { zip ->
+        def fixturePackages = zip.entries().findAll { it.name.endsWith('.class') }.collect {
+            it.name.substring(0, it.name.lastIndexOf('/'))
+        }.toSet()
+        def overlaps = fixturePackages.intersect(own)
+        if (!overlaps.empty) throw new GradleException("Runtime fixture shares production packages: ${overlaps}")
+    }
+}
+tasks.withType(Jar).matching { it.name in ['runtimeValidationJar', 'guiCaptureValidationJar'] }.configureEach {
+    doLast { verifyFixturePackages(delegate as Jar) }
+}
+
 // English and Chinese must expose exactly the same authored translation keys.
 apply from: rootProject.file('gradle/kinetic-language-validation.gradle')
 
@@ -351,7 +384,7 @@ if (project.property('loader') == 'forge') {
     }
     def captureJar = tasks.register('guiCaptureValidationJar', Jar) {
         dependsOn 'testClasses', writeCaptureMetadata
-        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class', 'dev/xyat/realmcontrolvalidation/PreviewDragValidation*.class' }
+        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class', 'dev/xyat/realmcontrolvalidation/MegaNaturalValidation*.class', 'dev/xyat/realmcontrolvalidation/MegaDraftFixture.class', 'dev/xyat/realmcontrolvalidation/PreviewDragValidation*.class' }
         from captureMetadata
         archiveFileName = 'realmcontrol-gui-capture.jar'
     }

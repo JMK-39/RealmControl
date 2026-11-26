@@ -41,12 +41,17 @@ public final class Tile {
     }
 
     public Tile(int sizeX, int sizeY, int sizeZ) {
+        if (!validSize(sizeX, sizeY, sizeZ)) throw new IllegalArgumentException("Invalid structure tile dimensions");
         this.sizeX = sizeX;
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
         this.cells = new short[sizeX * sizeY * sizeZ];
         palette.add(BlockStates.AIR);
         paletteIndex.put(BlockStates.AIR, 0);
+    }
+
+    private static boolean validSize(int x, int y, int z) {
+        return x > 0 && x <= 64 && y > 0 && y <= 4096 && z > 0 && z <= 64;
     }
 
     public int cell(int x, int y, int z) {
@@ -111,7 +116,7 @@ public final class Tile {
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(new GZIPInputStream(Files.newInputStream(file), 65536)))) {
             if (in.readInt() != MAGIC) throw new IOException("Not a structure tile: " + file);
             int sizeX = in.readInt(), sizeY = in.readInt(), sizeZ = in.readInt();
-            if (sizeX <= 0 || sizeY <= 0 || sizeZ <= 0 || (long) sizeX * sizeY * sizeZ > 64L * 64 * 4096) {
+            if (!validSize(sizeX, sizeY, sizeZ)) {
                 throw new IOException("Bad tile size in " + file);
             }
             Tile tile = new Tile(sizeX, sizeY, sizeZ);
@@ -124,27 +129,35 @@ public final class Tile {
                 tile.palette.add(state);
                 tile.paletteIndex.putIfAbsent(state, i);
             }
-            int bits = in.readByte();
+            int bits = in.readUnsignedByte();
+            int requiredBits = Math.max(1, 32 - Integer.numberOfLeadingZeros(paletteSize - 1));
+            if (bits < requiredBits || bits > 16) throw new IOException("Bad palette width in " + file);
             int perLong = 64 / bits;
             int longs = in.readInt();
+            if (longs != (tile.cells.length + perLong - 1) / perLong) throw new IOException("Bad packed length in " + file);
             long mask = (1L << bits) - 1;
             for (int i = 0; i < longs; i++) {
                 long packed = in.readLong();
                 int base = i * perLong;
                 for (int j = 0; j < perLong && base + j < tile.cells.length; j++) {
                     int index = (int) ((packed >>> (j * bits)) & mask);
-                    tile.cells[base + j] = (short) (index < paletteSize ? index : 0);
+                    if (index >= paletteSize) throw new IOException("Bad palette index in " + file);
+                    tile.cells[base + j] = (short) index;
                 }
             }
             int blockEntities = in.readInt();
+            if (blockEntities < 0 || blockEntities > tile.cells.length) throw new IOException("Bad block entity count in " + file);
             for (int i = 0; i < blockEntities; i++) {
                 int cell = in.readInt();
+                if (cell < 0 || cell >= tile.cells.length) throw new IOException("Bad block entity position in " + file);
                 tile.blockEntities.put(cell, NbtIo.read(in));
             }
             int entities = in.readInt();
+            if (entities < 0) throw new IOException("Bad entity count in " + file);
             for (int i = 0; i < entities; i++) {
                 tile.entities.add(new EntityData(in.readDouble(), in.readDouble(), in.readDouble(), NbtIo.read(in)));
             }
+            if (in.read() != -1) throw new IOException("Unexpected data after tile records in " + file);
             return tile;
         }
     }

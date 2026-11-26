@@ -1,3 +1,12 @@
+2026年11月26日 — 26.11.26 — Large custom structures / 超巨型自定义结构
+
+- Select and publish a footprint up to 4096 × 4096 blocks. A mega structure keeps one anchor, rotation and base height across its parts. When a new chunk generates, RealmControl checks the nearby group and places the tiles that reach that chunk. Dense tiles share decoded blocks between generation workers and keep a bounded cache.
+- Large drafts scan incrementally. Empty tiles use a compact index, and a rescan switches to the new data after it finishes writing. Preview and publish each use one completed scan. Existing drafts and structures remain readable.
+- NeoForge builds require KineticCore 26.11.26 or later so enchanted starter items can be saved after Publish & Rejoin. Forge supports KineticCore 26.11.24 or later.
+- 结构编辑器的水平选区扩大到 4096 × 4096 格。建筑群各部分共用中心、朝向和地基高度。玩家进入新区块时，游戏只查找附近的结构分组，放置落在当前区块的部分。密集建筑的模板可由生成线程共用，缓存同时按模板数量和方块条目数控制。
+- 大草稿分段扫描，空白分块使用索引保存。重新扫描写完后才切换草稿，预览和发布各自读取一次完整扫描的结果。旧版草稿和已发布结构可以继续使用。
+- NeoForge 需要 KineticCore 26.11.26 或以上版本，修复“发布并重进”后附魔新手装备导致的存档错误。Forge 的核心最低版本为 26.11.24。
+
 2026年11月14日 — 26.11.14 — Structure editor look / 结构编辑器外观
 - The controller's next-click outline follows the actual A/B and Shift actions, and its status panel wraps on smaller screens. Editing a shared draft invalidates its thumbnails in every world's cache, so returning to another world shows the updated picture.
 - 控制器的下一次点击预览与实际的 A/B、Shift 操作保持一致，状态面板在较小窗口中自动换行。修改共用草稿会同时清除各世界中的旧缩略图，切回其他世界也能显示新图片。

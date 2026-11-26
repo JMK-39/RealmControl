@@ -32,7 +32,7 @@ final class StructureSampler {
     private static final int ATTEMPTS = 16;
 
     /** A finished sample. {@code missing} lists template blocks this game does not know, with how often each occurs. */
-    record Sample(KineticBlockSnapshot snapshot, Map<String, Integer> missing, int pieces, int sizeX, int sizeY,
+    record Sample(KineticBlockSnapshot snapshot, Map<String, Long> missing, int pieces, int sizeX, int sizeY,
                   int sizeZ, int failedChunks) {
     }
 
@@ -61,7 +61,7 @@ final class StructureSampler {
         CaptureLevel capture = new CaptureLevel(level, generator, randomState, seed);
         int fromX = box.minX() >> 4, toX = box.maxX() >> 4, fromZ = box.minZ() >> 4, toZ = box.maxZ() >> 4;
         int total = (toX - fromX + 1) * (toZ - fromZ + 1), done = 0, failed = 0;
-        Map<String, Integer> missing;
+        Map<String, Long> missing;
         TemplateMissingTracker.startRecording();
         try {
             for (int cx = fromX; cx <= toX; cx++) {

@@ -35,14 +35,16 @@ public final class StructureProject {
     public List<String> ignoreBlocks = new ArrayList<>(List.of("minecraft:structure_void", "minecraft:structure_block", "minecraft:jigsaw"));
     /** {@code draft}, {@code published} or {@code modified} (published, changed since). */
     public String status = "draft";
-    public int blocks;
-    public int blockEntities;
-    public int containers;
-    public int entities;
+    public long blocks;
+    public long blockEntities;
+    public long containers;
+    public long entities;
     /** Chunks whose entities were not loaded during the scan, so their entities are missing. */
-    public int entityChunksSkipped;
+    public long entityChunksSkipped;
     /** Blocks this game does not know, by block id, with how often they occur. */
-    public Map<String, Integer> missing = new LinkedHashMap<>();
+    public Map<String, Long> missing = new LinkedHashMap<>();
+    /** On-disk pointer to the active scan. Empty for legacy drafts. */
+    String scanGeneration = "";
     public long scannedAt;
     public long publishedAt;
     /** The pack folder the last publish wrote into; empty for a ZIP or before the first publish. */
@@ -211,8 +213,9 @@ public final class StructureProject {
         int colon = id.indexOf(':');
         if (colon <= 0 || colon == id.length() - 1) return false;
         String namespace = id.substring(0, colon), path = id.substring(colon + 1);
-        return namespace.matches("[a-z0-9_.-]{1,64}") && path.matches("[a-z0-9_.-]+(/[a-z0-9_.-]+)*") && path.length() <= 128
-                && !path.contains("..");
+        return namespace.matches("[a-z0-9_.-]{1,64}") && !namespace.equals(".") && !namespace.equals("..")
+                && path.matches("[a-z0-9_.-]+(/[a-z0-9_.-]+)*") && path.length() <= 128 && !path.contains("..")
+                && !List.of(path.split("/")).contains(".");
     }
 
     public JsonObject toJson() {
@@ -268,15 +271,15 @@ public final class StructureProject {
         project.status = oneOf(stringOf(json, "status", project.status), "draft", "published", "modified");
         if (json.has("counts")) {
             JsonObject counts = json.getAsJsonObject("counts");
-            project.blocks = intOf(counts, "blocks", 0);
-            project.blockEntities = intOf(counts, "block_entities", 0);
-            project.containers = intOf(counts, "containers", 0);
-            project.entities = intOf(counts, "entities", 0);
-            project.entityChunksSkipped = intOf(counts, "entity_chunks_skipped", 0);
+            project.blocks = longOf(counts, "blocks");
+            project.blockEntities = longOf(counts, "block_entities");
+            project.containers = longOf(counts, "containers");
+            project.entities = longOf(counts, "entities");
+            project.entityChunksSkipped = longOf(counts, "entity_chunks_skipped");
         }
         if (json.has("missing")) {
             for (Map.Entry<String, JsonElement> entry : json.getAsJsonObject("missing").entrySet()) {
-                project.missing.put(entry.getKey(), entry.getValue().getAsInt());
+                project.missing.put(entry.getKey(), entry.getValue().getAsLong());
             }
         }
         project.scannedAt = json.has("scanned_at") ? json.get("scanned_at").getAsLong() : 0L;
@@ -292,6 +295,14 @@ public final class StructureProject {
             return json.has(key) ? json.get(key).getAsInt() : fallback;
         } catch (RuntimeException e) {
             return fallback;
+        }
+    }
+
+    private static long longOf(JsonObject json, String key) {
+        try {
+            return json.has(key) ? json.get(key).getAsLong() : 0L;
+        } catch (RuntimeException e) {
+            return 0L;
         }
     }
 

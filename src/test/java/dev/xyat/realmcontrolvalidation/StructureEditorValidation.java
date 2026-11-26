@@ -217,12 +217,123 @@ public final class StructureEditorValidation {
     public static void install() {
         if (installed) return;
         installed = true;
+        if (Boolean.getBoolean("realmcontrolstructure.scanSmoke")) {
+            KineticClientEvents.onTick(KineticClientEvents.TickPhase.END, ScanSmoke::tick);
+            return;
+        }
         KineticClientEvents.onTick(KineticClientEvents.TickPhase.END, StructureEditorValidation::tick);
         // How long each server tick takes while the flight across the mega structure is measured.
         KineticServerEvents.onTick(KineticEventPriority.NORMAL, KineticServerEvents.TickPhase.START, server -> tickStarted = System.nanoTime());
         KineticServerEvents.onTick(KineticEventPriority.NORMAL, KineticServerEvents.TickPhase.END, server -> {
             if (measuring && tickStarted != 0L) tickNanos.add(System.nanoTime() - tickStarted);
         });
+    }
+
+    /** Scans real thin regions spanning mostly unloaded chunks, then cancels and retries a rescan. */
+    private static final class ScanSmoke {
+        private static final String SHORT = "realmcontrol:scan_smoke_1024", LONG = "realmcontrol:scan_smoke_4096";
+        private static final BlockPos SHORT_MIN = new BlockPos(-1026, 91, 2080), LONG_MIN = new BlockPos(-2050, 92, 2048);
+        private static int phase;
+        private static long started, deadline, previousScan;
+
+        static void tick() {
+            Minecraft mc = Minecraft.getInstance();
+            MinecraftServer server = mc.getSingleplayerServer();
+            if (finished || server == null || mc.player == null || mc.level == null) return;
+            try {
+                long now = System.currentTimeMillis();
+                if (phase != 0) require(now < deadline, "scan smoke timed out in phase " + phase);
+                switch (phase) {
+                    case 0 -> {
+                        started = now;
+                        deadline = now + 600_000L;
+                        onServer(() -> { start(server, SHORT, SHORT_MIN, 1024); return null; });
+                        phase = 1;
+                    }
+                    case 1 -> {
+                        if (!onServer(() -> ready(SHORT))) return;
+                        onServer(() -> {
+                            check(SHORT, 1024, "minecraft:stone");
+                            start(server, LONG, LONG_MIN, 4096);
+                            return null;
+                        });
+                        LOG.info("REALM_SCAN_SMOKE_1024_PASS ms={}", now - started);
+                        started = now;
+                        phase = 2;
+                    }
+                    case 2 -> {
+                        if (!onServer(() -> ready(LONG))) return;
+                        previousScan = onServer(() -> {
+                            long scannedAt = check(LONG, 4096, "minecraft:stone");
+                            server.overworld().setBlock(LONG_MIN, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+                            return scannedAt;
+                        });
+                        LOG.info("REALM_SCAN_SMOKE_4096_PASS ms={}", now - started);
+                        StructureEditorNetwork.request(StructureEditorNetwork.ProjectRequestPacket.Kind.RESCAN, LONG, "");
+                        phase = 3;
+                    }
+                    case 3 -> {
+                        if (!onServer(() -> {
+                            Path scans = ProjectStore.folder(LONG).resolve("@scans");
+                            try (var entries = Files.list(scans)) {
+                                return ScanService.busy(LONG) && entries.count() > 1;
+                            }
+                        })) return;
+                        StructureEditorNetwork.request(StructureEditorNetwork.ProjectRequestPacket.Kind.CANCEL_SCAN, LONG, "");
+                        phase = 4;
+                    }
+                    case 4 -> {
+                        if (!onServer(() -> ready(LONG))) return;
+                        require(onServer(() -> check(LONG, 4096, "minecraft:stone")) == previousScan,
+                                "cancel committed over the previous generation");
+                        LOG.info("REALM_SCAN_SMOKE_CANCEL_PASS");
+                        StructureEditorNetwork.request(StructureEditorNetwork.ProjectRequestPacket.Kind.RESCAN, LONG, "");
+                        phase = 5;
+                    }
+                    case 5 -> {
+                        if (!onServer(() -> ready(LONG) && ProjectStore.load(LONG).scannedAt > previousScan)) return;
+                        onServer(() -> check(LONG, 4096, "minecraft:diamond_block"));
+                        LOG.info("REALM_SCAN_SMOKE_RESCAN_PASS");
+                        finishSmoke(null);
+                    }
+                }
+            } catch (Throwable failure) {
+                finishSmoke(failure);
+            }
+        }
+
+        private static void start(MinecraftServer server, String id, BlockPos start, int width) throws Exception {
+            ServerLevel level = server.overworld();
+            ServerPlayer player = server.getPlayerList().getPlayers().get(0);
+            ProjectStore.delete(id);
+            BlockPos end = start.offset(width - 1, 0, 16);
+            level.setBlock(start, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(end, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+            ScanService.start(player, id, id, level, Selection.Box.of(start, end), List.of());
+        }
+
+        private static boolean ready(String id) {
+            return !ScanService.busy(id) && ProjectStore.exists(id);
+        }
+
+        private static long check(String id, int width, String expectedFirst) throws Exception {
+            try (ProjectStore.Draft draft = ProjectStore.openDraft(id)) {
+                require(draft != null && draft.project().size[0] == width && draft.project().blocks == 2,
+                        "real scan dimensions and solid count for " + id);
+                require(draft.readTile(0, 0).state(0, 0, 0).equals(expectedFirst), "real scan first block for " + id);
+                require(draft.readTile(draft.project().tilesX() - 1, 0).state(31, 0, 16).equals("minecraft:gold_block"),
+                        "real scan far block for " + id);
+                require(draft.isEmptyTile(1, 0), "real scan persisted an empty tile index for " + id);
+                return draft.project().scannedAt;
+            }
+        }
+
+        private static void finishSmoke(@Nullable Throwable failure) {
+            finished = true;
+            if (failure != null) LOG.error("REALM_SCAN_SMOKE_FAIL phase={}", phase, failure);
+            else LOG.info("REALM_SCAN_SMOKE_PASS");
+            dev.xyat.kineticcore.api.runtime.KineticClientRuntime.stopClient();
+        }
     }
 
     private static void tick() {

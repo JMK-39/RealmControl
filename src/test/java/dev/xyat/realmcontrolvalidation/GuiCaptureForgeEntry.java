@@ -5,6 +5,10 @@ package dev.xyat.realmcontrolvalidation;
 @net.minecraftforge.fml.common.Mod("realmcontrol_gui_capture")
 public final class GuiCaptureForgeEntry {
     public GuiCaptureForgeEntry() {
+        if (Boolean.getBoolean("realmcontrolmega.validate")) {
+            dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> MegaNaturalValidation::install);
+            return;
+        }
         if (Boolean.getBoolean("realmcontrol.guiValidation")) {
             dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> GuiCaptureValidation::install);
         }

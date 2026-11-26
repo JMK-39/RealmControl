@@ -47,7 +47,8 @@ public final class MegaStructure extends Structure {
     public static final MapCodec<MegaStructure> CODEC = RecordCodecBuilder.mapCodec(i -> i.group(
             settingsCodec(i),
             ResourceLocation.CODEC.fieldOf("tiles").forGetter(structure -> structure.tiles),
-            Codec.INT.listOf().fieldOf("size").forGetter(structure -> List.of(structure.layout.sizeX, structure.layout.sizeY, structure.layout.sizeZ)),
+            Codec.intRange(1, MegaLayout.MAX_DIMENSION).listOf().fieldOf("size")
+                    .forGetter(structure -> List.of(structure.layout.sizeX, structure.layout.sizeY, structure.layout.sizeZ)),
             Codec.STRING.listOf().optionalFieldOf("absent", List.of()).forGetter(structure -> List.copyOf(structure.absent)),
             Codec.STRING.optionalFieldOf("height", "surface").forGetter(structure -> structure.height),
             Codec.INT.optionalFieldOf("offset", 0).forGetter(structure -> structure.offset),
@@ -111,10 +112,10 @@ public final class MegaStructure extends Structure {
      */
     private void addGroup(StructurePiecesBuilder builder, ChunkPos anchor, Rotation rotation, int bottom, int groupX, int groupZ) {
         boolean added = false;
-        for (int tz = 0; tz < layout.tilesZ(); tz++) {
-            if (layout.groupZ(tz) != groupZ) continue;
-            for (int tx = 0; tx < layout.tilesX(); tx++) {
-                if (layout.groupX(tx) != groupX || absent.contains(tx + "_" + tz)) continue;
+        MegaLayout.Bounds tilesInGroup = layout.tilesInGroup(groupX, groupZ);
+        for (int tz = tilesInGroup.minZ(); tz < tilesInGroup.endZ(); tz++) {
+            for (int tx = tilesInGroup.minX(); tx < tilesInGroup.endX(); tx++) {
+                if (absent.contains(tx + "_" + tz)) continue;
                 BlockPos position = layout.world(anchor, bottom, rotation, tx * MegaLayout.TILE, 0, tz * MegaLayout.TILE);
                 ResourceLocation template = KineticResourceIds.of(tiles.getNamespace(), tiles.getPath() + "/t_" + tx + "_" + tz);
                 builder.addPiece(new MegaTilePiece(template, position, rotation, layout.tileBox(anchor, bottom, rotation, tx, tz), foundation, foundationBlock));

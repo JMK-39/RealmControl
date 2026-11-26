@@ -252,15 +252,19 @@ public final class Markers {
      * data, and type settings stay.
      */
     public void carryOver(Markers old) {
+        Map<Cell, Container> priorContainers = new HashMap<>();
+        for (Container before : old.containers) priorContainers.putIfAbsent(new Cell(before.x, before.y, before.z), before);
         for (Container container : containers) {
-            Container before = old.container(container.x, container.y, container.z);
+            Container before = priorContainers.get(new Cell(container.x, container.y, container.z));
             if (before != null && before.block.equals(container.block)) {
                 container.mode = before.mode;
                 container.table = before.table;
             }
         }
+        Map<Cell, Spawner> priorSpawners = new HashMap<>();
+        for (Spawner before : old.spawners) priorSpawners.putIfAbsent(new Cell(before.x, before.y, before.z), before);
         for (Spawner spawner : spawners) {
-            Spawner before = old.spawner(spawner.x, spawner.y, spawner.z);
+            Spawner before = priorSpawners.get(new Cell(spawner.x, spawner.y, spawner.z));
             if (before == null || !before.block.equals(spawner.block)) continue;
             spawner.mode = before.mode;
             spawner.mobs = new ArrayList<>(before.mobs);
@@ -287,6 +291,8 @@ public final class Markers {
             }
         }
     }
+
+    private record Cell(int x, int y, int z) { }
 
     public Markers copy() {
         return fromJson(toJson());

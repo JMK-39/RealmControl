@@ -12,6 +12,7 @@
     "BiomeSourceAccessor",
     "StructureTemplateMissingMixin",
     "StructureTemplateAccessor",
+    "StructurePaletteInvoker",
     "StructureTemplateManagerAccessor",
     "MegaStructureSuppressMixin",
     "MegaFeatureGuardMixin"

@@ -15,6 +15,10 @@ import net.minecraftforge.fml.common.Mod;
 @Mod("realmcontrol_validation")
 public final class RuntimeValidation {
     public RuntimeValidation() {
+        if (Boolean.getBoolean("realmcontrolmega.validate")) {
+            dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> MegaNaturalValidation::install);
+            return;
+        }
         if (Boolean.getBoolean("realmcontrol.guiValidation")) {
             dev.xyat.kineticcore.api.runtime.KineticPlatform.runOnClient(() -> GuiCaptureValidation::install);
             return;

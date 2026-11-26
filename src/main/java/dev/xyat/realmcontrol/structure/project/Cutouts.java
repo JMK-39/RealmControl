@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,37 @@ public final class Cutouts {
             cut = range != null && y >= range[0] && y <= range[1];
         }
         return cut;
+    }
+
+    /** Cut cells in a tile. Each column occupies sizeY consecutive bits, with Y increasing. */
+    public BitSet tileMask(int ox, int oz, int sizeX, int sizeY, int sizeZ) {
+        BitSet result = new BitSet();
+        for (Box box : boxes) {
+            int y0 = Math.max(0, box.minY()), y1 = Math.min(sizeY - 1, box.maxY());
+            if (y0 > y1) continue;
+            int x0 = Math.max(ox, box.minX()), x1 = Math.min(ox + sizeX - 1, box.maxX());
+            int z0 = Math.max(oz, box.minZ()), z1 = Math.min(oz + sizeZ - 1, box.maxZ());
+            for (int z = z0; z <= z1; z++) {
+                for (int x = x0; x <= x1; x++) {
+                    int start = ((z - oz) * sizeX + x - ox) * sizeY;
+                    result.set(start + y0, start + y1 + 1, !box.add());
+                }
+            }
+        }
+        if (!mask.isEmpty()) {
+            for (int z = 0; z < sizeZ; z++) {
+                for (int x = 0; x < sizeX; x++) {
+                    int[] range = mask.get(column(ox + x, oz + z));
+                    if (range == null) continue;
+                    int y0 = Math.max(0, range[0]), y1 = Math.min(sizeY - 1, range[1]);
+                    if (y0 <= y1) {
+                        int start = (z * sizeX + x) * sizeY;
+                        result.set(start + y0, start + y1 + 1);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /** Number of cut-out entries, as shown in lists: each box plus the mask as one. */

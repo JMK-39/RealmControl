@@ -229,6 +229,10 @@ public final class StructureEditorNetwork {
 
     /** Takes the editor's settings for the markers the server has; what the scan found stays as it is. */
     private static void saveMarkers(ServerPlayer player, String id, String json) {
+        if (ScanService.sealing(id)) {
+            result(player, KineticI18n.translatable("msg.realmcontrol.structure.scan.busy"), false);
+            return;
+        }
         StructureProject project = ProjectStore.load(id);
         if (project == null) {
             result(player, KineticI18n.translatable("msg.realmcontrol.structure.publish.unknown", id), false);
@@ -286,7 +290,7 @@ public final class StructureEditorNetwork {
             return;
         }
         ServerLevel level;
-        Selection.Box region;
+        @Nullable Selection.Box region;
         java.util.List<Selection.Box> cutouts = java.util.List.of();
         if (rescan) {
             StructureProject project = ProjectStore.load(id);
@@ -300,8 +304,11 @@ public final class StructureEditorNetwork {
                 result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.no_dimension", project.dimension), false);
                 return;
             }
-            BlockPos min = new BlockPos(project.origin[0], project.origin[1], project.origin[2]);
-            region = new Selection.Box(min, min.offset(project.size[0] - 1, project.size[1] - 1, project.size[2] - 1));
+            region = Selection.fromOrigin(project.origin, project.size);
+            if (region == null) {
+                result(player, KineticI18n.translatable("msg.realmcontrol.structure.selection.out_of_bounds"), false);
+                return;
+            }
         } else {
             if (ProjectStore.exists(id)) {
                 result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.exists", id), false);
@@ -309,11 +316,6 @@ public final class StructureEditorNetwork {
             }
             Selection selection = SelectionStore.get(player);
             region = selection.region();
-            String problem = Selection.problem(region);
-            if (problem != null) {
-                result(player, KineticI18n.translatable(problem, Selection.MAX_FOOTPRINT), false);
-                return;
-            }
             level = player.serverLevel();
             cutouts = selection.cutouts;
         }
@@ -371,6 +373,9 @@ public final class StructureEditorNetwork {
      * structure panel always show and edit the same values.
      */
     public static Publisher.Outcome applyEdit(MinecraftServer server, StructureProject edited, String cutoutsJson) {
+        if (ScanService.sealing(edited.id)) {
+            return new Publisher.Outcome(false, KineticI18n.translatable("msg.realmcontrol.structure.scan.busy"));
+        }
         StructureProject project = ProjectStore.load(edited.id);
         if (project == null) return new Publisher.Outcome(false, KineticI18n.translatable("msg.realmcontrol.structure.publish.unknown", edited.id));
         boolean templates = !project.air.equals(edited.air) || !project.ignoreBlocks.equals(edited.ignoreBlocks)
@@ -386,10 +391,9 @@ public final class StructureEditorNetwork {
         project.save = edited.save;
         if (templates && "published".equals(project.status)) project.status = "modified";
         try {
-            Publisher.Outcome synced = rules ? Publisher.syncGeneration(server, project) : null;
+            Cutouts cutouts = cutoutsJson.isEmpty() ? null : Cutouts.fromJson(JsonParser.parseString(cutoutsJson).getAsJsonObject());
+            Publisher.Outcome synced = Publisher.saveEdits(server, project, rules, cutouts);
             if (synced != null && !synced.success()) return synced;
-            ProjectStore.save(project);
-            if (!cutoutsJson.isEmpty()) ProjectStore.saveCutouts(project.id, Cutouts.fromJson(JsonParser.parseString(cutoutsJson).getAsJsonObject()));
             if (picture) dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forgetPicture(server, dev.xyat.realmcontrol.structure.project.ProjectPreview.PREFIX + project.id);
             if (synced != null) return synced;
         } catch (IOException e) {
@@ -399,6 +403,10 @@ public final class StructureEditorNetwork {
     }
 
     private static void importCutouts(ServerPlayer player, String id) {
+        if (ScanService.sealing(id)) {
+            result(player, KineticI18n.translatable("msg.realmcontrol.structure.scan.busy"), false);
+            return;
+        }
         StructureProject project = ProjectStore.load(id);
         if (project == null) return;
         Selection selection = SelectionStore.get(player);

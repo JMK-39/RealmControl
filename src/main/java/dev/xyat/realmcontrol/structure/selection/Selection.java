@@ -16,9 +16,10 @@ import java.util.List;
  */
 public final class Selection {
     /** Largest footprint along X and Z. */
-    public static final int MAX_FOOTPRINT = 1024;
-    /** Largest number of blocks one scan reads. */
-    public static final long MAX_VOLUME = 200_000_000L;
+    public static final int MAX_FOOTPRINT = 4096;
+    /** A vertical span up to the maximum supported by a tile; the dimension may allow less. */
+    private static final int MAX_HEIGHT = 4096;
+    private static final int HORIZONTAL_LIMIT = 30_000_000;
     public static final int MAX_CUTOUTS = 256;
 
     @Nullable public BlockPos a;
@@ -35,19 +36,25 @@ public final class Selection {
         }
 
         public int sizeX() {
-            return max.getX() - min.getX() + 1;
+            return size(min.getX(), max.getX());
         }
 
         public int sizeY() {
-            return max.getY() - min.getY() + 1;
+            return size(min.getY(), max.getY());
         }
 
         public int sizeZ() {
-            return max.getZ() - min.getZ() + 1;
+            return size(min.getZ(), max.getZ());
         }
 
         public long volume() {
-            return (long) sizeX() * sizeY() * sizeZ();
+            long area = (long) sizeX() * sizeZ();
+            int height = sizeY();
+            return height > 0 && area > Long.MAX_VALUE / height ? Long.MAX_VALUE : area * height;
+        }
+
+        private static int size(int min, int max) {
+            return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, (long) max - min + 1L));
         }
 
         public boolean contains(int x, int y, int z) {
@@ -80,8 +87,32 @@ public final class Selection {
     public static String problem(@Nullable Box region) {
         if (region == null) return "msg.realmcontrol.structure.selection.incomplete";
         if (region.sizeX() > MAX_FOOTPRINT || region.sizeZ() > MAX_FOOTPRINT) return "msg.realmcontrol.structure.selection.too_wide";
-        if (region.volume() > MAX_VOLUME) return "msg.realmcontrol.structure.selection.too_big";
+        if (region.sizeX() == 0 || region.sizeZ() == 0 || region.sizeY() == 0 || region.sizeY() > MAX_HEIGHT
+                || region.min().getX() < -HORIZONTAL_LIMIT || region.min().getZ() < -HORIZONTAL_LIMIT
+                || region.max().getX() >= HORIZONTAL_LIMIT || region.max().getZ() >= HORIZONTAL_LIMIT) {
+            return "msg.realmcontrol.structure.selection.out_of_bounds";
+        }
         return null;
+    }
+
+    /** Also checks the target dimension. The maximum build coordinate is exclusive. */
+    @Nullable
+    public static String problem(@Nullable Box region, int minBuildY, int maxBuildY) {
+        String problem = problem(region);
+        if (problem != null) return problem;
+        return region.min().getY() < minBuildY || region.max().getY() >= maxBuildY
+                ? "msg.realmcontrol.structure.selection.out_of_bounds" : null;
+    }
+
+    /** Reconstructs stored bounds without letting invalid sizes or offsets wrap around. */
+    @Nullable
+    public static Box fromOrigin(int[] origin, int[] size) {
+        if (size[0] <= 0 || size[1] <= 0 || size[2] <= 0) return null;
+        long x = (long) origin[0] + size[0] - 1L;
+        long y = (long) origin[1] + size[1] - 1L;
+        long z = (long) origin[2] + size[2] - 1L;
+        if (x > Integer.MAX_VALUE || y > Integer.MAX_VALUE || z > Integer.MAX_VALUE) return null;
+        return new Box(new BlockPos(origin[0], origin[1], origin[2]), new BlockPos((int) x, (int) y, (int) z));
     }
 
     public boolean isEmpty() {

@@ -78,24 +78,26 @@ public final class MegaTilePiece extends StructurePiece {
         MegaTemplates.Entry entry = MegaTemplates.get(level.getLevel().getStructureManager(), template);
         if (entry == null) return;
         boolean clear = "fill_clear".equals(foundation), fill = clear || "fill".equals(foundation);
-        if (clear) clearAbove(level, box, entry);
-        StructurePlaceSettings settings = new StructurePlaceSettings().setRotation(rotation).setBoundingBox(box).setKnownShape(true)
+        MegaLayout.Bounds columns = fill ? MegaLayout.columnsInBox(position, rotation, box, entry.sizeX(), entry.sizeZ()) : null;
+        if (clear) clearAbove(level, columns, entry);
+        StructurePlaceSettings settings = entry.slices() == null ? new StructurePlaceSettings()
+                : entry.slices().settings(position, rotation, box, entry.sizeX(), entry.sizeZ());
+        settings.setRotation(rotation).setBoundingBox(box).setKnownShape(true)
                 .setIgnoreEntities(false).setFinalizeEntities(true).addProcessor(BlockIgnoreProcessor.STRUCTURE_BLOCK);
         entry.template().placeInWorld(level, position, position, settings, random, 2);
-        if (fill) fillBelow(level, box, entry);
+        if (fill) fillBelow(level, columns, entry);
         MegaStats.record(System.nanoTime() - started);
     }
 
     /** Clears the ground above each of the tile's columns that hold a block, from just above its top block to the surface. */
-    private void clearAbove(WorldGenLevel level, BoundingBox box, MegaTemplates.Entry entry) {
+    private void clearAbove(WorldGenLevel level, MegaLayout.Bounds columns, MegaTemplates.Entry entry) {
         BlockState air = Blocks.AIR.defaultBlockState();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int z = 0; z < entry.sizeZ(); z++) {
-            for (int x = 0; x < entry.sizeX(); x++) {
+        for (int z = columns.minZ(); z < columns.endZ(); z++) {
+            for (int x = columns.minX(); x < columns.endX(); x++) {
                 int top = entry.top(x, z);
                 if (top < 0) continue;
                 BlockPos column = position.offset(MegaLayout.turn(new BlockPos(x, 0, z), rotation));
-                if (column.getX() < box.minX() || column.getX() > box.maxX() || column.getZ() < box.minZ() || column.getZ() > box.maxZ()) continue;
                 int surface = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, column.getX(), column.getZ());
                 for (int y = position.getY() + top + 1; y < surface; y++) {
                     cursor.set(column.getX(), y, column.getZ());
@@ -108,15 +110,14 @@ public final class MegaTilePiece extends StructurePiece {
     }
 
     /** Fills below each of the tile's columns that stands on a block, down to the first solid block of the ground. */
-    private void fillBelow(WorldGenLevel level, BoundingBox box, MegaTemplates.Entry entry) {
+    private void fillBelow(WorldGenLevel level, MegaLayout.Bounds columns, MegaTemplates.Entry entry) {
         BlockState parsed = BlockStates.parse(foundationBlock);
         BlockState block = parsed == null ? Blocks.STONE.defaultBlockState() : parsed;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int z = 0; z < entry.sizeZ(); z++) {
-            for (int x = 0; x < entry.sizeX(); x++) {
+        for (int z = columns.minZ(); z < columns.endZ(); z++) {
+            for (int x = columns.minX(); x < columns.endX(); x++) {
                 if (!entry.standsOnBlock(x, z)) continue;
                 BlockPos column = position.offset(MegaLayout.turn(new BlockPos(x, 0, z), rotation));
-                if (column.getX() < box.minX() || column.getX() > box.maxX() || column.getZ() < box.minZ() || column.getZ() > box.maxZ()) continue;
                 for (int depth = 1; depth <= MAX_FOUNDATION; depth++) {
                     cursor.set(column.getX(), position.getY() - depth, column.getZ());
                     if (level.isOutsideBuildHeight(cursor)) break;

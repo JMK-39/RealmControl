@@ -65,14 +65,14 @@ public final class TemplateMissingTracker {
     }
 
     /** Stops recording and returns the missing blocks of the templates placed since {@link #startRecording()}. */
-    static Map<String, Integer> stopRecording() {
+    static Map<String, Long> stopRecording() {
         Set<StructureTemplate> placed = PLACED.get();
         PLACED.remove();
-        Map<String, Integer> result = new LinkedHashMap<>();
+        Map<String, Long> result = new LinkedHashMap<>();
         if (placed == null) return result;
         for (StructureTemplate template : new HashSet<>(placed)) {
             Map<String, Integer> counts = MISSING.get(template);
-            if (counts != null) counts.forEach((name, count) -> result.merge(name, count, Integer::sum));
+            if (counts != null) counts.forEach((name, count) -> result.merge(name, count.longValue(), Long::sum));
         }
         return result;
     }

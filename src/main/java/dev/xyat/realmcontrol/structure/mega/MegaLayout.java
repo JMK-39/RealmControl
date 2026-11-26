@@ -9,6 +9,7 @@ import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,7 +22,12 @@ import java.util.List;
  */
 public final class MegaLayout {
     public static final int TILE = 32, GROUP = 256;
+    static final int MAX_DIMENSION = 4096;
+    private static final int GROUP_CHUNKS = GROUP / 16;
     public final int sizeX, sizeY, sizeZ, anchorX, anchorZ;
+
+    record Bounds(int minX, int minZ, int endX, int endZ) {
+    }
 
     public MegaLayout(int sizeX, int sizeY, int sizeZ) {
         this.sizeX = Math.max(1, sizeX);
@@ -72,12 +78,44 @@ public final class MegaLayout {
 
     /** How far, in chunks along either axis, a group start can be from the anchor chunk. */
     public int maxGroupOffset() {
-        return 16 * Math.max(Math.max(-minGroupX(), maxGroupX()), Math.max(-minGroupZ(), maxGroupZ()));
+        return GROUP_CHUNKS * Math.max(Math.max(-minGroupX(), maxGroupX()), Math.max(-minGroupZ(), maxGroupZ()));
     }
 
     /** The start chunk of group (k, l) relative to the anchor chunk, turned with the structure. */
     public static BlockPos groupOffset(Rotation rotation, int k, int l) {
-        return turn(new BlockPos(16 * k, 0, 16 * l), rotation);
+        return turn(new BlockPos(GROUP_CHUNKS * k, 0, GROUP_CHUNKS * l), rotation);
+    }
+
+    /** The group at an offset from the anchor, or no group if the chunk is between starts or outside the layout. */
+    @Nullable
+    BlockPos groupAtOffset(int x, int z, Rotation rotation) {
+        if (x % GROUP_CHUNKS != 0 || z % GROUP_CHUNKS != 0) return null;
+        BlockPos group = turn(new BlockPos(x / GROUP_CHUNKS, 0, z / GROUP_CHUNKS), inverse(rotation));
+        int gx = group.getX(), gz = group.getZ();
+        return gx < minGroupX() || gx > maxGroupX() || gz < minGroupZ() || gz > maxGroupZ() ? null : group;
+    }
+
+    Bounds tilesInGroup(int gx, int gz) {
+        int firstX = (anchorX - GROUP / 2 + gx * GROUP) / TILE;
+        int firstZ = (anchorZ - GROUP / 2 + gz * GROUP) / TILE;
+        return new Bounds(Math.max(0, firstX), Math.max(0, firstZ), Math.min(tilesX(), firstX + GROUP / TILE),
+                Math.min(tilesZ(), firstZ + GROUP / TILE));
+    }
+
+    /** Farthest chunk coordinate reached by a rotated footprint and its margin, relative to its anchor. */
+    int anchorReach(int margin) {
+        int x = Math.max(anchorX, sizeX - 1 - anchorX);
+        int z = Math.max(anchorZ, sizeZ - 1 - anchorZ);
+        return (Math.max(x, z) + margin + 15) / 16;
+    }
+
+    /** Converts a horizontal world clip to the exact interval of tile-local columns it intersects. */
+    static Bounds columnsInBox(BlockPos origin, Rotation rotation, BoundingBox box, int sizeX, int sizeZ) {
+        Rotation undo = inverse(rotation);
+        BlockPos first = turn(new BlockPos(box.minX() - origin.getX(), 0, box.minZ() - origin.getZ()), undo);
+        BlockPos last = turn(new BlockPos(box.maxX() - origin.getX(), 0, box.maxZ() - origin.getZ()), undo);
+        return new Bounds(Math.max(0, Math.min(first.getX(), last.getX())), Math.max(0, Math.min(first.getZ(), last.getZ())),
+                Math.min(sizeX, Math.max(first.getX(), last.getX()) + 1), Math.min(sizeZ, Math.max(first.getZ(), last.getZ()) + 1));
     }
 
     /** The groups of the structure as {k, l} pairs. */
@@ -124,5 +162,13 @@ public final class MegaLayout {
 
     static BlockPos turn(BlockPos pos, Rotation rotation) {
         return StructureTemplate.transform(pos, Mirror.NONE, rotation, BlockPos.ZERO);
+    }
+
+    private static Rotation inverse(Rotation rotation) {
+        return switch (rotation) {
+            case CLOCKWISE_90 -> Rotation.COUNTERCLOCKWISE_90;
+            case COUNTERCLOCKWISE_90 -> Rotation.CLOCKWISE_90;
+            default -> rotation;
+        };
     }
 }

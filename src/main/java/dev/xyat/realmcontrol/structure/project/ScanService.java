@@ -1,6 +1,7 @@
 package dev.xyat.realmcontrol.structure.project;
 
 import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.realmcontrol.structure.mega.MegaLayout;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.realmcontrol.structure.selection.Selection;
 import dev.xyat.realmcontrol.worldgen.preview.StructurePreviewService;
@@ -13,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -20,38 +22,65 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+//? if <1.20.5 {
+import net.minecraft.world.level.chunk.ChunkStatus;
+//?} else {
+/*import net.minecraft.world.level.chunk.status.ChunkStatus;
+*///?}
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.AABB;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.BitSet;
+//? if <26.1 {
+import java.util.Comparator;
+//?}
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
- * Reads selected regions into drafts on the server thread, a slice each tick: at most 8 ms per tick, half of that
- * while the server runs below 15 TPS. One scan runs at a time; others wait in line. Finished tiles are written by a
- * background thread, into a new folder that replaces the old tiles only when the whole scan succeeded. Scanning only
- * reads the world; chunks that are not loaded are loaded (and generated if they never were) as vanilla does.
+ * Reads selected regions on the server thread in timed slices. Loads a tile's chunks asynchronously and limits
+ * how many completed tiles can wait for disk before scanning more. The old scan remains readable until the new
+ * tile files and metadata are ready and the project pointer changes.
  */
 public final class ScanService {
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
     private static final long BUDGET_NANOS = 8_000_000L;
     private static final long PROGRESS_INTERVAL_NANOS = 150_000_000L;
+    private static final long CHUNK_WAIT_NANOS = TimeUnit.MINUTES.toNanos(2);
+    private static final int MAX_PENDING_WRITES = 4;
+    //? if >=26.1 {
+    /*private static final TicketType SCAN_TICKET = new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING | TicketType.FLAG_KEEP_DIMENSION_ACTIVE);
+    *///?} else {
+    private static final TicketType<ChunkPos> SCAN_TICKET = TicketType.create("realmcontrol_structure_scan", Comparator.comparingLong(ChunkPos::toLong));
+    //?}
+    private static final AtomicInteger PENDING_WRITES = new AtomicInteger();
     private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "RealmControl structure scan writer");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final ExecutorService CHUNK_REQUESTER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "RealmControl structure scan chunk requests");
         thread.setDaemon(true);
         return thread;
     });
@@ -63,16 +92,39 @@ public final class ScanService {
     private ScanService() {
     }
 
+    private static <T> CompletableFuture<T> writeInBackground(Supplier<T> write) {
+        PENDING_WRITES.incrementAndGet();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return write.get();
+            } finally {
+                PENDING_WRITES.decrementAndGet();
+            }
+        }, WRITER);
+    }
+
+    private record PendingChunk(long started, CompletableFuture<ChunkAccess> future) { }
+
     /**
      * Queues a scan of {@code region} into project {@code id}. A new project takes the name and the selection's
      * cut-out boxes; an existing one keeps its settings and cut-outs and only gets new tiles.
      */
-    public static void start(ServerPlayer player, String id, String name, ServerLevel level, Selection.Box region,
+    public static void start(ServerPlayer player, String id, String name, ServerLevel level, @Nullable Selection.Box region,
                              List<Selection.Box> worldCutouts) {
+        if (!StructureProject.validId(id)) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.bad_id", id), false);
+            return;
+        }
+        String problem = Selection.problem(region, level.getMinBuildHeight(), level.getMaxBuildHeight());
+        if (problem != null) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable(problem, Selection.MAX_FOOTPRINT), false);
+            return;
+        }
         if (busy(id)) {
             StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.scan.busy"), false);
             return;
         }
+        if (region == null) return;
         Job job = new Job(player.getUUID(), id, name, level, region, worldCutouts);
         QUEUE.addLast(job);
         job.sendProgress(player.getServer(), true);
@@ -101,6 +153,11 @@ public final class ScanService {
         return QUEUE.stream().anyMatch(job -> job.id.equals(id));
     }
 
+    /** While sealing the scanned data, edits would otherwise change the metadata being copied into the new scan. */
+    public static boolean sealing(String id) {
+        return current != null && current.id.equals(id) && current.prepared != null;
+    }
+
     public static void stop(MinecraftServer server) {
         QUEUE.clear();
         if (current != null) {
@@ -108,6 +165,8 @@ public final class ScanService {
             current.cleanUp();
             current = null;
         }
+        lastTick = 0L;
+        tickInterval = 50.0D;
     }
 
     public static void tick(MinecraftServer server) {
@@ -123,10 +182,11 @@ public final class ScanService {
         Job job = current;
         try {
             if (job.step(server, now + budget)) current = null;
-        } catch (RuntimeException | LinkageError e) {
+        } catch (IOException | RuntimeException | LinkageError e) {
             LOGGER.warn("Structure scan of {} failed", job.id, e);
             job.cleanUp();
-            job.finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(e.getMessage())));
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            job.finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(cause.getMessage())));
             current = null;
         }
     }
@@ -142,19 +202,26 @@ public final class ScanService {
         final int tileSize;
         final int tilesX, tilesZ;
         final long total;
-        final Path newTiles;
-        final List<CompletableFuture<Void>> writes = new ArrayList<>();
+        final Path newScan;
+        final Deque<CompletableFuture<Void>> writes = new ArrayDeque<>();
+        final BitSet emptyTiles = new BitSet();
         volatile boolean cancelled;
+        boolean installed;
         long done;
         long lastProgress;
         int tileX, tileZ;
+        int tileWidth, tileDepth;
         @Nullable Tile tile;
+        final Map<BlockState, Integer> tilePalette = new IdentityHashMap<>();
         List<ChunkPos> chunks = List.of();
+        final Map<ChunkPos, PendingChunk> requests = new HashMap<>();
+        final Set<ChunkPos> heldChunks = new HashSet<>();
+        @Nullable LevelChunk activeChunk;
         int chunkIndex;
         int sectionY;
-        int blocks, blockEntities, containers, entities, entityChunksSkipped, bottomSolid;
+        long blocks, blockEntities, containers, entities, entityChunksSkipped, bottomSolid;
         final Markers markers = new Markers();
-        @Nullable IOException writeError;
+        @Nullable CompletableFuture<StructureProject> prepared;
 
         Job(UUID owner, String id, String name, ServerLevel level, Selection.Box region, List<Selection.Box> worldCutouts) {
             this.owner = owner;
@@ -167,52 +234,56 @@ public final class ScanService {
             this.tilesX = (region.sizeX() + tileSize - 1) / tileSize;
             this.tilesZ = (region.sizeZ() + tileSize - 1) / tileSize;
             this.total = region.volume();
-            this.newTiles = ProjectStore.folder(id).resolve("tiles.new");
+            this.newScan = ProjectStore.newScan(id);
         }
 
         /** Scans until {@code deadline}; returns {@code true} once the job is over. */
-        boolean step(MinecraftServer server, long deadline) {
+        boolean step(MinecraftServer server, long deadline) throws IOException {
             if (cancelled) {
                 cleanUp();
                 finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.cancelled"));
                 return true;
             }
-            if (done == 0L && tile == null && tileX == 0 && tileZ == 0) {
-                try {
-                    ProjectStore.deleteTree(newTiles);
-                    Files.createDirectories(newTiles);
-                } catch (IOException e) {
-                    finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(e.getMessage())));
-                    return true;
-                }
-            }
+            reapWrites();
             while (tileZ < tilesZ) {
-                if (tile == null) beginTile();
+                if (chunks.isEmpty()) {
+                    if (System.nanoTime() >= deadline || PENDING_WRITES.get() >= MAX_PENDING_WRITES) return waitForWork(server);
+                    beginTile();
+                }
                 while (chunkIndex < chunks.size()) {
-                    if (System.nanoTime() > deadline) {
-                        sendProgress(server, false);
-                        return false;
-                    }
-                    scanSection(chunks.get(chunkIndex));
+                    if (System.nanoTime() >= deadline) return waitForWork(server);
+                    ChunkPos chunkPos = chunks.get(chunkIndex);
+                    if (activeChunk == null) activeChunk = readyChunk(chunkPos);
+                    if (activeChunk == null) return waitForWork(server);
+                    scanSection(activeChunk, chunkPos);
                 }
                 endTile();
+                reapWrites();
                 if (++tileX >= tilesX) {
                     tileX = 0;
                     tileZ++;
                 }
             }
-            // Every tile is read; wait for the writer before the new tiles replace the old ones.
-            if (!writes.stream().allMatch(CompletableFuture::isDone)) {
-                sendProgress(server, false);
-                return false;
+            if (!writes.isEmpty()) return waitForWork(server);
+            if (prepared == null) {
+                if (PENDING_WRITES.get() >= MAX_PENDING_WRITES) return waitForWork(server);
+                prepared = writeInBackground(this::prepare);
             }
-            if (writeError != null) {
-                cleanUp();
-                finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(writeError.getMessage())));
-                return true;
-            }
+            if (!prepared.isDone()) return waitForWork(server);
+            if (!ProjectStore.activateScan(newScan, prepared.join())) return waitForWork(server);
+            installed = true;
             complete(server);
             return true;
+        }
+
+        private boolean waitForWork(MinecraftServer server) {
+            sendProgress(server, false);
+            return false;
+        }
+
+        private void reapWrites() {
+            // Done futures cannot block. Joining propagates every failure, including unchecked writer errors.
+            while (!writes.isEmpty() && writes.peekFirst().isDone()) writes.removeFirst().join();
         }
 
         private int tileMinX() {
@@ -224,24 +295,77 @@ public final class ScanService {
         }
 
         private void beginTile() {
-            int sizeX = Math.min(tileSize, region.max().getX() - tileMinX() + 1);
-            int sizeZ = Math.min(tileSize, region.max().getZ() - tileMinZ() + 1);
-            tile = new Tile(sizeX, region.sizeY(), sizeZ);
+            tileWidth = Math.min(tileSize, region.max().getX() - tileMinX() + 1);
+            tileDepth = Math.min(tileSize, region.max().getZ() - tileMinZ() + 1);
             List<ChunkPos> list = new ArrayList<>();
-            for (int cz = tileMinZ() >> 4; cz <= (tileMinZ() + sizeZ - 1) >> 4; cz++) {
-                for (int cx = tileMinX() >> 4; cx <= (tileMinX() + sizeX - 1) >> 4; cx++) list.add(new ChunkPos(cx, cz));
+            for (int cz = tileMinZ() >> 4; cz <= (tileMinZ() + tileDepth - 1) >> 4; cz++) {
+                for (int cx = tileMinX() >> 4; cx <= (tileMinX() + tileWidth - 1) >> 4; cx++) {
+                    ChunkPos pos = new ChunkPos(cx, cz);
+                    list.add(pos);
+                    holdChunk(pos);
+                    if (level.getChunkSource().getChunkNow(cx, cz) == null) requestChunk(pos);
+                }
             }
             chunks = list;
             chunkIndex = 0;
             sectionY = region.min().getY() >> 4;
         }
 
+        private Tile contents() {
+            if (tile == null) tile = new Tile(tileWidth, region.sizeY(), tileDepth);
+            return tile;
+        }
+
+        private void holdChunk(ChunkPos pos) {
+            heldChunks.add(pos);
+            // Vanilla's on-demand UNKNOWN ticket can expire while the future is still generating the chunk.
+            //? if >=26.1 {
+            /*level.getChunkSource().addTicketWithRadius(SCAN_TICKET, pos, 0);
+            *///?} else {
+            level.getChunkSource().addRegionTicket(SCAN_TICKET, pos, 0, pos);
+            //?}
+        }
+
+        private void removeChunkTicket(ChunkPos pos) {
+            //? if >=26.1 {
+            /*level.getChunkSource().removeTicketWithRadius(SCAN_TICKET, pos, 0);
+            *///?} else {
+            level.getChunkSource().removeRegionTicket(SCAN_TICKET, pos, 0, pos);
+            //?}
+        }
+
+        private PendingChunk requestChunk(ChunkPos pos) {
+            return requests.computeIfAbsent(pos, key -> new PendingChunk(System.nanoTime(), CompletableFuture.supplyAsync(() -> {
+                if (cancelled) return CompletableFuture.<ChunkAccess>completedFuture(null);
+                // Vanilla's public method waits if invoked on the server thread. Calling it here schedules the
+                // normal ticket request on that thread and returns the future without occupying the tick.
+                return level.getChunkSource().getChunkFuture(MegaLayout.chunkX(key), MegaLayout.chunkZ(key), ChunkStatus.FULL, true).thenApply(result -> {
+                    //? if <1.20.5 {
+                    return result.left().orElse(null);
+                    //?} else {
+                    /*return result.orElse(null);
+                    *///?}
+                });
+            }, CHUNK_REQUESTER).thenCompose(future -> future)));
+        }
+
+        @Nullable
+        private LevelChunk readyChunk(ChunkPos pos) {
+            LevelChunk loaded = level.getChunkSource().getChunkNow(MegaLayout.chunkX(pos), MegaLayout.chunkZ(pos));
+            if (loaded != null) return loaded;
+            PendingChunk pending = requestChunk(pos);
+            if (!pending.future.isDone()) {
+                if (System.nanoTime() - pending.started > CHUNK_WAIT_NANOS) throw new IllegalStateException("Timed out loading chunk " + pos);
+                return null;
+            }
+            if (pending.future.join() instanceof LevelChunk full) return full;
+            throw new IllegalStateException("Unable to load chunk " + pos);
+        }
+
         /** Reads one 16-block-high section of a chunk inside the tile; the first section also takes the chunk's block entities and entities. */
-        private void scanSection(ChunkPos chunkPos) {
-            Tile tile = this.tile;
-            LevelChunk chunk = level.getChunk(chunkPos.x, chunkPos.z);
-            int fromX = Math.max(tileMinX(), chunkPos.getMinBlockX()), toX = Math.min(tileMinX() + tile.sizeX - 1, chunkPos.getMaxBlockX());
-            int fromZ = Math.max(tileMinZ(), chunkPos.getMinBlockZ()), toZ = Math.min(tileMinZ() + tile.sizeZ - 1, chunkPos.getMaxBlockZ());
+        private void scanSection(LevelChunk chunk, ChunkPos chunkPos) {
+            int fromX = Math.max(tileMinX(), chunkPos.getMinBlockX()), toX = Math.min(tileMinX() + tileWidth - 1, chunkPos.getMaxBlockX());
+            int fromZ = Math.max(tileMinZ(), chunkPos.getMinBlockZ()), toZ = Math.min(tileMinZ() + tileDepth - 1, chunkPos.getMaxBlockZ());
             int minY = region.min().getY(), maxY = region.max().getY();
             if (sectionY == minY >> 4) captureChunkContents(chunk, chunkPos, fromX, toX, fromZ, toZ);
             int fromY = Math.max(minY, sectionY << 4), toY = Math.min(maxY, (sectionY << 4) + 15);
@@ -249,18 +373,20 @@ public final class ScanService {
             int sectionIndex = chunk.getSectionIndex(fromY);
             LevelChunkSection section = sectionIndex >= 0 && sectionIndex < chunk.getSections().length ? chunk.getSection(sectionIndex) : null;
             if (section != null && !section.hasOnlyAir()) {
-                Map<BlockState, Integer> indices = new IdentityHashMap<>();
+                Tile tile = this.tile;
+                int minX = tileMinX(), minZ = tileMinZ();
                 for (int y = fromY; y <= toY; y++) {
                     for (int z = fromZ; z <= toZ; z++) {
                         for (int x = fromX; x <= toX; x++) {
                             BlockState state = section.getBlockState(x & 15, y & 15, z & 15);
                             if (state.isAir()) continue;
-                            Integer index = indices.get(state);
+                            if (tile == null) tile = contents();
+                            Integer index = tilePalette.get(state);
                             if (index == null) {
                                 index = tile.index(BlockStates.serialize(state));
-                                indices.put(state, index);
+                                tilePalette.put(state, index);
                             }
-                            tile.cells[tile.cell(x - tileMinX(), y - minY, z - tileMinZ())] = (short) (int) index;
+                            tile.cells[tile.cell(x - minX, y - minY, z - minZ)] = (short) (int) index;
                             blocks++;
                             if (y == minY && !state.getCollisionShape(level, new BlockPos(x, y, z)).isEmpty()) bottomSolid++;
                         }
@@ -271,12 +397,15 @@ public final class ScanService {
             sectionY++;
             if (sectionY > maxY >> 4) {
                 sectionY = minY >> 4;
+                requests.remove(chunkPos);
+                removeChunkTicket(chunkPos);
+                heldChunks.remove(chunkPos);
+                activeChunk = null;
                 chunkIndex++;
             }
         }
 
         private void captureChunkContents(LevelChunk chunk, ChunkPos chunkPos, int fromX, int toX, int fromZ, int toZ) {
-            Tile tile = this.tile;
             int minY = region.min().getY(), maxY = region.max().getY();
             for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
                 BlockPos pos = entry.getKey();
@@ -285,20 +414,21 @@ public final class ScanService {
                 data.remove("x");
                 data.remove("y");
                 data.remove("z");
+                Tile tile = contents();
                 tile.blockEntities.put(tile.cell(pos.getX() - tileMinX(), pos.getY() - minY, pos.getZ() - tileMinZ()), data);
                 blockEntities++;
                 if (entry.getValue() instanceof Container) containers++;
                 mark(entry.getValue(), pos, data);
             }
-            if (!level.areEntitiesLoaded(ChunkPos.asLong(chunkPos.x, chunkPos.z))) {
+            if (!level.areEntitiesLoaded(ChunkPos.asLong(MegaLayout.chunkX(chunkPos), MegaLayout.chunkZ(chunkPos)))) {
                 entityChunksSkipped++;
                 return;
             }
             AABB box = new AABB(fromX, minY, fromZ, toX + 1, maxY + 1, toZ + 1);
             for (Entity entity : level.getEntities((Entity) null, box, entity -> !(entity instanceof Player) && !entity.isPassenger())) {
-                if (!entity.getType().canSerialize()) continue;
+                if (!entity.getType().canSerialize() || !box.contains(entity.getX(), entity.getY(), entity.getZ())) continue;
                 CompoundTag data = entityTag(entity);
-                tile.entities.add(new Tile.EntityData(entity.getX() - tileMinX(), entity.getY() - minY, entity.getZ() - tileMinZ(), data));
+                contents().entities.add(new Tile.EntityData(entity.getX() - tileMinX(), entity.getY() - minY, entity.getZ() - tileMinZ(), data));
                 entities++;
                 if (markers.entities.size() < Markers.MAX_ENTITIES) {
                     Markers.EntityMark mark = new Markers.EntityMark();
@@ -350,18 +480,27 @@ public final class ScanService {
 
         private void endTile() {
             Tile finished = tile;
-            Path file = ProjectStore.tile(newTiles, tileX, tileZ);
             tile = null;
-            writes.add(CompletableFuture.runAsync(() -> {
+            tilePalette.clear();
+            chunks = List.of();
+            if (finished == null) {
+                emptyTiles.set(tileZ * tilesX + tileX);
+                return;
+            }
+            Path file = ProjectStore.tile(newScan.resolve("tiles"), tileX, tileZ);
+            writes.add(writeInBackground(() -> {
+                if (cancelled) return null;
                 try {
                     finished.write(file);
+                    return null;
                 } catch (IOException e) {
-                    writeError = e;
+                    throw new UncheckedIOException(e);
                 }
-            }, WRITER));
+            }));
         }
 
-        private void complete(MinecraftServer server) {
+        private StructureProject prepare() {
+            if (cancelled) return null;
             try {
                 StructureProject project = ProjectStore.load(id);
                 boolean fresh = project == null;
@@ -393,22 +532,16 @@ public final class ScanService {
                 project.missing.clear();
                 project.scannedAt = System.currentTimeMillis();
                 if (!"draft".equals(project.status)) project.status = "modified";
-                Path folder = ProjectStore.folder(id);
-                Path tiles = folder.resolve("tiles");
-                Path old = folder.resolve("tiles.old");
-                ProjectStore.deleteTree(old);
-                if (Files.exists(tiles)) Files.move(tiles, old, StandardCopyOption.ATOMIC_MOVE);
-                Files.move(newTiles, tiles, StandardCopyOption.ATOMIC_MOVE);
-                ProjectStore.deleteTree(old);
-                ProjectStore.save(project);
-                if (fresh) ProjectStore.saveCutouts(id, relativeCutouts());
-                markers.carryOver(ProjectStore.markers(id));
-                ProjectStore.saveMarkers(id, markers);
-            } catch (IOException | RuntimeException e) {
-                LOGGER.warn("Could not save structure project {}", id, e);
-                finish(server, KineticI18n.translatable("msg.realmcontrol.structure.scan.failed", String.valueOf(e.getMessage())));
-                return;
+                Cutouts cutouts = fresh ? relativeCutouts() : ProjectStore.cutouts(project);
+                if (!fresh) markers.carryOver(ProjectStore.markers(project));
+                ProjectStore.prepareScan(newScan, cutouts, markers, emptyTiles);
+                return project;
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
             }
+        }
+
+        private void complete(MinecraftServer server) {
             dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(server, ProjectPreview.PREFIX + id);
             done = total;
             sendProgress(server, true);
@@ -435,14 +568,15 @@ public final class ScanService {
         }
 
         void cleanUp() {
-            try {
-                CompletableFuture.allOf(writes.toArray(new CompletableFuture[0])).join();
-                ProjectStore.deleteTree(newTiles);
-                // A new project that never finished leaves no empty folder behind.
-                if (!ProjectStore.exists(id)) ProjectStore.delete(id);
-            } catch (IOException | RuntimeException e) {
-                LOGGER.warn("Could not remove the partial scan of {}", id, e);
-            }
+            if (installed) return;
+            cancelled = true;
+            heldChunks.forEach(this::removeChunkTicket);
+            heldChunks.clear();
+            requests.clear();
+            // This barrier runs after the outstanding writes, so deletion never races a writer or blocks a tick.
+            Path abandoned = newScan;
+            if (writes.isEmpty() && prepared == null) ProjectStore.removeInBackground(abandoned);
+            else WRITER.execute(() -> ProjectStore.removeInBackground(abandoned));
         }
 
         void finish(MinecraftServer server, Component reason) {
