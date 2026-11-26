@@ -5,9 +5,11 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.xyat.kineticcore.api.client.event.KineticClientEvents;
 import dev.xyat.kineticcore.api.client.gui.KineticGui;
+import dev.xyat.kineticcore.api.client.gui.widget.KineticTextField;
 import dev.xyat.kineticcore.api.event.KineticEventPriority;
 import dev.xyat.kineticcore.api.runtime.KineticClientRuntime;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
+import dev.xyat.kineticcore.api.world.structure.KineticBlockSnapshot;
 import dev.xyat.realmcontrol.structure.StructureEditorModule;
 import dev.xyat.realmcontrol.structure.client.EditorClient;
 import dev.xyat.realmcontrol.structure.client.ControllerClient;
@@ -15,6 +17,7 @@ import dev.xyat.realmcontrol.structure.client.gui.BlockEditPage;
 import dev.xyat.realmcontrol.structure.client.gui.MarkersPage;
 import dev.xyat.realmcontrol.structure.network.BlockEditNetwork;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
+import dev.xyat.realmcontrol.structure.project.BlockStates;
 import dev.xyat.realmcontrol.structure.project.Cutouts;
 import dev.xyat.realmcontrol.structure.project.ProjectStore;
 import dev.xyat.realmcontrol.structure.project.ScanService;
@@ -23,6 +26,7 @@ import dev.xyat.realmcontrol.structure.project.Tile;
 import dev.xyat.realmcontrol.structure.publish.Publisher;
 import dev.xyat.realmcontrol.structure.publish.TestPlacement;
 import dev.xyat.realmcontrol.worldgen.preview.StructureImportService;
+import dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderSet;
@@ -61,6 +65,7 @@ public final class ExistingLayoutValidation {
     private static final String DESERT_DRAFT = "layout_validation:desert", DRAFT = "layout_validation:edited_probe";
     private static final String GIANT_DRAFT = "layout_validation:giant_sparse";
     private static final String ADORA = "adorabuild_structures:acacia_house_small_1", ADORA_DRAFT = "layout_validation:adorabuild_edited";
+    private static final String ADORA_BLOCK = "minecraft:acacia_slab[type=bottom,waterlogged=false]";
     private static final String ORIGINAL_POOL = "layout_fixture:mixed", EDITED_POOL = DRAFT + "/start";
     private static final Path OUTPUT = Path.of(System.getProperty("realmcontrolstructure.existingValidation.output", "existing-layout-validation"));
     private static final String PHASE = System.getProperty("realmcontrolstructure.existingValidation.phase", "initial");
@@ -74,6 +79,7 @@ public final class ExistingLayoutValidation {
     private static BlockPos clicked;
     private static long privateWindow;
     private static int inputTicks;
+    private static String previewTrace = "";
     private static boolean measuring;
     private static long tickStart, operationStart;
     private static float lastProgress;
@@ -373,9 +379,14 @@ public final class ExistingLayoutValidation {
     }
 
     //? if <1.21 {
-    private static void thirdParty(Minecraft client, MinecraftServer server) throws IOException {
+    private static void thirdParty(Minecraft client, MinecraftServer server) throws IOException, ReflectiveOperationException {
         switch (step) {
-            case 0 -> { pending = request(server, ADORA, 4, ADORA_DRAFT); step++; }
+            case 0 -> {
+                var previous = ProjectStore.load(ADORA_DRAFT);
+                if (previous == null) pending = request(server, ADORA, 4, ADORA_DRAFT);
+                else pending = CompletableFuture.completedFuture(new StructureImportService.Result(previous, null));
+                step++;
+            }
             case 1 -> {
                 if (!ready()) return;
                 var sampled = imported(ADORA, 4);
@@ -427,14 +438,24 @@ public final class ExistingLayoutValidation {
                 step++;
             }
             case 5 -> {
-                var page = KineticGui.currentPage();
-                if (!(page instanceof BlockEditPage) && !(page instanceof MarkersPage)) return;
-                var instance = ProjectStore.list().stream().filter(project -> project.sourceStructure.equals(ADORA) && project.sourceVariant < 0)
-                        .findFirst().orElseThrow(() -> new IllegalStateException("Ctrl+right click did not create a live generated structure draft"));
+                traceBlockPreview();
+                var page = KineticGui.currentPage(BlockEditPage.class);
+                if (page == null) return;
+                var field = editorField(page, "stateField", KineticTextField.class);
+                if (field == null) return;
+                var instance = editorField(page, "project", StructureProject.class);
+                require(instance.sourceStructure.equals(ADORA) && instance.sourceVariant < 0, "the opened editor targets the naturally generated instance");
                 require(instance.blocks > 50 && instance.origin[0] != 0, "the opened draft contains real generated blocks at their existing coordinates");
+                var position = editorField(page, "position", BlockPos.class);
+                require(position.offset(instance.origin[0], instance.origin[1], instance.origin[2]).equals(clicked), "the edit page targets the clicked world block");
+                String original = editorField(page, "original", String.class);
+                require(original.equals(ADORA_BLOCK) && field.textValue().equals(original)
+                        && state(instance.id, position).equals(original), "the block editor and saved draft contain the selected bottom acacia slab state");
                 RECEIPT.addProperty("clicked_world_position", clicked.toShortString());
                 RECEIPT.addProperty("actual_blocks", instance.blocks);
                 RECEIPT.addProperty("opened_editor", page.getClass().getSimpleName());
+                RECEIPT.addProperty("original_block_state", original);
+                RECEIPT.addProperty("editable_state_text", field.textValue());
                 finish();
             }
             default -> throw new IllegalStateException("Unexpected modded validation step " + step);
@@ -455,9 +476,7 @@ public final class ExistingLayoutValidation {
         for (int y = box.maxY(); y >= box.minY(); y--) for (int x = box.minX(); x <= box.maxX(); x++) for (int z = box.minZ(); z <= box.maxZ(); z++) {
             var pos = new BlockPos(x, y, z);
             var state = level.getBlockState(pos);
-            boolean houseMaterial = state.is(net.minecraft.tags.BlockTags.PLANKS) || state.is(net.minecraft.tags.BlockTags.STAIRS)
-                    || state.is(net.minecraft.tags.BlockTags.SLABS) || state.is(Blocks.ACACIA_LOG) || state.is(Blocks.STRIPPED_ACACIA_LOG);
-            if (houseMaterial && level.getBlockState(pos.above()).isAir()
+            if (state.is(Blocks.ACACIA_SLAB) && BlockStates.serialize(state).equals(ADORA_BLOCK) && level.getBlockState(pos.above()).isAir()
                     && level.getBlockState(pos.above(2)).isAir() && level.getBlockState(pos.above(3)).isAir()) {
                 clicked = pos;
                 break search;
@@ -470,6 +489,39 @@ public final class ExistingLayoutValidation {
             server.getCommands().getDispatcher().execute(teleport, server.createCommandSourceStack().withSuppressedOutput());
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
             throw new IllegalStateException("Could not position the real player at the house", e);
+        }
+    }
+
+    private static <T> T editorField(BlockEditPage page, String name, Class<T> type) throws ReflectiveOperationException {
+        return readField(BlockEditPage.class, page, name, type);
+    }
+
+    private static <T> T readField(Class<?> owner, Object object, String name, Class<T> type) throws ReflectiveOperationException {
+        var field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(object));
+    }
+
+    private static void traceBlockPreview() throws ReflectiveOperationException {
+        var page = KineticGui.currentPage();
+        var key = readField(StructurePreviewClient.class, null, "currentKey", String.class);
+        var request = readField(StructurePreviewClient.class, null, "current", Integer.class);
+        String trace = (page == null ? "world" : page.getClass().getSimpleName()) + " preview=" + key + " request=" + request;
+        if (page instanceof MarkersPage markersPage) {
+            var origin = readField(MarkersPage.class, markersPage, "windowOrigin", BlockPos.class);
+            var project = readField(MarkersPage.class, markersPage, "project", StructureProject.class);
+            var shown = readField(MarkersPage.class, markersPage, "shown", KineticBlockSnapshot.class);
+            trace += " window=" + origin + " layout=" + project.id;
+            if (shown != null && origin != null) {
+                int x = clicked.getX() - project.origin[0] - origin.getX();
+                int y = clicked.getY() - project.origin[1] - origin.getY();
+                int z = clicked.getZ() - project.origin[2] - origin.getZ();
+                trace += " scale=" + shown.scale() + " hit=" + shown.paletteName(shown.index(x, y, z));
+            }
+        }
+        if (!previewTrace.equals(trace)) {
+            previewTrace = trace;
+            LOG.info("REALM_EXISTING_LAYOUT_BLOCK_PREVIEW {}", trace);
         }
     }
     //?}
