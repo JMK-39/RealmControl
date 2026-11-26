@@ -1,25 +1,22 @@
-2026年11月26日 — 26.11.26.1 — Edit an existing structure and place it in the world / 编辑已有结构并定点生成
+2026年11月26日 — 26.11.26 — Existing structure editing, world placement and large custom structures / 编辑已有结构、定点生成和超巨型结构
 
 **English**
 
+- If you installed an earlier November 26 build, replace both the KineticCore and RealmControl JARs on the server and clients. The updated files use the same date and filenames.
 - Open **Structure library**, choose a vanilla or mod-provided structure and inspect a layout as an editable draft. Click a block to replace its state or remove it. A click on a reduced-detail model opens that area at full resolution. Containers, spawners and entities open their own inspectors.
 - Use **Generate in world** to place a draft at the aimed face, selection corner A, or explicit coordinates. The confirmation shows both corners. Placement runs in bounded batches and can be stopped. Ctrl-right-click a block or entity with the Structure Controller to inspect an existing building.
-- Publishing creates a separate structure by default. For a draft linked to a registered structure, **Replace source layout** can apply that layout to future generation under the original ID. The confirmation names the source. Already generated chunks keep their buildings. All three builds require a matching KineticCore 26.11.26.1 or later.
+- Publishing creates a separate structure by default. For a draft linked to a registered structure, **Replace source layout** can apply that layout to future generation under the original ID. The confirmation names the source. Already generated chunks keep their buildings. All three builds require a matching KineticCore 26.11.26 or later.
+- Select and publish a footprint up to 4096 × 4096 blocks. A mega structure keeps one anchor, rotation and base height across its parts. When a new chunk generates, RealmControl checks the nearby group and places the tiles that reach that chunk. Dense tiles share decoded blocks between generation workers and keep a bounded cache.
+- Large drafts scan incrementally. Empty tiles use a compact index, and a rescan switches to the new data after it finishes writing. Preview and publish each use one completed scan. Existing drafts and structures remain readable.
 
 **简体中文**
 
+- 如果已安装 11 月 26 日较早的构建，请在服务端和客户端同时替换 KineticCore 和 RealmControl 的 JAR。本次更新沿用当天日期和文件名。
 - 从**结构库**选择原版或其他模组的结构，把选中的布局导入草稿。点普通方块可替换方块状态或移除它。点击缩略模型会先放大相应区域，再以原始精度选中具体方块。容器、刷怪笼和实体有各自的属性面板。
 - 用**在世界中生成**选准星所指面、选区 A 点或输入坐标，确认页显示两个边界角点。放置分批执行，可中途停止。手持结构控制器 Ctrl + 右键点方块或实体，可检查已经生成的建筑。
-- 默认将布局另存为独立结构。有注册来源的草稿可以明确选择**替换原结构布局**，确认原 ID 后，该布局会用于往后的自然生成。已经生成的建筑保留原样。三个版本均需同平台的 KineticCore 26.11.26.1 或更新版本。
-
-2026年11月26日 — 26.11.26 — Large custom structures / 超巨型自定义结构
-
-- Select and publish a footprint up to 4096 × 4096 blocks. A mega structure keeps one anchor, rotation and base height across its parts. When a new chunk generates, RealmControl checks the nearby group and places the tiles that reach that chunk. Dense tiles share decoded blocks between generation workers and keep a bounded cache.
-- Large drafts scan incrementally. Empty tiles use a compact index, and a rescan switches to the new data after it finishes writing. Preview and publish each use one completed scan. Existing drafts and structures remain readable.
-- NeoForge builds require KineticCore 26.11.26 or later so enchanted starter items can be saved after Publish & Rejoin. Forge supports KineticCore 26.11.24 or later.
+- 默认将布局另存为独立结构。有注册来源的草稿可以明确选择**替换原结构布局**，确认原 ID 后，该布局会用于往后的自然生成。已经生成的建筑保留原样。三个版本均需同平台的 KineticCore 26.11.26 或更新版本。
 - 结构编辑器的水平选区扩大到 4096 × 4096 格。建筑群各部分共用中心、朝向和地基高度。玩家进入新区块时，游戏只查找附近的结构分组，放置落在当前区块的部分。密集建筑的模板可由生成线程共用，缓存同时按模板数量和方块条目数控制。
 - 大草稿分段扫描，空白分块使用索引保存。重新扫描写完后才切换草稿，预览和发布各自读取一次完整扫描的结果。旧版草稿和已发布结构可以继续使用。
-- NeoForge 需要 KineticCore 26.11.26 或以上版本，修复“发布并重进”后附魔新手装备导致的存档错误。Forge 的核心最低版本为 26.11.24。
 
 2026年11月14日 — 26.11.14 — Structure editor look / 结构编辑器外观
 - The controller's next-click outline follows the actual A/B and Shift actions, and its status panel wraps on smaller screens. Editing a shared draft invalidates its thumbnails in every world's cache, so returning to another world shows the updated picture.
