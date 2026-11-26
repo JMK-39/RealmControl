@@ -14,6 +14,7 @@ import dev.xyat.realmcontrol.structure.client.ControllerClient;
 import dev.xyat.realmcontrol.structure.client.gui.BlockEditPage;
 import dev.xyat.realmcontrol.structure.client.gui.MarkersPage;
 import dev.xyat.realmcontrol.structure.network.BlockEditNetwork;
+import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.realmcontrol.structure.project.Cutouts;
 import dev.xyat.realmcontrol.structure.project.ProjectStore;
 import dev.xyat.realmcontrol.structure.project.ScanService;
@@ -111,7 +112,7 @@ public final class ExistingLayoutValidation {
                 case "giant" -> giant(server);
                 case "giant-reopen" -> giantReopen(server);
                 //? if <1.21 {
-                case "third-party" -> thirdParty(client, server);
+                case "third-party", "third-party-packet" -> thirdParty(client, server);
                 //?}
                 default -> throw new IllegalArgumentException("Unknown validation phase " + PHASE);
             }
@@ -382,16 +383,34 @@ public final class ExistingLayoutValidation {
                 RECEIPT.addProperty("third_party_source", ADORA);
                 RECEIPT.addProperty("sampled_blocks", sampled.blocks);
                 pending = server.submit(() -> locateAdora(server));
+                deadline = System.nanoTime() + 45_000_000_000L;
                 step++;
             }
             case 2 -> {
                 if (!ready()) return;
                 pending.join();
-                if (!ControllerClient.holding() || !(client.player.pick(32.0D, 1.0F, false) instanceof BlockHitResult hit)
-                        || !hit.getBlockPos().equals(clicked)) return;
+                if (++inputTicks == 20) server.execute(() -> {
+                    var player = operator(server);
+                    player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(StructureEditorModule.CONTROLLER.get()));
+                    player.inventoryMenu.broadcastChanges();
+                });
+                if (inputTicks == 60) LOG.info("REALM_EXISTING_LAYOUT_NATIVE_POSE pos={} controller={} camera={} hit={}",
+                        client.player.position(), ControllerClient.holding(), client.player.getXRot(), client.player.pick(32.0D, 1.0F, false));
+                if (!ControllerClient.holding() || client.player.distanceToSqr(clicked.getX() + 0.5D, clicked.getY() + 1.0D, clicked.getZ() + 0.5D) > 4.0D) return;
+                client.player.setXRot(90F);
+                if (!(client.player.pick(32.0D, 1.0F, false) instanceof BlockHitResult hit) || !hit.getBlockPos().equals(clicked)) return;
+                if ("third-party-packet".equals(PHASE)) {
+                    StructureEditorNetwork.inspect(clicked, -1);
+                    RECEIPT.addProperty("input_path", "client-inspect-packet");
+                    deadline = System.nanoTime() + 45_000_000_000L;
+                    step = 5;
+                    return;
+                }
+                inputTicks = 0;
                 privateWindow = GLFWNativeWin32.glfwGetWin32Window(client.getWindow().getWindow());
                 require(privateWindow != 0 && Boolean.getBoolean("kineticcore.guiValidation.background"), "fixture owns an isolated native game window");
                 require(User32.PostMessage(privateWindow, 0x0100, 0x11, (29L << 16) | 1L), "left Ctrl key reached the private native window");
+                deadline = System.nanoTime() + 20_000_000_000L;
                 step++;
             }
             case 3 -> {
@@ -403,6 +422,8 @@ public final class ExistingLayoutValidation {
                 if (++inputTicks < 3) return;
                 require(User32.PostMessage(privateWindow, 0x0205, 0x0008, 128L | (128L << 16)), "right mouse release reached the private native window");
                 require(User32.PostMessage(privateWindow, 0x0101, 0x11, 0xc0000000L | (29L << 16) | 1L), "Ctrl release reached the private native window");
+                RECEIPT.addProperty("input_path", "native-control-and-right-button");
+                deadline = System.nanoTime() + 45_000_000_000L;
                 step++;
             }
             case 5 -> {
@@ -433,14 +454,17 @@ public final class ExistingLayoutValidation {
         search:
         for (int y = box.maxY(); y >= box.minY(); y--) for (int x = box.minX(); x <= box.maxX(); x++) for (int z = box.minZ(); z <= box.maxZ(); z++) {
             var pos = new BlockPos(x, y, z);
-            if (level.getBlockState(pos).is(Blocks.ACACIA_PLANKS) && level.getBlockState(pos.above()).isAir()
+            var state = level.getBlockState(pos);
+            boolean houseMaterial = state.is(net.minecraft.tags.BlockTags.PLANKS) || state.is(net.minecraft.tags.BlockTags.STAIRS)
+                    || state.is(net.minecraft.tags.BlockTags.SLABS) || state.is(Blocks.ACACIA_LOG) || state.is(Blocks.STRIPPED_ACACIA_LOG);
+            if (houseMaterial && level.getBlockState(pos.above()).isAir()
                     && level.getBlockState(pos.above(2)).isAir() && level.getBlockState(pos.above(3)).isAir()) {
                 clicked = pos;
                 break search;
             }
         }
-        require(clicked != null, "pick a visible acacia block belonging to the generated house");
-        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(StructureEditorModule.CONTROLLER.get()));
+        require(clicked != null, "pick a visible building block belonging to the generated house");
+        LOG.info("REALM_EXISTING_LAYOUT_NATIVE_TARGET {} {}", clicked, level.getBlockState(clicked));
         String teleport = "tp @p " + (clicked.getX() + 0.5D) + " " + (clicked.getY() + 1.0D) + " " + (clicked.getZ() + 0.5D) + " 0 90";
         try {
             server.getCommands().getDispatcher().execute(teleport, server.createCommandSourceStack().withSuppressedOutput());
