@@ -4,6 +4,10 @@
 
 Realm Control provides visual tools for world blocks, structure and biome generation, beacon areas, and teleport authorization.
 
+Select a build in the world, then open its draft and use the 3D preview to pick an entity to edit. Test placement before publishing. [Structure editor guide](https://github.com/JMK-39/RealmControl/wiki/Structures)
+
+<img src="https://raw.githubusercontent.com/wiki/JMK-39/RealmControl/media/showcase-20261126/en/realm-structure-editor.gif" alt="Captured steps for selecting a build, editing an entity in 3D, and opening the test placement dialog" width="640">
+
 - Generation bans, fixed replacements, and weighted replacements.
 - Structure/biome rules with 3D structure previews, and configurable beacon coverage.
 - A structure editor that turns a building in the world into a data pack structure generating in new chunks.
@@ -17,6 +21,10 @@ Optional: Jade 11+ on Forge or 15+ on NeoForge for beacon information.
 
 Realm Control 提供世界方块、结构与群系生成、信标区域和传送授权的可视化管理工具。
 
+在世界里圈选建筑，打开草稿后在 3D 预览里选中实体进行编辑。发布前可测试放置。 [结构编辑指南](https://github.com/JMK-39/RealmControl/wiki/%E7%BB%93%E6%9E%84%E7%94%9F%E6%88%90)
+
+<img src="https://raw.githubusercontent.com/wiki/JMK-39/RealmControl/media/showcase-20261126/zh/realm-structure-editor.gif" alt="圈选建筑、在 3D 预览中编辑实体并打开测试放置对话框的实拍步骤" width="640">
+
 - 方块生成禁用、固定替换与加权替换。
 - 结构、群系规则（带结构 3D 预览）及可配置信标区域。
 - 结构编辑器：把世界里的建筑做成在新区块中生成的数据包结构。
@@ -28,8 +36,8 @@ Realm Control 提供世界方块、结构与群系生成、信标区域和传送
 
 [GitHub project / 项目仓库](https://github.com/JMK-39/RealmControl) · [CurseForge](https://www.curseforge.com/minecraft/mc-mods/realmcontrol)
 
-See the [English Wiki tutorial](https://github.com/JMK-39/RealmControl/wiki/Tutorial) for detailed instructions (pages prepared locally; publication pending).
+See the [English Wiki tutorial](https://github.com/JMK-39/RealmControl/wiki/Tutorial) for detailed instructions.
 
-详细用法见[中文 Wiki 教程](https://github.com/JMK-39/RealmControl/wiki/使用教程)（页面已在本地整理，待上线）。
+详细用法见[中文 Wiki 教程](https://github.com/JMK-39/RealmControl/wiki/使用教程)。
 
 [Changelog / 更新日志](CHANGELOG.md)
