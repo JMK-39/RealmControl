@@ -45,6 +45,8 @@ Optional: Jade 11+ on Forge or 15+ on NeoForge for beacon information.
 
 Realm Control 提供世界方块、结构与群系生成、信标区域和传送授权的可视化管理工具。
 
+<a name="zh-generation-walkthrough"></a>
+
 ### 看已发布的庭院在新区块自然生成
 
 打开已发布结构的生成规则，查看哪些群系可以生成它。这座庭院的长、高、宽为 23 × 8 × 19 格。新主世界开始生成时，游戏按这些规则把庭院生成在了平原。
@@ -57,6 +59,8 @@ Realm Control 提供世界方块、结构与群系生成、信标区域和传送
 https://github.com/user-attachments/assets/130fff21-a5c2-4949-9ac9-6ccf2e01b1a7
 
 </details>
+
+<a name="zh-walkthrough"></a>
 
 ### 在 3D 草稿里直接点选和编辑实体
 
