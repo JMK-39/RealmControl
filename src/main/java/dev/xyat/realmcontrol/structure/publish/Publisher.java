@@ -7,6 +7,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import dev.xyat.kineticcore.api.text.KineticI18n;
 import dev.xyat.realmcontrol.structure.project.BlockStates;
@@ -41,6 +42,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -71,6 +73,7 @@ import java.util.zip.ZipOutputStream;
 public final class Publisher {
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
     private static final Set<String> WRITING = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<String> WRITING_SOURCES = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     public static final String PACK = "realmcontrol";
     private static final Pattern TILE_FILE = Pattern.compile("t_\\d+_\\d+\\.(nbt|json)");
@@ -107,20 +110,35 @@ public final class Publisher {
 
     /** Publishes project {@code id}; runs off the server thread, {@code progress} gets 0 to 1. */
     public static Outcome publish(MinecraftServer server, String id, Consumer<Float> progress) throws IOException {
+        return publish(server, id, progress, null);
+    }
+
+    public static Outcome publish(MinecraftServer server, String id, Consumer<Float> progress,
+                                  @Nullable String confirmedOptions) throws IOException {
         if (!WRITING.add(id)) return failure("msg.realmcontrol.structure.publish.busy", id);
         List<Path[]> moves = new ArrayList<>();
         Path zipStaging = null;
+        String lockedSource = null;
         try (ProjectStore.Draft draft = ProjectStore.openDraft(id)) {
             if (draft == null) return failure("msg.realmcontrol.structure.publish.unknown", id);
-            Path root = target(server, draft.project());
+            StructureProject project = draft.project();
+            if (StructureProject.validId(project.sourceStructure)) {
+                if (!WRITING_SOURCES.add(project.sourceStructure)) return failure("msg.realmcontrol.structure.publish.busy", id);
+                lockedSource = project.sourceStructure;
+            }
+            if (confirmedOptions != null && !confirmedOptions.equals(project.save.toJson().toString()))
+                return failure("msg.realmcontrol.structure.publish.changed", id);
+            Path root = target(server, project).toAbsolutePath().normalize();
             Path archive = null;
-            if ("zip".equals(draft.project().save.target)) {
+            if ("zip".equals(project.save.target)) {
                 archive = exportFolder().resolve(root.getFileName() + ".zip");
                 Files.createDirectories(root.getParent());
                 zipStaging = Files.createTempDirectory(root.getParent(), ".realm-export-");
                 root = zipStaging;
             }
             return publish(server, draft, progress, root, archive, moves);
+        } catch (SourceOverride.Conflict conflict) {
+            return failure("msg.realmcontrol.structure.publish.source_conflict", conflict.getMessage());
         } finally {
             try {
                 discard(moves);
@@ -132,6 +150,7 @@ public final class Publisher {
                     }
                 }
             } finally {
+                if (lockedSource != null) WRITING_SOURCES.remove(lockedSource);
                 WRITING.remove(id);
             }
         }
@@ -143,14 +162,22 @@ public final class Publisher {
         String id = project.id;
         boolean medium = "medium".equals(project.tier()), mega = "mega".equals(project.tier());
         StructureProject.Generation generation = project.generation;
-        if (generation.separation >= generation.spacing) return failure("msg.realmcontrol.structure.publish.spacing");
+        StructureProject.SaveOptions options = project.save;
+        if (options.replaceSource && (!StructureProject.validId(project.sourceStructure) || id.equals(project.sourceStructure))) {
+            return failure("msg.realmcontrol.structure.publish.source_required");
+        }
+        if ((!options.replaceSource || mega) && generation.separation >= generation.spacing) {
+            return failure("msg.realmcontrol.structure.publish.spacing");
+        }
         if (mega && !"kineticcore".equals(project.save.target)) return failure("msg.realmcontrol.structure.publish.mega_target");
         if (mega && generation.separation < project.megaSeparation()) {
             return failure("msg.realmcontrol.structure.publish.mega_separation", project.megaSeparation(), Math.max(project.size[0], project.size[2]));
         }
-        BiomeFilter.Result biomes = BiomeFilter.resolve(server, generation);
-        if (biomes.values().isEmpty()) return failure("msg.realmcontrol.structure.publish.no_biomes");
-        StructureProject.SaveOptions options = project.save;
+        SourceOverride.Plan override = SourceOverride.prepare(server, project, root, archive != null);
+        if (override == null) return failure("msg.realmcontrol.structure.publish.source_missing", project.sourceStructure);
+        override.verify(root);
+        BiomeFilter.Result biomes = override.enabled() ? null : BiomeFilter.resolve(server, generation);
+        if (biomes != null && biomes.values().isEmpty()) return failure("msg.realmcontrol.structure.publish.no_biomes");
         Markers markers = draft.markers();
         List<String> unknownTables = options.loot ? LootTables.unknownTables(server, markers) : List.of();
         if (!unknownTables.isEmpty()) return failure("msg.realmcontrol.structure.publish.unknown_tables", String.join("、", unknownTables));
@@ -178,7 +205,11 @@ public final class Publisher {
         }
         progress.accept(0.8F);
 
-        stageGeneration(project, biomes, data, moves, absent);
+        if (override.enabled()) {
+            stageOverride(project, override, root, moves, absent, archive != null);
+        } else {
+            stageGeneration(project, Objects.requireNonNull(biomes), data, moves, absent);
+        }
         if (options.loot) stageTables(root, markers, options, moves);
         Path meta = root.resolve("pack.mcmeta");
         if (!Files.exists(meta) || options.bothFormats) writeJson(staged(meta, moves), packMeta(options.bothFormats));
@@ -188,6 +219,7 @@ public final class Publisher {
         }
         progress.accept(0.95F);
         if (!ProjectStore.beginInstall(draft)) return failure("msg.realmcontrol.structure.publish.changed", id);
+        override.verify(root);
 
         Commit savePublication = () -> {
             if (!ProjectStore.updateIfCurrent(draft, current -> {
@@ -196,8 +228,11 @@ public final class Publisher {
                 current.publishedRoot = archive == null ? root.toAbsolutePath().toString() : "";
             })) throw new IOException("Draft changed before publication completed: " + id);
         };
-        if (archive == null) installPack(data, path, moves, savePublication);
-        else install(List.<Path[]>of(moves.get(moves.size() - 1)), List.of(), savePublication);
+        if (archive == null) {
+            List<Path> stale = new ArrayList<>(override.stale(moves));
+            if (override.enabled()) stale.addAll(ownStandaloneGeneration(server, project, override));
+            installPack(data, path, moves, stale, savePublication);
+        } else install(List.<Path[]>of(moves.get(moves.size() - 1)), List.of(), savePublication);
 
         try {
             dev.xyat.realmcontrol.worldgen.preview.StructureThumbnailService.forget(server, id);
@@ -209,7 +244,73 @@ public final class Publisher {
             case "zip" -> "msg.realmcontrol.structure.publish.done_zip";
             default -> "msg.realmcontrol.structure.publish.done";
         };
-        return new Outcome(true, KineticI18n.translatable(doneKey, id, biomes.count(), (archive == null ? root : archive).toString()));
+        return new Outcome(true, KineticI18n.translatable(doneKey, override.enabled() ? project.sourceStructure : id,
+                biomes == null ? override.biomeCount() : biomes.count(), (archive == null ? root : archive).toString()));
+    }
+
+    /** Withdraw the previous standalone generator when the same project first switches to its source's ID. */
+    private static List<Path> ownStandaloneGeneration(MinecraftServer server, StructureProject project,
+                                                       SourceOverride.Plan override) throws IOException {
+        ResourceLocation id = Objects.requireNonNull(ResourceLocation.tryParse(project.id));
+        JsonPrimitive projectId = new JsonPrimitive(project.id);
+        JsonPrimitive startPool = new JsonPrimitive(project.id + "/start");
+        List<Path> stale = new ArrayList<>();
+        for (Path root : SourceOverride.installedRoots(server)) {
+            Path definition = SourceOverride.definition(root, id);
+            if (Files.exists(definition, LinkOption.NOFOLLOW_LINKS)) {
+                if (project.publishedAt == 0) throw new SourceOverride.Conflict(definition.toString());
+                JsonObject prior = readGeneration(definition);
+                JsonElement pool = prior.get("start_pool"), tiles = prior.get("tiles");
+                if (!startPool.equals(pool) && !projectId.equals(tiles)) {
+                    throw new SourceOverride.Conflict(definition.toString());
+                }
+                stale.add(definition);
+            }
+            Path set = SourceOverride.resource(root, id, "structure_set");
+            var owned = override.at(root);
+            if (owned != null && !owned.setHash().isEmpty()) continue;
+            if (Files.exists(set, LinkOption.NOFOLLOW_LINKS)) {
+                if (project.publishedAt == 0) throw new SourceOverride.Conflict(set.toString());
+                JsonElement entries = readGeneration(set).get("structures");
+                if (entries == null || !entries.isJsonArray() || entries.getAsJsonArray().size() != 1) {
+                    throw new SourceOverride.Conflict(set.toString());
+                }
+                JsonElement entry = entries.getAsJsonArray().get(0);
+                if (!entry.isJsonObject() || !projectId.equals(entry.getAsJsonObject().get("structure"))) {
+                    throw new SourceOverride.Conflict(set.toString());
+                }
+                stale.add(set);
+            }
+        }
+        return stale;
+    }
+
+    private static JsonObject readGeneration(Path file) throws IOException {
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new SourceOverride.Conflict(file.toString());
+        try (var reader = Files.newBufferedReader(file)) {
+            return JsonParser.parseReader(reader).getAsJsonObject();
+        } catch (JsonParseException | IllegalStateException error) {
+            throw new SourceOverride.Conflict(file.toString());
+        }
+    }
+
+    private static void stageOverride(StructureProject project, SourceOverride.Plan override, Path root,
+                                      List<Path[]> moves, List<String> absent, boolean archive) throws IOException {
+        ResourceLocation source = Objects.requireNonNull(override.source());
+        JsonObject original = Objects.requireNonNull(override.original());
+        boolean mega = "mega".equals(project.tier());
+        JsonObject definition = SourceOverride.merge(mega ? megaStructure(project, absent) : structure(project), original, mega);
+        if (archive) {
+            writeJson(staged(SourceOverride.definition(root, source), moves), definition);
+            return;
+        }
+        Path megaSet = null;
+        if (mega) {
+            ResourceLocation id = Objects.requireNonNull(ResourceLocation.tryParse(project.id));
+            megaSet = staged(SourceOverride.resource(root, id, "structure_set"), moves);
+            writeJson(megaSet, structureSet(project, project.sourceStructure));
+        }
+        SourceOverride.stage(root, source, project.id, original, definition, megaSet, moves);
     }
 
     /**
@@ -255,7 +356,13 @@ public final class Publisher {
     @Nullable
     private static Outcome stageGenerationEdit(MinecraftServer server, StructureProject project, List<Path[]> moves) throws IOException {
         if (project.publishedRoot.isBlank() || "draft".equals(project.status)) return null;
-        Path data = Path.of(project.publishedRoot).resolve("data").resolve(project.namespace());
+        Path root = Path.of(project.publishedRoot);
+        if (StructureProject.validId(project.sourceStructure)) {
+            ResourceLocation source = Objects.requireNonNull(ResourceLocation.tryParse(project.sourceStructure));
+            var state = SourceOverride.read(root, source);
+            if (state != null && state.owner().equals(project.id)) return null; // Only explicit publication changes the source.
+        }
+        Path data = root.resolve("data").resolve(project.namespace());
         if (!Files.isRegularFile(data.resolve("worldgen/structure_set/" + project.path() + ".json"))) return null;
         StructureProject.Generation generation = project.generation;
         if (generation.separation >= generation.spacing) return failure("msg.realmcontrol.structure.publish.spacing");
@@ -281,7 +388,7 @@ public final class Publisher {
     }
 
     /** Explicit air tiles still carve terrain when the editor asks to keep air. */
-    private static Tile readTile(ProjectStore.Draft draft, int tx, int tz) throws IOException {
+    static Tile readTile(ProjectStore.Draft draft, int tx, int tz) throws IOException {
         if (!draft.isEmptyTile(tx, tz)) return draft.readTile(tx, tz);
         StructureProject project = draft.project();
         int size = project.tileSize;
@@ -486,9 +593,13 @@ public final class Publisher {
      * tier, of tiles that are now cut out entirely, and of the other format when it is no longer written.
      */
     static void installPack(Path data, String path, List<Path[]> moves, Commit metadata) throws IOException {
+        installPack(data, path, moves, List.of(), metadata);
+    }
+
+    private static void installPack(Path data, String path, List<Path[]> moves, List<Path> stale, Commit metadata) throws IOException {
         Set<Path> written = new HashSet<>();
         for (Path[] move : moves) written.add(move[1]);
-        List<Path> candidates = new ArrayList<>();
+        Set<Path> candidates = new HashSet<>(stale);
         for (String folder : List.of(templateFolder(), otherTemplateFolder())) {
             Path templates = data.resolve(folder);
             candidates.add(templates.resolve(path + ".nbt"));
@@ -498,7 +609,7 @@ public final class Publisher {
         candidates.addAll(tileFiles(data.resolve("worldgen/template_pool").resolve(path)));
         candidates.add(data.resolve("worldgen/template_pool").resolve(path).resolve("start.json"));
         candidates.removeIf(written::contains);
-        install(moves, candidates, metadata);
+        install(moves, List.copyOf(candidates), metadata);
         for (String folder : List.of(templateFolder(), otherTemplateFolder())) {
             Path tiles = data.resolve(folder).resolve(path);
             try {
@@ -790,9 +901,13 @@ public final class Publisher {
 
     /** The structure set; a structure switched off keeps its set with a chance of 0, as the structure panel does. */
     private static JsonObject structureSet(StructureProject project) {
+        return structureSet(project, project.id);
+    }
+
+    private static JsonObject structureSet(StructureProject project, String structureId) {
         StructureProject.Generation generation = project.generation;
         JsonObject entry = new JsonObject();
-        entry.addProperty("structure", project.id);
+        entry.addProperty("structure", structureId);
         entry.addProperty("weight", 1);
         JsonArray structures = new JsonArray();
         structures.add(entry);
@@ -965,7 +1080,7 @@ public final class Publisher {
         }
     }
 
-    private static void writeJson(Path file, JsonObject json) throws IOException {
+    static void writeJson(Path file, JsonObject json) throws IOException {
         Files.writeString(file, GSON.toJson(json), StandardCharsets.UTF_8);
     }
 

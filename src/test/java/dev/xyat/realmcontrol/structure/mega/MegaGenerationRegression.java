@@ -23,6 +23,7 @@ public final class MegaGenerationRegression {
         verifyGroupTileBounds();
         verifyFoundationBounds();
         verifyCoverage();
+        verifyPickingCoordinates();
         System.out.println("REALM_MEGA_GENERATION_REGRESSION_PASS");
     }
 
@@ -90,6 +91,22 @@ public final class MegaGenerationRegression {
                             check(Math.max(0, bounds.endX() - bounds.minX()) * Math.max(0, bounds.endZ() - bounds.minZ()) == count,
                                     "foundation operation scanned columns outside its chunk");
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void verifyPickingCoordinates() {
+        var anchor = new BlockPos(-2032, -29, 848);
+        for (int[] size : SIZES) {
+            var layout = new MegaLayout(size[0], 63, size[1]);
+            for (Rotation rotation : Rotation.values()) {
+                for (int x : new int[]{0, layout.anchorX, size[0] - 1}) {
+                    for (int z : new int[]{0, layout.anchorZ, size[1] - 1}) {
+                        var world = anchor.offset(MegaLayout.turn(new BlockPos(x - layout.anchorX, 39, z - layout.anchorZ), rotation));
+                        check(layout.local(anchor, rotation, world).equals(new BlockPos(x, 39, z)),
+                                "picked wrong draft cell in rotated structure " + rotation);
                     }
                 }
             }

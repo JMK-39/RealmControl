@@ -8,6 +8,7 @@ import dev.xyat.kineticcore.api.runtime.KineticCreativeTabs;
 import dev.xyat.kineticcore.api.runtime.KineticPlatform;
 import dev.xyat.kineticcore.api.server.event.KineticServerEvents;
 import dev.xyat.realmcontrol.structure.command.StructureCommand;
+import dev.xyat.realmcontrol.structure.network.BlockEditNetwork;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.realmcontrol.structure.project.ScanService;
 import dev.xyat.realmcontrol.structure.selection.SelectionStore;
@@ -28,6 +29,7 @@ public final class StructureEditorModule {
     public StructureEditorModule() {
         dev.xyat.realmcontrol.structure.mega.MegaTypes.install();
         StructureEditorNetwork.register();
+        BlockEditNetwork.register();
         StructureCommand.install();
         KineticCreativeTabs.onBuildContents(context -> {
             if (context.tabKey().equals(CreativeModeTabs.TOOLS_AND_UTILITIES) || context.tabKey().equals(CreativeModeTabs.OP_BLOCKS)) {
@@ -37,6 +39,7 @@ public final class StructureEditorModule {
         KineticServerEvents.onStarted(KineticEventPriority.NORMAL, SelectionStore::load);
         KineticServerEvents.onStopping(KineticEventPriority.NORMAL, server -> {
             ScanService.stop(server);
+            dev.xyat.realmcontrol.worldgen.preview.StructureImportService.stop(server);
             dev.xyat.realmcontrol.structure.publish.TestPlacement.stop(server);
             SelectionStore.save(server);
         });

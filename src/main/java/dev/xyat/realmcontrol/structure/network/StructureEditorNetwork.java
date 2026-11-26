@@ -58,6 +58,7 @@ public final class StructureEditorNetwork {
     }
 
     public static void register() {
+        LayoutNetwork.register(CHANNEL);
         CHANNEL.registerServerbound(0, SelectionActionPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), SelectionActionPacket::read), SelectionActionPacket::handle);
         CHANNEL.registerServerbound(1, ProjectRequestPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), ProjectRequestPacket::read), ProjectRequestPacket::handle);
         CHANNEL.registerServerbound(2, SaveProjectPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), SaveProjectPacket::read), SaveProjectPacket::handle);
@@ -73,6 +74,18 @@ public final class StructureEditorNetwork {
         CHANNEL.registerClientbound(12, MarkersPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), MarkersPacket::read), MarkersPacket::handleClient);
         CHANNEL.registerClientbound(13, LootTablesPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), LootTablesPacket::read), LootTablesPacket::handleClient);
         CHANNEL.registerClientbound(14, EntityDataPacket.class, NetworkCodec.of((buf, msg) -> msg.write(buf), EntityDataPacket::read), EntityDataPacket::handleClient);
+    }
+
+    public static void generate(String id, BlockPos min) {
+        CHANNEL.sendToServer(new LayoutNetwork.Generate(id, min));
+    }
+
+    public static void useLayout(String source, int variant, boolean place) {
+        CHANNEL.sendToServer(new LayoutNetwork.UseLayout(source, variant, place));
+    }
+
+    public static void inspect(BlockPos pos, int entityId) {
+        CHANNEL.sendToServer(new LayoutNetwork.Inspect(pos, entityId));
     }
 
     // ---- client side senders ----
@@ -126,8 +139,10 @@ public final class StructureEditorNetwork {
 
     public static void sendProjects(ServerPlayer player, @Nullable String focus, boolean open) {
         JsonArray list = new JsonArray();
+        String worldKey = dev.xyat.realmcontrol.structure.project.PlacedDrafts.worldKey(player.serverLevel());
         for (StructureProject project : ProjectStore.list()) {
             JsonObject json = project.toJson();
+            json.addProperty("origin_in_current_world", worldKey.equals(project.sourceWorld));
             json.addProperty("cutout_count", ProjectStore.cutouts(project.id).count());
             json.addProperty("scanning", ScanService.busy(project.id) || TestPlacement.busy(project.id));
             list.add(json);
@@ -159,7 +174,7 @@ public final class StructureEditorNetwork {
      * Sends a draft's markers with the state of the loot tables they use; {@code focus} names the markers the page
      * should select (see {@code MarkersPage}), {@code open} opens the page.
      */
-    private static void sendMarkers(ServerPlayer player, String id, String focus, boolean open) {
+    public static void sendMarkers(ServerPlayer player, String id, String focus, boolean open) {
         StructureProject project = ProjectStore.load(id);
         if (project == null) {
             result(player, KineticI18n.translatable("msg.realmcontrol.structure.publish.unknown", id), false);
@@ -326,7 +341,7 @@ public final class StructureEditorNetwork {
         ScanService.start(player, id, name, level, region, cutouts);
     }
 
-    private static void publish(ServerPlayer player, String id) {
+    private static void publish(ServerPlayer player, String id, @Nullable String confirmedOptions) {
         MinecraftServer server = player.getServer();
         UUID owner = player.getUUID();
         PUBLISHER.execute(() -> {
@@ -341,7 +356,7 @@ public final class StructureEditorNetwork {
                         ServerPlayer target = server.getPlayerList().getPlayer(owner);
                         if (target != null) CHANNEL.sendToPlayer(target, new ScanProgressPacket(id, share, -1, false, null));
                     });
-                });
+                }, confirmedOptions);
             } catch (IOException | RuntimeException e) {
                 LOGGER.warn("Publishing structure project {} failed", id, e);
                 outcome = new Publisher.Outcome(false, KineticI18n.translatable("msg.realmcontrol.structure.publish.failed", String.valueOf(e.getMessage())));
@@ -477,7 +492,7 @@ public final class StructureEditorNetwork {
             /** Places a draft around the player for a test. */
             TEST_PLACE,
             /** Puts back the area of the world's test placement. */
-            TEST_UNDO
+            TEST_UNDO, PUBLISH_WITH_OPTIONS
         }
 
         static ProjectRequestPacket read(NetworkBuffer buf) {
@@ -517,7 +532,25 @@ public final class StructureEditorNetwork {
                     }
                     sendProjects(player, null);
                 }
-                case PUBLISH -> publish(player, id);
+                case PUBLISH -> publish(player, id, null);
+                case PUBLISH_WITH_OPTIONS -> {
+                    StructureProject draft = ProjectStore.load(id);
+                    if (draft == null) {
+                        result(player, KineticI18n.translatable("msg.realmcontrol.structure.publish.unknown", id), false);
+                        return;
+                    }
+                    try {
+                        draft.save = StructureProject.SaveOptions.fromJson(JsonParser.parseString(name).getAsJsonObject());
+                        Publisher.Outcome saved = applyEdit(player.getServer(), draft, "");
+                        if (saved.success()) publish(player, id, draft.save.toJson().toString());
+                        else {
+                            CHANNEL.sendToPlayer(player, new ScanProgressPacket(id, 0, -1, true, saved.message()));
+                            result(player, saved.message(), false);
+                        }
+                    } catch (RuntimeException e) {
+                        result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.save_failed", e.getMessage()), false);
+                    }
+                }
                 case BIOMES -> CHANNEL.sendToPlayer(player, new BiomeCatalogPacket(BiomeFilter.catalog(player.getServer()).toString()));
                 case IMPORT_CUTOUTS -> importCutouts(player, id);
                 case MARKERS -> sendMarkers(player, id, name, false);

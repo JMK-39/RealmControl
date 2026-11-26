@@ -2,6 +2,7 @@ package dev.xyat.realmcontrol.structure.project;
 
 import dev.xyat.realmcontrol.structure.selection.Selection;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -18,7 +19,65 @@ public final class StructureScanRegression {
         selectionBounds();
         scanGenerations();
         markerCarryOver();
+        importedStructureDraft();
         System.out.println("StructureScanRegression passed");
+    }
+
+    private static void importedStructureDraft() throws IOException {
+        Path folder = Files.createTempDirectory("realmcontrol-import-regression");
+        try {
+            StructureProject project = new StructureProject();
+            project.id = "regression:imported";
+            project.size = new int[]{130, 3, 2};
+            project.tileSize = 64;
+            ImportedStructureDraft draft = new ImportedStructureDraft(project);
+            draft.putBlock(0, 1, 0, "minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]");
+            draft.putBlock(129, 0, 0, "minecraft:chest[facing=north,type=single,waterlogged=false]");
+            CompoundTag chest = new CompoundTag();
+            chest.putString("id", "minecraft:chest");
+            chest.putString("LootTable", "minecraft:chests/simple_dungeon");
+            chest.putLong("LootTableSeed", 9007L);
+            draft.putBlockEntity(129, 0, 0, chest);
+            CompoundTag entity = new CompoundTag();
+            entity.putString("id", "minecraft:armor_stand");
+            entity.putBoolean("Invisible", true);
+            draft.putEntity(128.5, 0.25, 0.75, entity, "Imported stand");
+            try (var staged = draft.stage(folder, () -> false)) {
+                require(ProjectStore.openDraft(folder) == null, "an import is hidden until it commits");
+                require(staged.commit(), "first import installs a fresh state");
+            }
+            try (var reopened = ProjectStore.openDraft(folder)) {
+                require(reopened.project().blocks == 2 && reopened.project().entities == 1 && reopened.project().blockEntities == 1,
+                        "import metadata reflects the intact snapshot");
+                require(reopened.readTile(0, 0).state(0, 1, 0).contains("waterlogged=true"),
+                        "full block and state properties survive the tile boundary");
+                require(reopened.isEmptyTile(1, 0), "uncaptured middle tile is explicitly empty");
+                Tile last = reopened.readTile(2, 0);
+                require(chest.equals(last.blockEntities.get(last.cell(1, 0, 0))), "chest loot id and seed are kept verbatim");
+                require(last.entities.get(0).x() == 0.5 && entity.equals(last.entities.get(0).tag()), "entity retains relative position and full data");
+                require(reopened.markers().entities.get(0).name.equals("Imported stand"), "entity is visible in the editor");
+                require(reopened.markers().entities.get(0).x == 128.5, "marker uses the draft-relative position");
+            }
+            StructureProject stale = new StructureProject();
+            stale.id = project.id;
+            stale.size = new int[]{1, 1, 1};
+            ImportedStructureDraft duplicate = new ImportedStructureDraft(stale);
+            duplicate.putBlock(0, 0, 0, "minecraft:dirt");
+            try (var staged = duplicate.stage(folder, () -> false)) {
+                require(!staged.commit(), "a concurrent import may not overwrite an already committed draft");
+            }
+            try (var original = ProjectStore.openDraft(folder)) {
+                require(original.project().size[0] == 130, "the winning draft is unchanged");
+            }
+            try {
+                duplicate.putEntity(1.0, 0.0, 0.0, entity, "");
+                throw new AssertionError("outside the draft cannot be dropped silently");
+            } catch (IllegalArgumentException expected) {
+                // Right boundary is exclusive for entities.
+            }
+        } finally {
+            ProjectStore.deleteTree(folder);
+        }
     }
 
     private static void selectionBounds() {

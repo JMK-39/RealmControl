@@ -144,6 +144,7 @@ public final class Markers {
         public static final int MAX_DATA = 65_536;
         public String type = "";
         public double x, y, z;
+        public String sourceUuid = "";
         public String name = "";
         @Nullable public Boolean keep;
         @Nullable public String data;
@@ -156,6 +157,7 @@ public final class Markers {
         JsonObject toJson() {
             JsonObject json = new JsonObject();
             json.addProperty("type", type);
+            if (!sourceUuid.isEmpty()) json.addProperty("source_uuid", sourceUuid);
             JsonArray pos = new JsonArray();
             pos.add(x);
             pos.add(y);
@@ -170,6 +172,7 @@ public final class Markers {
         static EntityMark fromJson(JsonObject json) {
             EntityMark mark = new EntityMark();
             mark.type = StructureProject.stringOf(json, "type", "");
+            mark.sourceUuid = StructureProject.stringOf(json, "source_uuid", "");
             JsonArray pos = json.getAsJsonArray("pos");
             mark.x = pos.get(0).getAsDouble();
             mark.y = pos.get(1).getAsDouble();

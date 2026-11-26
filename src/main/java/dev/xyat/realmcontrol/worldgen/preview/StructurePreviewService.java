@@ -172,7 +172,7 @@ public final class StructurePreviewService {
     /** Forgets the kept samples of one structure or draft, after it changed. */
     public static void forget(String structureId) {
         synchronized (CACHE) {
-            CACHE.keySet().removeIf(key -> key.startsWith(structureId + "#"));
+            CACHE.keySet().removeIf(key -> key.startsWith(structureId + "#") || key.startsWith(structureId + "@"));
         }
     }
 
@@ -250,13 +250,13 @@ public final class StructurePreviewService {
     }
 
     @Nullable
-    private static Holder.Reference<Structure> structure(MinecraftServer server, String structureId) {
+    static Holder.Reference<Structure> structure(MinecraftServer server, String structureId) {
         ResourceLocation id = ResourceLocation.tryParse(structureId);
         var registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
         return id == null ? null : registry.getHolder(ResourceKey.create(Registries.STRUCTURE, id)).orElse(null);
     }
 
-    private static ServerLevel levelFor(MinecraftServer server, String structureId) {
+    static ServerLevel levelFor(MinecraftServer server, String structureId) {
         for (String dimension : StructureGenerationControl.getStructureDimensions(server, structureId)) {
             ResourceLocation id = ResourceLocation.tryParse(dimension);
             ServerLevel level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));

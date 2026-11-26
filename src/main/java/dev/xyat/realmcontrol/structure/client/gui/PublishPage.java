@@ -75,6 +75,12 @@ public final class PublishPage extends ProjectPage {
                     .tooltip(KineticI18n.translatable("gui.realmcontrol.structure.save." + OPTIONS[i] + ".tooltip")).onChange(setter).build();
         }
         int y = outputY();
+        if (!project.sourceStructure.isBlank()) {
+            ui().toggle(COLUMN_B + LABEL_W + 4, TOP + 14 + 3 * ROW_STEP, TOGGLE_W).value(options.replaceSource)
+                    .labels(KineticI18n.translatable("gui.realmcontrol.structure.save.on"), KineticI18n.translatable("gui.realmcontrol.structure.save.off"))
+                    .tooltip(KineticI18n.translatable("gui.realmcontrol.structure.override.tooltip", project.sourceStructure))
+                    .onChange(v -> options.replaceSource = v).build();
+        }
         List<KineticDropdown.Option> targets = new ArrayList<>();
         for (String target : List.of("kineticcore", "world", "zip")) {
             targets.add(new KineticDropdown.Option(target, KineticI18n.translatable("gui.realmcontrol.structure.save.target." + target),
@@ -118,14 +124,27 @@ public final class PublishPage extends ProjectPage {
     }
 
     private void publish() {
-        save();
-        StructureEditorNetwork.request(Kind.PUBLISH, project.id, "");
+        confirmPublish(false);
+    }
+
+    private void confirmPublish(boolean rejoin) {
+        if (project.save.replaceSource && !project.sourceStructure.isBlank()) {
+            openDialog(KineticI18n.translatable("gui.realmcontrol.structure.override"), KineticI18n.translatable(
+                            "gui.realmcontrol.structure.override.confirm", project.sourceStructure, project.name),
+                    KineticI18n.translatable("gui.realmcontrol.structure.action.publish"),
+                    KineticI18n.translatable("gui.realmcontrol.worldgen.config.back"), () -> commitPublish(rejoin), () -> {});
+        } else commitPublish(rejoin);
+    }
+
+    private void commitPublish(boolean rejoin) {
+        if (rejoin) EditorClient.rejoinAfterPublish(project.id);
+        if (!bothFormatsAvailable()) project.save.bothFormats = false;
+        StructureEditorNetwork.request(Kind.PUBLISH_WITH_OPTIONS, project.id, project.save.toJson().toString());
         navigateBack();
     }
 
     private void publishAndRejoin() {
-        EditorClient.rejoinAfterPublish(project.id);
-        publish();
+        confirmPublish(true);
     }
 
     @Override
@@ -146,6 +165,8 @@ public final class PublishPage extends ProjectPage {
                     : KineticI18n.translatable("gui.realmcontrol.structure.save." + OPTIONS[i]);
             g.scrollingText(label, x, y, LABEL_W, 0xFFFFFFFF, false);
         }
+        if (!project.sourceStructure.isBlank()) g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.override"),
+                COLUMN_B, TOP + 18 + 3 * ROW_STEP, LABEL_W, 0xFFFFFFFF, false);
         int y = outputY();
         g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.save.output"), LABEL_X, y - 14, 200, 0xFFFFAA00, false);
         g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.save.target"), LABEL_X, y + 4, LABEL_W, 0xFFFFFFFF, false);

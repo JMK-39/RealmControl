@@ -3,16 +3,19 @@ package dev.xyat.realmcontrol.structure.publish;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.xyat.kineticcore.api.text.KineticI18n;
+import dev.xyat.realmcontrol.structure.StructureEditorModule;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.realmcontrol.structure.project.BlockStates;
 import dev.xyat.realmcontrol.structure.project.Cutouts;
 import dev.xyat.realmcontrol.structure.project.Markers;
+import dev.xyat.realmcontrol.structure.project.PlacedDrafts;
 import dev.xyat.realmcontrol.structure.project.ProjectStore;
 import dev.xyat.realmcontrol.structure.project.ScanService;
 import dev.xyat.realmcontrol.structure.project.StructureProject;
 import dev.xyat.realmcontrol.structure.project.Tile;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.DoubleTag;
@@ -68,7 +71,7 @@ public final class TestPlacement {
     /** Scoreboard tag of the entities a test placement added. */
     public static final String ENTITY_TAG = "realmcontrol_test_placement";
     /** Progress codes in {@link StructureEditorNetwork.ScanProgressPacket#waiting()}. */
-    public static final int PLACING = -2, UNDOING = -3;
+    public static final int PLACING = -2, UNDOING = -3, GENERATING = -4;
     private static final int TILE = 64;
     private static final long BUDGET_NANOS = 8_000_000L;
     private static final long PROGRESS_INTERVAL_NANOS = 150_000_000L;
@@ -129,7 +132,56 @@ public final class TestPlacement {
     }
 
     public static boolean busy(String id) {
-        return current != null && current.id.equals(id);
+        return current != null && !current.finished && current.id.equals(id);
+    }
+
+    /** Permanently places a draft at its explicitly chosen minimum corner in the operator's current world. */
+    public static void generate(ServerPlayer player, String id, BlockPos min) {
+        if (!StructureEditorModule.allowed(player)) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.no_permission"), false);
+            return;
+        }
+        if (current != null) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.generate.busy"), false);
+            return;
+        }
+        if (ScanService.busy(id)) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.scan.busy"), false);
+            return;
+        }
+        ProjectStore.Draft draft = null;
+        try {
+            draft = ProjectStore.openDraft(id);
+            if (draft == null) {
+                StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.publish.unknown", id), false);
+                return;
+            }
+            StructureProject project = draft.project();
+            PlacementVolume volume = PlacementVolume.at(min, project.size);
+            ServerLevel level = player.serverLevel();
+            if (volume == null || level.isOutsideBuildHeight(volume.min().getY()) || level.isOutsideBuildHeight(volume.max().getY())
+                    || !level.getWorldBorder().isWithinBounds(volume.min()) || !level.getWorldBorder().isWithinBounds(volume.max())) {
+                StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.generate.bounds"), false);
+                return;
+            }
+            MinecraftServer server = player.getServer();
+            Record test = record(server);
+            if (test != null && test.dimension().equals(level.dimension().location().toString())
+                    && overlaps(min, project.size, test.min(), new int[]{test.sizeX(), test.sizeY(), test.sizeZ()})) {
+                StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.test.exists", test.name()), false);
+                return;
+            }
+            var job = new GenerateJob(player.getUUID(), draft, level, volume);
+            current = job;
+            draft = null;
+            job.sendProgress(server, true);
+        } catch (IOException | RuntimeException error) {
+            LOGGER.warn("Could not prepare direct structure placement for {}", id, error);
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.generate.failed",
+                    String.valueOf(error.getMessage())), false);
+        } finally {
+            if (draft != null) draft.close();
+        }
     }
 
     /** Places draft {@code id} around the player, its bottom set into the ground by the draft's embedding. */
@@ -199,7 +251,7 @@ public final class TestPlacement {
         job.sendProgress(server, true);
     }
 
-    /** Stops the owner's placement or undo of {@code id}; what was already placed can be undone. */
+    /** Stops the owner's placement or undo of {@code id}. A permanent placement retains completed changes. */
     public static void cancel(ServerPlayer player, String id) {
         if (current != null && current.id.equals(id) && current.owner.equals(player.getUUID())) current.cancelled = true;
     }
@@ -215,16 +267,21 @@ public final class TestPlacement {
         long now = System.nanoTime();
         if (lastTick != 0L) tickInterval = tickInterval * 0.9D + (now - lastTick) / 1_000_000.0D * 0.1D;
         lastTick = now;
-        // A scan has the tick to itself.
-        if (current == null || ScanService.running()) return;
+        if (current == null) return;
+        if (current instanceof GenerateJob job && !job.cancelled) {
+            ServerPlayer owner = server.getPlayerList().getPlayer(job.owner);
+            if (owner == null || !StructureEditorModule.allowed(owner)) job.cancelled = true;
+        }
+        // A scan has the tick to itself. Cancellation may release an outstanding placement ticket even during a scan.
+        if (ScanService.running() && !(current instanceof GenerateJob && current.cancelled)) return;
         long budget = tickInterval > 1000.0D / 15.0D ? BUDGET_NANOS / 2 : BUDGET_NANOS;
         Job job = current;
         try {
             if (job.step(server, now + budget)) current = null;
         } catch (IOException | RuntimeException | LinkageError e) {
-            LOGGER.warn("Test placement of {} failed", job.id, e);
+            LOGGER.warn("Structure placement of {} failed", job.id, e);
             job.cleanUp(server);
-            job.finish(server, KineticI18n.translatable("msg.realmcontrol.structure.test.failed", String.valueOf(e.getMessage())), false);
+            job.finish(server, job.failure(e), false);
             current = null;
         }
     }
@@ -244,6 +301,7 @@ public final class TestPlacement {
         final long total;
         long done;
         long lastProgress;
+        boolean finished;
         volatile boolean cancelled;
 
         Job(UUID owner, String id, ServerLevel level, BlockPos min, int sizeX, int sizeY, int sizeZ, long total) {
@@ -265,7 +323,12 @@ public final class TestPlacement {
         void cleanUp(MinecraftServer server) {
         }
 
+        Component failure(Throwable error) {
+            return KineticI18n.translatable("msg.realmcontrol.structure.test.failed", String.valueOf(error.getMessage()));
+        }
+
         void finish(MinecraftServer server, Component message, boolean success) {
+            finished = true;
             ServerPlayer player = server.getPlayerList().getPlayer(owner);
             if (player == null) return;
             // A failure shows as the task's message; success as a result.
@@ -282,6 +345,67 @@ public final class TestPlacement {
             if (player == null) return;
             StructureEditorNetwork.CHANNEL.sendToPlayer(player, new StructureEditorNetwork.ScanProgressPacket(id,
                     total == 0 ? 1F : (float) Math.min(0.999D, done / (double) total), code(), false, null));
+        }
+    }
+
+    private static final class GenerateJob extends Job {
+        private final ProjectStore.Draft draft;
+        private final CompletableFuture<DraftSource> source;
+        @Nullable private Placer placer;
+
+        GenerateJob(UUID owner, ProjectStore.Draft draft, ServerLevel level, PlacementVolume volume) {
+            super(owner, draft.project().id, level, volume.min(), draft.project().size[0], draft.project().size[1],
+                    draft.project().size[2], volume.cells());
+            this.draft = draft;
+            source = CompletableFuture.supplyAsync(() -> {
+                StructureProject project = draft.project();
+                return new DraftSource(project, project.save.cutouts ? draft.cutouts() : new Cutouts(), draft.markers(), draft, false);
+            }, IO);
+        }
+
+        @Override int code() {
+            return GENERATING;
+        }
+
+        @Override boolean step(MinecraftServer server, long deadline) throws IOException {
+            if (cancelled) {
+                finish(server, KineticI18n.translatable(changed()
+                        ? "msg.realmcontrol.structure.generate.stopped" : "msg.realmcontrol.structure.generate.cancelled"), false);
+                cleanUp(server);
+                return true;
+            }
+            if (placer == null) {
+                if (!source.isDone()) return false;
+                placer = new Placer(level, min, sizeX, sizeY, sizeZ, source.join(), draft.project().tileSize, true);
+            }
+            boolean complete = placer.step(deadline);
+            done = placer.placed;
+            if (!complete) {
+                sendProgress(server, false);
+                return false;
+            }
+            if (changed()) PlacedDrafts.record(level, draft.project(), min);
+            finish(server, KineticI18n.translatable("msg.realmcontrol.structure.generate.done", draft.project().name,
+                    min.getX(), min.getY(), min.getZ(), min.getX() + sizeX - 1, min.getY() + sizeY - 1, min.getZ() + sizeZ - 1), true);
+            cleanUp(server);
+            return true;
+        }
+
+        private boolean changed() {
+            return placer != null && placer.changed;
+        }
+
+        @Override Component failure(Throwable error) {
+            return KineticI18n.translatable(changed() ? "msg.realmcontrol.structure.generate.failed_partial" : "msg.realmcontrol.structure.generate.failed",
+                    String.valueOf(error.getMessage()));
+        }
+
+        @Override void cleanUp(MinecraftServer server) {
+            if (placer != null) placer.close();
+            // A cancelled job can still have one off-thread reader. It sees the pinned generation until it returns.
+            CompletableFuture<?> reading = placer == null ? source : placer.loading;
+            if (reading == null) draft.close();
+            else reading.whenComplete((ignored, failure) -> draft.close());
         }
     }
 
@@ -529,6 +653,14 @@ public final class TestPlacement {
         @Nullable
         Tile tile(int tileX, int tileZ) throws IOException;
 
+        default boolean skipTile(int tileX, int tileZ) {
+            return false;
+        }
+
+        default boolean skipContents(Tile tile) {
+            return false;
+        }
+
         /** The cells of a tile to set; {@code ox}, {@code oz} are the tile's corner in the box. */
         boolean[] keep(Tile tile, int ox, int oz);
 
@@ -544,10 +676,27 @@ public final class TestPlacement {
         boolean generated();
     }
 
-    private record DraftSource(StructureProject project, Cutouts cutouts, Markers markers) implements Source {
+    private record DraftSource(StructureProject project, Cutouts cutouts, Markers markers,
+                               @Nullable ProjectStore.Draft draft, boolean test) implements Source {
+        DraftSource(StructureProject project, Cutouts cutouts, Markers markers) {
+            this(project, cutouts, markers, null, true);
+        }
+
         @Override
         public Tile tile(int tileX, int tileZ) throws IOException {
-            return ProjectStore.readTile(project.id, tileX, tileZ);
+            return draft == null ? ProjectStore.readTile(project.id, tileX, tileZ) : Publisher.readTile(draft, tileX, tileZ);
+        }
+
+        @Override public boolean skipTile(int tileX, int tileZ) {
+            return draft != null && !keepsAir() && draft.isEmptyTile(tileX, tileZ);
+        }
+
+        @Override public boolean skipContents(Tile tile) {
+            return draft != null && !keepsAir() && tile.palette.size() == 1 && tile.entities.isEmpty();
+        }
+
+        private boolean keepsAir() {
+            return "keep".equals(project.air) && !project.ignoreBlocks.contains(BlockStates.AIR);
         }
 
         @Override
@@ -568,6 +717,7 @@ public final class TestPlacement {
         @Override
         public CompoundTag entity(Tile.EntityData entity) {
             CompoundTag data = Publisher.entityData(entity.tag(), project.save).copy();
+            if (!test) return data;
             ListTag tags = data.get("Tags") instanceof ListTag list ? list.copy() : new ListTag();
             tags.add(StringTag.valueOf(ENTITY_TAG));
             data.put("Tags", tags);
@@ -616,50 +766,58 @@ public final class TestPlacement {
     }
 
     /**
-     * Sets a box from 64×64 tiles, one 16×16×16 world section at a time, each through a vanilla template of its own:
-     * vanilla loads block entities (seeding loot tables), creates entities and sets up mobs. A tile is read and its
-     * cells chosen on the file thread while the server goes on.
+     * Places a tile one 16-block-high section at a time using vanilla templates, including block-entity NBT and
+     * mob initialization. Draft tiles are read on the file thread.
      */
     private static final class Placer {
         final ServerLevel level;
         final BlockPos min;
-        final int sizeX, sizeY, sizeZ, tilesX, tilesZ;
+        final int sizeX, sizeY, sizeZ, tileSize, tilesX, tilesZ;
         final Source source;
+        @Nullable final PlacementChunk destination;
         int tileX, tileZ;
         @Nullable CompletableFuture<Loaded> loading;
         @Nullable Loaded loaded;
+        @Nullable Section prepared;
         int chunkX, chunkZ, sectionY;
         long placed;
+        boolean changed;
 
-        private record Loaded(Tile tile, boolean[] keep, List<Tile.EntityData> entities) {
+        private record Loaded(Tile tile, boolean[] keep, Map<Long, List<Tile.EntityData>> entities) {
+        }
+
+        private record Section(BlockPos from, BlockPos to, @Nullable CompoundTag template, boolean hasEntities) {
         }
 
         Placer(ServerLevel level, BlockPos min, int sizeX, int sizeY, int sizeZ, Source source) {
+            this(level, min, sizeX, sizeY, sizeZ, source, TILE, false);
+        }
+
+        Placer(ServerLevel level, BlockPos min, int sizeX, int sizeY, int sizeZ, Source source, int tileSize, boolean permanent) {
             this.level = level;
             this.min = min;
             this.sizeX = sizeX;
             this.sizeY = sizeY;
             this.sizeZ = sizeZ;
-            this.tilesX = (sizeX + TILE - 1) / TILE;
-            this.tilesZ = (sizeZ + TILE - 1) / TILE;
+            this.tileSize = tileSize;
+            this.tilesX = (sizeX + tileSize - 1) / tileSize;
+            this.tilesZ = (sizeZ + tileSize - 1) / tileSize;
             this.source = source;
+            this.destination = permanent ? new PlacementChunk(level) : null;
         }
 
-        /** Places until {@code deadline}; returns {@code true} once every tile is placed. */
+        /** Places until the tick deadline, returning true once every tile has been considered. */
         boolean step(long deadline) throws IOException {
             while (tileZ < tilesZ) {
+                if (System.nanoTime() > deadline) return false;
                 if (loaded == null) {
+                    if (source.skipTile(tileX, tileZ)) {
+                        skipTile();
+                        continue;
+                    }
                     if (loading == null) {
                         int tx = tileX, tz = tileZ;
-                        loading = CompletableFuture.supplyAsync(() -> {
-                            try {
-                                Tile tile = source.tile(tx, tz);
-                                if (tile == null) throw new IllegalStateException("Missing tile " + tx + "," + tz);
-                                return new Loaded(tile, source.keep(tile, tx * TILE, tz * TILE), source.entities(tile, tx * TILE, tz * TILE));
-                            } catch (IOException e) {
-                                throw new java.io.UncheckedIOException(e);
-                            }
-                        }, IO);
+                        loading = CompletableFuture.supplyAsync(() -> loadTile(tx, tz), IO);
                     }
                     if (!loading.isDone()) return false;
                     try {
@@ -669,49 +827,104 @@ public final class TestPlacement {
                         throw e.getCause() instanceof RuntimeException runtime ? runtime : e;
                     }
                     loading = null;
+                    if (loaded == null) {
+                        skipTile();
+                        continue;
+                    }
                     chunkX = tileMinX() >> 4;
                     chunkZ = tileMinZ() >> 4;
                     sectionY = min.getY() >> 4;
                 }
-                while (chunkZ <= tileMaxZ() >> 4) {
-                    if (System.nanoTime() > deadline) return false;
-                    placeSection();
+                while (chunkZ <= (tileMaxZ() >> 4)) {
+                    if (System.nanoTime() > deadline || !placeSection()) return false;
                 }
                 loaded = null;
-                if (++tileX >= tilesX) {
-                    tileX = 0;
-                    tileZ++;
+                nextTile();
+            }
+            return true;
+        }
+
+        @Nullable
+        private Loaded loadTile(int tx, int tz) {
+            try {
+                Tile tile = source.tile(tx, tz);
+                if (tile == null) throw new IOException("Missing placement tile " + tx + "," + tz);
+                if (source.skipContents(tile)) return null;
+                int ox = tx * tileSize, oz = tz * tileSize;
+                Map<Long, List<Tile.EntityData>> entities = new HashMap<>();
+                for (Tile.EntityData entity : source.entities(tile, ox, oz)) {
+                    int x = min.getX() + ox + (int) Math.floor(entity.x());
+                    int y = min.getY() + (int) Math.floor(entity.y());
+                    int z = min.getZ() + oz + (int) Math.floor(entity.z());
+                    long section = SectionPos.asLong(x >> 4, y >> 4, z >> 4);
+                    entities.computeIfAbsent(section, ignored -> new ArrayList<>()).add(entity);
+                }
+                return new Loaded(tile, source.keep(tile, ox, oz), entities);
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+
+        private void skipTile() {
+            placed += (long) (tileMaxX() - tileMinX() + 1) * sizeY * (tileMaxZ() - tileMinZ() + 1);
+            nextTile();
+        }
+
+        private void nextTile() {
+            if (++tileX >= tilesX) {
+                tileX = 0;
+                tileZ++;
+            }
+        }
+
+        private int tileMinX() {
+            return min.getX() + tileX * tileSize;
+        }
+
+        private int tileMinZ() {
+            return min.getZ() + tileZ * tileSize;
+        }
+
+        private int tileMaxX() {
+            return Math.min(tileMinX() + tileSize, min.getX() + sizeX) - 1;
+        }
+
+        private int tileMaxZ() {
+            return Math.min(tileMinZ() + tileSize, min.getZ() + sizeZ) - 1;
+        }
+
+        private boolean placeSection() throws IOException {
+            if (prepared == null) prepared = prepareSection();
+            Section section = prepared;
+            if (section.template() != null) {
+                LevelChunk chunk = destination == null ? level.getChunk(chunkX, chunkZ) : destination.ready(chunkX, chunkZ);
+                if (chunk == null) return false;
+                applySection(chunk, section);
+            }
+            BlockPos from = section.from(), to = section.to();
+            placed += (long) (to.getX() - from.getX() + 1) * (to.getZ() - from.getZ() + 1) * (to.getY() - from.getY() + 1);
+            prepared = null;
+            if (++sectionY > ((min.getY() + sizeY - 1) >> 4)) {
+                if (destination != null) destination.release();
+                sectionY = min.getY() >> 4;
+                if (++chunkX > (tileMaxX() >> 4)) {
+                    chunkX = tileMinX() >> 4;
+                    chunkZ++;
                 }
             }
             return true;
         }
 
-        private int tileMinX() {
-            return min.getX() + tileX * TILE;
-        }
-
-        private int tileMinZ() {
-            return min.getZ() + tileZ * TILE;
-        }
-
-        private int tileMaxX() {
-            return Math.min(tileMinX() + TILE, min.getX() + sizeX) - 1;
-        }
-
-        private int tileMaxZ() {
-            return Math.min(tileMinZ() + TILE, min.getZ() + sizeZ) - 1;
-        }
-
-        private void placeSection() {
+        private Section prepareSection() {
             Loaded loaded = this.loaded;
             Tile tile = loaded.tile();
             int fromX = Math.max(tileMinX(), chunkX << 4), toX = Math.min(tileMaxX(), (chunkX << 4) + 15);
             int fromZ = Math.max(tileMinZ(), chunkZ << 4), toZ = Math.min(tileMaxZ(), (chunkZ << 4) + 15);
-            int minY = min.getY(), maxY = minY + sizeY - 1;
-            int fromY = Math.max(minY, sectionY << 4), toY = Math.min(maxY, (sectionY << 4) + 15);
-            // Tile cells of this section; the template's corner is the section's lowest corner in the world.
-            int cx0 = fromX - tileMinX(), cx1 = toX - tileMinX(), cz0 = fromZ - tileMinZ(), cz1 = toZ - tileMinZ(), cy0 = fromY - minY, cy1 = toY - minY;
-            int ox = tileX * TILE, oz = tileZ * TILE;
+            int fromY = Math.max(min.getY(), sectionY << 4), toY = Math.min(min.getY() + sizeY - 1, (sectionY << 4) + 15);
+            // Tile cells are relative to the tile origin; the section template is relative to its own lower corner.
+            int cx0 = fromX - tileMinX(), cx1 = toX - tileMinX(), cz0 = fromZ - tileMinZ(), cz1 = toZ - tileMinZ();
+            int cy0 = fromY - min.getY(), cy1 = toY - min.getY();
+            int ox = tileX * tileSize, oz = tileZ * tileSize;
             Map<Integer, Integer> remap = new HashMap<>();
             ListTag palette = new ListTag(), blocks = new ListTag(), entities = new ListTag();
             boolean[] keep = loaded.keep();
@@ -736,7 +949,8 @@ public final class TestPlacement {
                     }
                 }
             }
-            for (Tile.EntityData entity : loaded.entities()) {
+            long key = SectionPos.asLong(chunkX, sectionY, chunkZ);
+            for (Tile.EntityData entity : loaded.entities().getOrDefault(key, List.of())) {
                 int ex = (int) Math.floor(entity.x()), ey = (int) Math.floor(entity.y()), ez = (int) Math.floor(entity.z());
                 if (ex < cx0 || ex > cx1 || ey < cy0 || ey > cy1 || ez < cz0 || ez > cz1) continue;
                 CompoundTag info = new CompoundTag();
@@ -749,39 +963,44 @@ public final class TestPlacement {
                 info.put("nbt", source.entity(entity));
                 entities.add(info);
             }
-            if (!blocks.isEmpty() || !entities.isEmpty()) {
-                LevelChunk chunk = level.getChunk(chunkX, chunkZ);
-                // A container gives up its items before it is replaced, as vanilla templates do; the snapshot holds them.
-                for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
-                    BlockPos pos = entry.getKey();
-                    if (pos.getX() < fromX || pos.getX() > toX || pos.getZ() < fromZ || pos.getZ() > toZ || pos.getY() < fromY || pos.getY() > toY) continue;
-                    if (entry.getValue() instanceof Clearable clearable && keep[tile.cell(pos.getX() - tileMinX(), pos.getY() - minY, pos.getZ() - tileMinZ())]) {
-                        clearable.clearContent();
-                    }
-                }
-                CompoundTag root = new CompoundTag();
-                root.put("size", ints(cx1 - cx0 + 1, cy1 - cy0 + 1, cz1 - cz0 + 1));
-                root.put("palette", palette);
-                root.put("blocks", blocks);
-                root.put("entities", entities);
-                root.putInt("DataVersion", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
-                StructureTemplate template = new StructureTemplate();
-                template.load(BlockStates.lookup(), root);
-                StructurePlaceSettings settings = new StructurePlaceSettings().setKnownShape(true)
-                        .setIgnoreEntities(entities.isEmpty()).setFinalizeEntities(source.generated());
-                liquids(settings, source.generated());
-                BlockPos corner = new BlockPos(fromX, fromY, fromZ);
-                template.placeInWorld(level, corner, corner, settings, level.getRandom(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
-                clearTicks(level, new BoundingBox(fromX, fromY, fromZ, toX, toY, toZ));
-            }
-            placed += (long) (toX - fromX + 1) * (toZ - fromZ + 1) * (toY - fromY + 1);
-            if (++sectionY > maxY >> 4) {
-                sectionY = minY >> 4;
-                if (++chunkX > tileMaxX() >> 4) {
-                    chunkX = tileMinX() >> 4;
-                    chunkZ++;
+            BlockPos from = new BlockPos(fromX, fromY, fromZ), to = new BlockPos(toX, toY, toZ);
+            if (blocks.isEmpty() && entities.isEmpty()) return new Section(from, to, null, false);
+            CompoundTag root = new CompoundTag();
+            root.put("size", ints(cx1 - cx0 + 1, cy1 - cy0 + 1, cz1 - cz0 + 1));
+            root.put("palette", palette);
+            root.put("blocks", blocks);
+            root.put("entities", entities);
+            root.putInt("DataVersion", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
+            return new Section(from, to, root, !entities.isEmpty());
+        }
+
+        private void applySection(LevelChunk chunk, Section section) {
+            BlockPos from = section.from(), to = section.to();
+            StructureTemplate template = new StructureTemplate();
+            template.load(BlockStates.lookup(), section.template());
+            StructurePlaceSettings settings = new StructurePlaceSettings().setKnownShape(true)
+                    .setIgnoreEntities(!section.hasEntities()).setFinalizeEntities(source.generated());
+            // Preserve the draft's saved fluid states during permanent placement. Vanilla's ambient-water pass
+            // looks into neighboring chunks and can synchronously load them at a section edge.
+            liquids(settings, destination == null && source.generated());
+            changed = true;
+            // Clear inventories of replaced containers before vanilla swaps their block entities.
+            for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
+                BlockPos pos = entry.getKey();
+                if (pos.getX() < from.getX() || pos.getX() > to.getX() || pos.getZ() < from.getZ() || pos.getZ() > to.getZ()
+                        || pos.getY() < from.getY() || pos.getY() > to.getY()) continue;
+                if (entry.getValue() instanceof Clearable clearable
+                        && loaded.keep()[loaded.tile().cell(pos.getX() - tileMinX(), pos.getY() - min.getY(), pos.getZ() - tileMinZ())]) {
+                    clearable.clearContent();
                 }
             }
+            template.placeInWorld(level, from, from, settings, level.getRandom(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+            // Test and undo need the exact captured shape; a permanent placement retains normal block and fluid ticks.
+            if (destination == null) clearTicks(level, BoundingBox.fromCorners(from, to));
+        }
+
+        void close() {
+            if (destination != null) destination.close();
         }
     }
 

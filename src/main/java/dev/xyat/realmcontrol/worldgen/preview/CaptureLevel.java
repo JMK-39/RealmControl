@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -12,6 +13,7 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.NoiseColumn;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
@@ -20,6 +22,9 @@ import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.ticks.BlackholeTickAccess;
@@ -50,18 +55,21 @@ final class CaptureLevel implements InvocationHandler {
     private final RandomState randomState;
     private final RandomSource random;
     private final long seed;
+    private final boolean forImport;
     private final Long2ObjectOpenHashMap<BlockState> written = new Long2ObjectOpenHashMap<>();
     private final Long2ObjectOpenHashMap<NoiseColumn> terrain = new Long2ObjectOpenHashMap<>();
     private final Map<Long, BlockEntity> blockEntities = new HashMap<>();
     private final List<Entity> entities = new ArrayList<>();
+    private final Map<ChunkPos, ChunkAccess> chunks = new HashMap<>();
     private final WorldGenLevel proxy;
     private final BiomeManager biomes;
 
-    CaptureLevel(ServerLevel level, ChunkGenerator generator, RandomState randomState, long seed) {
+    CaptureLevel(ServerLevel level, ChunkGenerator generator, RandomState randomState, long seed, boolean forImport) {
         this.level = level;
         this.generator = generator;
         this.randomState = randomState;
         this.seed = seed;
+        this.forImport = forImport;
         this.random = RandomSource.create(seed);
         this.proxy = (WorldGenLevel) Proxy.newProxyInstance(WorldGenLevel.class.getClassLoader(),
                 new Class<?>[]{WorldGenLevel.class}, this);
@@ -101,6 +109,7 @@ final class CaptureLevel implements InvocationHandler {
         long column = BlockPos.asLong(pos.getX(), 0, pos.getZ());
         NoiseColumn noise = terrain.get(column);
         if (noise == null) {
+            if (forImport && terrain.size() >= 262_144) throw new StructureSampler.ImportFailure("limit");
             noise = generator.getBaseColumn(pos.getX(), pos.getZ(), level, randomState);
             terrain.put(column, noise);
         }
@@ -108,21 +117,76 @@ final class CaptureLevel implements InvocationHandler {
     }
 
     private boolean set(BlockPos pos, BlockState state) {
+        if (forImport && (pos.getY() < level.getMinBuildHeight() || pos.getY() >= level.getMaxBuildHeight()
+                || BlockPos.getY(pos.asLong()) != pos.getY() || BlockPos.getX(pos.asLong()) != pos.getX()
+                || BlockPos.getZ(pos.asLong()) != pos.getZ())) throw new StructureSampler.ImportFailure("limit");
         long key = pos.asLong();
-        written.put(key, state);
-        blockEntities.remove(key);
+        if (forImport && written.size() >= StructureSampler.MAX_CAPTURED_BLOCKS && !written.containsKey(key)) {
+            throw new StructureSampler.ImportFailure("limit");
+        }
+        BlockState previous = written.put(key, state);
+        BlockEntity kept = blockEntities.get(key);
+        if (kept != null) {
+            if (previous != null && previous.is(state.getBlock()) && state.hasBlockEntity()) kept.setBlockState(state);
+            else blockEntities.remove(key);
+        }
         return true;
     }
 
-    private BlockEntity blockEntity(BlockPos pos) {
+    BlockEntity blockEntity(BlockPos pos) {
         long key = pos.asLong();
         BlockEntity existing = blockEntities.get(key);
         if (existing != null) return existing;
         BlockState state = written.get(key);
         if (state == null || !state.hasBlockEntity() || !(state.getBlock() instanceof EntityBlock block)) return null;
         BlockEntity created = block.newBlockEntity(pos.immutable(), state);
-        if (created != null) blockEntities.put(key, created);
+        if (created != null) putBlockEntity(created);
         return created;
+    }
+
+    private void putBlockEntity(BlockEntity entity) {
+        long key = entity.getBlockPos().asLong();
+        if (forImport && blockEntities.size() >= StructureSampler.MAX_CAPTURED_BLOCK_ENTITIES && !blockEntities.containsKey(key)) {
+            throw new StructureSampler.ImportFailure("limit");
+        }
+        blockEntities.put(key, entity);
+    }
+
+    private ChunkAccess chunk(ChunkPos pos) {
+        if (forImport && chunks.size() >= 2_048 && !chunks.containsKey(pos)) throw new StructureSampler.ImportFailure("limit");
+        return chunks.computeIfAbsent(pos, CapturedChunk::new);
+    }
+
+    /** Supports piece post-processing and chunk-local block calls without resolving a real chunk. */
+    private final class CapturedChunk extends ProtoChunk {
+        CapturedChunk(ChunkPos pos) {
+            //? if >=26.1 {
+            /*super(pos, UpgradeData.EMPTY, level, level.palettedContainerFactory(), null);
+            *///?} else {
+            super(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+            //?}
+        }
+
+        @Override public BlockState getBlockState(BlockPos pos) { return state(pos); }
+        @Override public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) { return state(pos).getFluidState(); }
+        @Override public BlockEntity getBlockEntity(BlockPos pos) { return blockEntity(pos); }
+        @Override public void setBlockEntity(BlockEntity entity) { putBlockEntity(entity); }
+        @Override public void removeBlockEntity(BlockPos pos) { blockEntities.remove(pos.asLong()); }
+        @Override public void markPosForPostprocessing(BlockPos pos) { }
+
+        //? if >=26.1 {
+        /*@Override public BlockState setBlockState(BlockPos pos, BlockState state, int flags) {
+        *///?} else {
+        @Override public BlockState setBlockState(BlockPos pos, BlockState state, boolean moved) {
+        //?}
+            BlockState previous = state(pos);
+            set(pos, state);
+            return previous;
+        }
+
+        @Override public void setBlockEntityNbt(CompoundTag entityTag) {
+            if (forImport) throw new StructureSampler.ImportFailure("pieces");
+        }
     }
 
     private int height(Heightmap.Types type, int x, int z) {
@@ -157,14 +221,25 @@ final class CaptureLevel implements InvocationHandler {
             // Kept apart from the real world: randomness, biome lookups that would read loaded chunks, scheduled
             // ticks and the player list.
             if (RandomSource.class.isAssignableFrom(result)) return random;
+            if (result == long.class) return seed; // The isolated World's getSeed().
             if (result == BiomeManager.class) return biomes;
             if (net.minecraft.world.ticks.LevelTickAccess.class.isAssignableFrom(result)) return BlackholeTickAccess.emptyLevelList();
             if (List.class.isAssignableFrom(result)) return List.of();
+            if (forImport && (net.minecraft.world.level.chunk.ChunkSource.class.isAssignableFrom(result)
+                    || result == net.minecraft.server.MinecraftServer.class || result == void.class)) {
+                throw new StructureSampler.ImportFailure("pieces");
+            }
             // Everything else without arguments is a plain getter (height limits, registries, sea level, seed): the
             // real level answers it without loading or changing a chunk.
             return method.invoke(level);
         }
         Class<?> first = params[0];
+        if (ChunkAccess.class.isAssignableFrom(result)) {
+            if (first == BlockPos.class) return chunk(new ChunkPos((BlockPos) args[0]));
+            if (count >= 2 && first == int.class && params[1] == int.class) {
+                return chunk(new ChunkPos((Integer) args[0], (Integer) args[1]));
+            }
+        }
         if (first == BlockPos.class) {
             BlockPos pos = (BlockPos) args[0];
             if (count == 1) {
@@ -192,8 +267,13 @@ final class CaptureLevel implements InvocationHandler {
             }
         }
         if (count == 1 && first == Entity.class && result == boolean.class) {
+            if (forImport && entities.size() >= StructureSampler.MAX_CAPTURED_ENTITIES) throw new StructureSampler.ImportFailure("limit");
             entities.add((Entity) args[0]);
             return true;
+        }
+        if (count == 1 && first == BlockEntity.class && result == void.class) {
+            putBlockEntity((BlockEntity) args[0]);
+            return null;
         }
         if (count == 3 && first == int.class && params[1] == int.class && params[2] == int.class && Holder.class.isAssignableFrom(result)) {
             return generator.getBiomeSource().getNoiseBiome((Integer) args[0], (Integer) args[1], (Integer) args[2],
@@ -204,6 +284,7 @@ final class CaptureLevel implements InvocationHandler {
         if (count == 2 && first == int.class && params[1] == int.class && result == boolean.class) return true; // chunk present
         if (List.class.isAssignableFrom(result)) return List.of();
         if (method.isDefault()) return InvocationHandler.invokeDefault(self, method, args);
+        if (forImport && result != void.class) throw new StructureSampler.ImportFailure("pieces");
         return empty(result);
     }
 

@@ -93,7 +93,7 @@ abstract class ProjectPage extends KineticPage implements EditorClient.Listener 
                     if (preview != null) preview.setMessage(reason);
                 }
             };
-            StructurePreviewClient.request(StructureEditorPage.PREVIEW_PREFIX + project.id, 0, previewListener);
+            StructurePreviewClient.request(StructureEditorPage.PREVIEW_PREFIX + project.id, project.blockRevision, previewListener);
         }
         dev.xyat.realmcontrol.structure.network.StructureEditorNetwork.request(
                 dev.xyat.realmcontrol.structure.network.StructureEditorNetwork.ProjectRequestPacket.Kind.DETAIL, project.id, "");

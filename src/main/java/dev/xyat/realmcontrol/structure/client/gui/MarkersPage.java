@@ -1,7 +1,9 @@
 package dev.xyat.realmcontrol.structure.client.gui;
 
 import com.google.gson.JsonObject;
+import dev.xyat.kineticcore.api.client.gui.KineticGui;
 import dev.xyat.kineticcore.api.client.gui.input.MouseInput;
+import dev.xyat.kineticcore.api.client.gui.overlay.KineticOverlays;
 import dev.xyat.kineticcore.api.client.gui.page.KineticPage;
 import dev.xyat.kineticcore.api.client.gui.render.KineticGraphics;
 import dev.xyat.kineticcore.api.client.gui.selector.KineticSelectors;
@@ -23,13 +25,17 @@ import dev.xyat.kineticcore.api.world.structure.KineticBlockSnapshot;
 import dev.xyat.realmcontrol.structure.client.CutoutSnapshots;
 import dev.xyat.realmcontrol.structure.client.EditorClient;
 import dev.xyat.realmcontrol.structure.client.EntityModels;
+import dev.xyat.realmcontrol.structure.network.BlockEditNetwork;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork;
 import dev.xyat.realmcontrol.structure.network.StructureEditorNetwork.ProjectRequestPacket.Kind;
 import dev.xyat.realmcontrol.structure.project.Cutouts;
 import dev.xyat.realmcontrol.structure.project.EntityEdits;
+import dev.xyat.realmcontrol.structure.project.InventoryEdits;
 import dev.xyat.realmcontrol.structure.project.Markers;
+import dev.xyat.realmcontrol.structure.project.ProjectPreview;
 import dev.xyat.realmcontrol.structure.project.StructureProject;
 import dev.xyat.realmcontrol.worldgen.preview.client.StructurePreviewClient;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -95,10 +101,10 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
     private RowList list;
     private KineticDropdown filterBox;
     private KineticTextField searchField;
-    private KineticButton listButton;
+    private KineticButton listButton, overviewButton;
     private KineticDropdown containerMode, spawnerMode;
     private KineticTextField tableField;
-    private KineticButton pickButton, newTableButton, editTableButton, spawnerButton;
+    private KineticButton pickButton, newTableButton, editTableButton, inventoryButton, spawnerButton;
     private KineticToggle keepToggle, aiToggle, stayToggle;
     private KineticTextField nameField;
     private KineticNumberField healthField;
@@ -108,7 +114,12 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
     @Nullable private StructurePreviewClient.Result previewResult;
     @Nullable private Cutouts cutouts;
     @Nullable private KineticBlockSnapshot shown;
+    @Nullable private BlockPos windowOrigin;
+    @Nullable private BlockPos initialWindow;
+    @Nullable private BlockPos initialBlock;
     private int previewRequest;
+    private int inventoryRequest;
+    private long inventorySubmitted;
 
     // Entity data the server sent: what the scan saw, by key. Edited data lives in the markers until Save.
     private final Map<String, String> scannedData = new HashMap<>();
@@ -134,6 +145,15 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
         this.tables = tables;
         for (String key : focus.split(";")) {
             if (key.isBlank()) continue;
+            if (key.startsWith("block:") || key.startsWith("window:")) {
+                boolean block = key.startsWith("block:");
+                BlockPos position = ProjectPreview.position(key.substring(block ? 6 : 7), project);
+                if (position != null) {
+                    initialWindow = position;
+                    if (block) initialBlock = position;
+                }
+                continue;
+            }
             List<String> keys = new ArrayList<>();
             if (key.startsWith("e:") && key.indexOf('@') < 0) {
                 for (Markers.EntityMark mark : this.markers.entities) if (mark.type.equals(key.substring(2))) keys.add(mark.key());
@@ -158,12 +178,25 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
     @Override
     protected void build(KineticUi ui) {
         ui().button(4, 4, 40).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
+        overviewButton = ui().button(48, 4, 91).text(KineticI18n.translatable(BlockEditPage.TEXT + "overview"))
+                .onClick(this::requestOverview).build();
         ui().button(width() - 4 - 48, 4, 48).text(KineticI18n.translatable("gui.realmcontrol.worldgen.worldgen.save_all")).onClick(this::save).build();
         view = ui.add(new KineticStructureView(4, TOP, inspectorX() - 8, height() - TOP - 4));
         view.setPickListener(new KineticStructureView.PickListener() {
             @Override
             public void clicked(@Nullable KineticStructureView.Marker marker, MouseInput input) {
                 pick(marker, input);
+            }
+
+            @Override
+            public void clicked(@Nullable KineticStructureView.Marker marker, @Nullable BlockPos cell, int scale, MouseInput input) {
+                if (marker != null || cell == null || input.hasControl() || input.hasShift()) {
+                    pick(marker, input);
+                } else if (scale == 1) {
+                    openBlock(projectPosition(cell));
+                } else if (scale > 1) {
+                    requestWindow(ProjectPreview.windowOrigin(project, coarseCenter(cell, scale)), null);
+                }
             }
 
             @Override
@@ -234,6 +267,9 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
                 .tooltip(() -> KineticI18n.translatable(KineticPlatform.isModLoaded(CONTENTSTUDIO)
                         ? "gui.realmcontrol.structure.markers.table.edit.tooltip" : "gui.realmcontrol.structure.markers.table.edit.missing"))
                 .onClick(this::editTable).build();
+        inventoryButton = ui().button(fieldX, y + 3 * ROW_STEP, fieldW).text(KineticI18n.translatable(BlockEditPage.TEXT + "inventory"))
+                .tooltip(KineticI18n.translatable(BlockEditPage.TEXT + "inventory_hint"))
+                .onClick(this::editInventory).build();
         // Spawners.
         spawnerMode = ui().dropdown(fieldX, y, fieldW, List.of(
                 new KineticDropdown.Option("keep", KineticI18n.translatable("gui.realmcontrol.structure.markers.spawner.keep")),
@@ -307,30 +343,20 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
                 .tooltip(KineticI18n.translatable("gui.realmcontrol.structure.markers.entity.revert.tooltip"))
                 .onClick(this::revertData).build();
 
-        previewListener = new StructurePreviewClient.Listener() {
-            @Override
-            public void progress(float share) {
-                if (view != null && view.snapshot() == null) view.setLoading(share);
-            }
-
-            @Override
-            public void finished(StructurePreviewClient.Result result) {
-                previewResult = result;
-                showPreview();
-            }
-
-            @Override
-            public void failed(Component reason) {
-                if (view != null) view.setMessage(reason);
-            }
-        };
-        if (shown != null) {
+        if (initialWindow != null) {
+            BlockPos target = initialWindow, exact = initialBlock;
+            initialWindow = null;
+            initialBlock = null;
+            requestWindow(ProjectPreview.windowOrigin(project, target), exact);
+        } else if (shown != null) {
             view.setSnapshot(shown);
+        } else if (windowOrigin != null) {
+            requestWindow(windowOrigin, null);
         } else {
-            view.setLoading(0F);
-            StructurePreviewClient.request(StructureEditorPage.PREVIEW_PREFIX + project.id, 0, previewListener);
-            StructureEditorNetwork.request(Kind.DETAIL, project.id, "");
+            requestOverview();
         }
+        if (windowOrigin != null && cutouts == null) StructureEditorNetwork.request(Kind.DETAIL, project.id, "");
+        overviewButton.setControlVisible(windowOrigin != null);
         refreshList();
         refreshMarkers();
         syncDetail();
@@ -348,11 +374,145 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
 
     // ---- the view ----
 
+    private void requestOverview() {
+        windowOrigin = null;
+        overviewButton.setControlVisible(false);
+        requestPreview(ProjectPreview.PREFIX + project.id, result -> {
+            previewResult = result;
+            showPreview();
+        });
+        StructureEditorNetwork.request(Kind.DETAIL, project.id, "");
+    }
+
+    private void requestWindow(BlockPos origin, @Nullable BlockPos focus) {
+        requestWindowAction(origin, focus == null ? null : () -> openBlock(focus));
+    }
+
+    private void requestWindowAction(BlockPos origin, @Nullable Runnable ready) {
+        windowOrigin = origin;
+        overviewButton.setControlVisible(true);
+        requestPreview(ProjectPreview.windowId(project.id, origin), result -> {
+            if (result.snapshot().scale() != 1) return;
+            show(result.snapshot());
+            if (ready != null) ready.run();
+        });
+    }
+
+    private void requestPreview(String key, java.util.function.Consumer<StructurePreviewClient.Result> finished) {
+        int request = ++previewRequest;
+        shown = null;
+        view.setSnapshot(null);
+        view.setLoading(0F);
+        previewListener = new StructurePreviewClient.Listener() {
+            @Override
+            public void progress(float share) {
+                if (request == previewRequest && view.snapshot() == null) view.setLoading(share);
+            }
+
+            @Override
+            public void finished(StructurePreviewClient.Result result) {
+                if (request == previewRequest) finished.accept(result);
+            }
+
+            @Override
+            public void failed(Component reason) {
+                if (request == previewRequest) view.setMessage(reason);
+            }
+        };
+        StructurePreviewClient.request(key, project.blockRevision, previewListener);
+    }
+
+    private BlockPos viewOrigin() {
+        return windowOrigin == null ? BlockPos.ZERO : windowOrigin;
+    }
+
+    private BlockPos projectPosition(BlockPos cell) {
+        BlockPos origin = viewOrigin();
+        return cell.offset(origin.getX(), origin.getY(), origin.getZ());
+    }
+
+    private BlockPos coarseCenter(BlockPos cell, int scale) {
+        return new BlockPos(Math.min(project.size[0] - 1, cell.getX() * scale + scale / 2),
+                Math.min(project.size[1] - 1, cell.getY() * scale + scale / 2),
+                Math.min(project.size[2] - 1, cell.getZ() * scale + scale / 2));
+    }
+
+    private void openBlock(BlockPos position) {
+        if (shown == null || shown.scale() != 1) return;
+        BlockPos origin = viewOrigin();
+        int x = position.getX() - origin.getX(), y = position.getY() - origin.getY(), z = position.getZ() - origin.getZ();
+        if (x < 0 || y < 0 || z < 0 || x >= shown.sizeX() || y >= shown.sizeY() || z >= shown.sizeZ()) return;
+        int index = shown.index(x, y, z);
+        if (index == 0) {
+            KineticOverlays.toast(KineticI18n.translatable(BlockEditPage.TEXT + "empty"));
+            return;
+        }
+        if (shown.paletteState(index).hasBlockEntity()) {
+            KineticOverlays.toast(KineticI18n.translatable("msg.realmcontrol.structure.block_edit.protected"));
+            return;
+        }
+        flushTyping();
+        openChild(new BlockEditPage(project, position, shown.paletteName(index), this::blockSaved));
+    }
+
+    private void blockSaved(int revision) {
+        project.blockRevision = revision;
+        previewResult = null;
+        if (windowOrigin == null) requestOverview();
+        else requestWindow(windowOrigin, null);
+    }
+
+    private void editInventory() {
+        Markers.Container container = currentContainer();
+        if (container == null || inventoryRequest != 0 || !"keep".equals(container.mode)
+                || selectedRows(MarkerKind.CONTAINER).size() != 1) return;
+        openInventory(new BlockPos(container.x, container.y, container.z), true);
+    }
+
+    private void openInventory(BlockPos position, boolean mayZoom) {
+        BlockPos origin = viewOrigin();
+        int x = position.getX() - origin.getX(), y = position.getY() - origin.getY(), z = position.getZ() - origin.getZ();
+        CompoundTag original = shown != null && shown.scale() == 1 && x >= 0 && y >= 0 && z >= 0
+                && x < shown.sizeX() && y < shown.sizeY() && z < shown.sizeZ() ? shown.blockEntity(x, y, z) : null;
+        if (original == null && mayZoom) {
+            requestWindowAction(ProjectPreview.windowOrigin(project, position), () -> openInventory(position, false));
+            return;
+        }
+        CompoundTag fixed = InventoryEdits.fixedItems(original);
+        if (fixed == null) {
+            KineticOverlays.toast(KineticI18n.translatable(BlockEditPage.TEXT + "no_fixed_inventory"));
+            return;
+        }
+        String expected = fixed.toString();
+        KineticSelectors.openNbtEditor(expected, value -> value.length() > BlockEditNetwork.MAX_INVENTORY || InventoryEdits.parse(value) == null
+                ? KineticI18n.translatable("msg.realmcontrol.structure.block_edit.invalid_items").getString() : null, replacement -> {
+            if (expected.equals(replacement)) return;
+            inventoryRequest = BlockEditNetwork.requestId();
+            inventorySubmitted = System.nanoTime();
+            try {
+                BlockEditNetwork.saveInventory(inventoryRequest, project, position, expected, replacement);
+            } catch (RuntimeException invalid) {
+                inventoryRequest = 0;
+                KineticOverlays.toast(KineticI18n.translatable("msg.realmcontrol.structure.block_edit.invalid_items"));
+            }
+            syncDetail();
+        });
+    }
+
+    public static void receiveInventory(BlockEditNetwork.Reply reply) {
+        MarkersPage page = KineticGui.currentPage(MarkersPage.class);
+        if (page == null || page.inventoryRequest == 0 || page.inventoryRequest != reply.request()) return;
+        page.inventoryRequest = 0;
+        if (reply.saved()) page.blockSaved(reply.revision());
+        page.syncDetail();
+        KineticOverlays.toast(reply.message());
+    }
+
     /** Shows the draft as it will generate: cut-out cells hidden. */
     private void showPreview() {
         StructurePreviewClient.Result result = previewResult;
         Cutouts cut = cutouts;
-        if (result == null || view == null) return;
+        if (result == null || view == null || windowOrigin != null) return;
         if (cut == null || cut.isEmpty()) {
             show(result.snapshot());
             return;
@@ -386,11 +546,23 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
                 case SPAWNER -> row.spawner().custom() ? CONFIGURED : 0;
                 case ENTITY -> !markers.keeps(row.entity()) ? LEFT_OUT : row.entity().data != null ? CONFIGURED : 0;
             };
-            list.add(viewMarker(row, color));
+            if (windowOrigin == null) list.add(viewMarker(row, color));
+            else if (shown != null && insideWindow(box(row))) {
+                KineticStructureView.Marker marker = viewMarker(row, color);
+                list.add(new KineticStructureView.Marker(marker.key(), marker.label(),
+                        marker.minX() - windowOrigin.getX(), marker.minY() - windowOrigin.getY(), marker.minZ() - windowOrigin.getZ(),
+                        marker.maxX() - windowOrigin.getX(), marker.maxY() - windowOrigin.getY(), marker.maxZ() - windowOrigin.getZ(), color));
+            }
         }
         view.setMarkers(list);
         view.setSelection(current, selected);
         view.setMarkersShown(shown != null && shown.scale() > 1);
+    }
+
+    private boolean insideWindow(double[] box) {
+        return box[3] > windowOrigin.getX() && box[0] < windowOrigin.getX() + shown.sizeX()
+                && box[4] > windowOrigin.getY() && box[1] < windowOrigin.getY() + shown.sizeY()
+                && box[5] > windowOrigin.getZ() && box[2] < windowOrigin.getZ() + shown.sizeZ();
     }
 
     /** Whether a marker is in a cut-out, so it does not generate. */
@@ -419,9 +591,10 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
     private void refreshEntities() {
         if (view == null || shown == null) return;
         List<KineticBlockSnapshot.EntityEntry> entities = new ArrayList<>();
+        BlockPos origin = viewOrigin();
         for (KineticBlockSnapshot.EntityEntry entry : shown.entities()) {
             CompoundTag data = entry.tag();
-            Markers.EntityMark mark = markers.entity(data.getString("id"), entry.x(), entry.y(), entry.z());
+            Markers.EntityMark mark = markers.entity(data.getString("id"), entry.x() + origin.getX(), entry.y() + origin.getY(), entry.z() + origin.getZ());
             CompoundTag edited = mark == null || mark.data == null ? null : EntityEdits.parse(mark.data);
             if (edited != null) edited.putString("id", mark.type);
             entities.add(edited == null ? entry : new KineticBlockSnapshot.EntityEntry(entry.x(), entry.y(), entry.z(), edited));
@@ -435,7 +608,14 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
 
     private void lookAt(Row row) {
         double[] box = box(row);
-        if (view != null) view.lookAt((box[0] + box[3]) / 2D, (box[1] + box[4]) / 2D, (box[2] + box[5]) / 2D);
+        double x = (box[0] + box[3]) / 2D, y = (box[1] + box[4]) / 2D, z = (box[2] + box[5]) / 2D;
+        if (view == null) return;
+        if (windowOrigin != null && shown != null && !insideWindow(box)) {
+            requestWindow(ProjectPreview.windowOrigin(project, new BlockPos((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z))), null);
+        } else {
+            BlockPos origin = viewOrigin();
+            view.lookAt(x - origin.getX(), y - origin.getY(), z - origin.getZ());
+        }
     }
 
     /** A click in the view: on a marker it selects it (Ctrl adds or removes it), on empty space it goes back to the list. */
@@ -681,7 +861,7 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
             filterBox.setControlVisible(kind == null);
             searchField.setControlVisible(kind == null);
             listButton.setControlVisible(kind != null);
-            for (var control : List.of(containerMode, tableField, pickButton, newTableButton, editTableButton)) control.setControlVisible(kind == MarkerKind.CONTAINER);
+            for (var control : List.of(containerMode, tableField, pickButton, newTableButton, editTableButton, inventoryButton)) control.setControlVisible(kind == MarkerKind.CONTAINER);
             for (var control : List.of(spawnerMode, spawnerButton)) control.setControlVisible(kind == MarkerKind.SPAWNER);
             for (var control : List.of(keepToggle, nameField, healthField, aiToggle, stayToggle, dataButton, revertButton)) {
                 control.setControlVisible(kind == MarkerKind.ENTITY);
@@ -698,6 +878,7 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
                 pickButton.setEnabled(table);
                 newTableButton.setEnabled(table);
                 editTableButton.setEnabled(table && KineticPlatform.isModLoaded(CONTENTSTUDIO) && StructureProject.validId(container.table));
+                inventoryButton.setEnabled(inventoryRequest == 0 && "keep".equals(container.mode) && selectedRows(MarkerKind.CONTAINER).size() == 1);
             } else if (kind == MarkerKind.SPAWNER) {
                 spawnerMode.setSelectedValue(row.spawner().mode);
                 spawnerButton.setEnabled(true);
@@ -767,6 +948,11 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
     @Override
     protected void onTick() {
         if ((nameTyped || healthTyped) && System.nanoTime() - typedAt > TYPING_NANOS) flushTyping();
+        if (inventoryRequest != 0 && System.nanoTime() - inventorySubmitted > 30_000_000_000L) {
+            inventoryRequest = 0;
+            syncDetail();
+            KineticOverlays.toast(KineticI18n.translatable(BlockEditPage.TEXT + "timeout"));
+        }
     }
 
     @Override
@@ -786,7 +972,7 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
 
     @Override
     protected void onRemoved() {
-        StructurePreviewClient.cancel(previewListener);
+        if (previewListener != null) StructurePreviewClient.cancel(previewListener);
         super.onRemoved();
     }
 
@@ -889,7 +1075,7 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
 
     @Override
     protected void renderForeground(KineticGraphics g, int mx, int my, float pt) {
-        int titleRoom = Math.max(1, 2 * Math.min(width() / 2 - 48, width() - 4 - 48 - 4 - width() / 2));
+        int titleRoom = Math.max(1, 2 * Math.min(width() / 2 - (windowOrigin == null ? 48 : 144), width() - 4 - 48 - 4 - width() / 2));
         g.scrollingTextCentered(KineticI18n.translatable("gui.realmcontrol.structure.page_title", project.name,
                 KineticI18n.translatable("gui.realmcontrol.structure.markers.title")), width() / 2, 8, titleRoom, 0xFFFFAA00, false);
         Row row = currentRow();
@@ -904,7 +1090,7 @@ public final class MarkersPage extends KineticPage implements EditorClient.Liste
                 Markers.Container container = row.container();
                 g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.markers.container.content"), x, labelY, LABEL_W, 0xFFFFFFFF, false);
                 g.scrollingText(KineticI18n.translatable("gui.realmcontrol.structure.markers.table"), x, labelY + ROW_STEP, LABEL_W, 0xFFFFFFFF, false);
-                int y = TOP + 24 + 3 * ROW_STEP + 2;
+                int y = TOP + 24 + 4 * ROW_STEP + 2;
                 List<Component> lines = new ArrayList<>();
                 List<Integer> colors = new ArrayList<>();
                 if (!container.lootable) {

@@ -24,6 +24,12 @@ public final class StructureProject {
     public String name = "";
     public String createdVersion = "";
     public int dataVersion;
+    /** Registered structure that supplied the draft. A nonnegative variant identifies a sampled layout. */
+    public String sourceStructure = "";
+    public String sourceWorld = "";
+    /** Set by the server for the current player, never used as authority when saving a draft. */
+    public boolean originInCurrentWorld;
+    public int sourceVariant = -1;
     public String dimension = "minecraft:overworld";
     public int[] origin = new int[3];
     public int[] size = new int[3];
@@ -45,6 +51,10 @@ public final class StructureProject {
     public Map<String, Long> missing = new LinkedHashMap<>();
     /** On-disk pointer to the active scan. Empty for legacy drafts. */
     String scanGeneration = "";
+    /** Immutable replacement tile files, indexed by the original tile's row-major index. */
+    final Map<Integer, String> editedTiles = new LinkedHashMap<>();
+    /** Changes the preview cache key whenever an edited block is saved. */
+    public int blockRevision;
     public long scannedAt;
     public long publishedAt;
     /** The pack folder the last publish wrote into; empty for a ZIP or before the first publish. */
@@ -69,6 +79,7 @@ public final class StructureProject {
         public String target = "kineticcore";
         /** Also writes the folders of the other format: 1.20.1's {@code structures} and {@code loot_tables}, 1.21's {@code structure} and {@code loot_table}. */
         public boolean bothFormats;
+        public boolean replaceSource;
 
         public JsonObject toJson() {
             JsonObject json = new JsonObject();
@@ -81,10 +92,11 @@ public final class StructureProject {
             json.addProperty("cutouts", cutouts);
             json.addProperty("target", target);
             json.addProperty("both_formats", bothFormats);
+            json.addProperty("replace_source", replaceSource);
             return json;
         }
 
-        static SaveOptions fromJson(JsonObject json) {
+        public static SaveOptions fromJson(JsonObject json) {
             SaveOptions options = new SaveOptions();
             options.blockEntities = flag(json, "block_entities", true);
             options.loot = flag(json, "loot", true);
@@ -94,6 +106,7 @@ public final class StructureProject {
             options.cleanEntities = flag(json, "clean_entities", true);
             options.cutouts = flag(json, "cutouts", true);
             options.target = oneOf(stringOf(json, "target", options.target), "kineticcore", "world", "zip");
+            options.replaceSource = flag(json, "replace_source", false);
             options.bothFormats = flag(json, "both_formats", false);
             return options;
         }
@@ -245,8 +258,14 @@ public final class StructureProject {
         missing.forEach(missingJson::addProperty);
         json.add("missing", missingJson);
         json.addProperty("scanned_at", scannedAt);
+        if (blockRevision != 0) json.addProperty("block_revision", blockRevision);
         json.addProperty("published_at", publishedAt);
         json.addProperty("published_root", publishedRoot);
+        if (!sourceWorld.isEmpty()) json.addProperty("source_world", sourceWorld);
+        if (!sourceStructure.isEmpty()) {
+            json.addProperty("source_structure", sourceStructure);
+            json.addProperty("source_variant", sourceVariant);
+        }
         json.add("generation", generation.toJson());
         json.add("save_options", save.toJson());
         return json;
@@ -283,7 +302,13 @@ public final class StructureProject {
             }
         }
         project.scannedAt = json.has("scanned_at") ? json.get("scanned_at").getAsLong() : 0L;
+        project.blockRevision = Math.max(0, intOf(json, "block_revision", 0));
         project.publishedAt = json.has("published_at") ? json.get("published_at").getAsLong() : 0L;
+        String sourceId = stringOf(json, "source_structure", "");
+        project.sourceStructure = validId(sourceId) ? sourceId : "";
+        project.sourceVariant = intOf(json, "source_variant", -1);
+        project.sourceWorld = stringOf(json, "source_world", "");
+        project.originInCurrentWorld = flag(json, "origin_in_current_world", false);
         project.publishedRoot = stringOf(json, "published_root", "");
         if (json.has("generation")) project.generation = Generation.fromJson(json.getAsJsonObject("generation"));
         if (json.has("save_options")) project.save = SaveOptions.fromJson(json.getAsJsonObject("save_options"));

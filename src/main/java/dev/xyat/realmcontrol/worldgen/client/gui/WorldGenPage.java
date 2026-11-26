@@ -69,6 +69,7 @@ public class WorldGenPage extends KineticPage {
     private KineticStructureView previewView;
     private String selectedStructureId = "";
     private int previewVariant;
+    private KineticButton editLayout, placeLayout;
     private StructurePreviewClient.Result previewResult;
     private long lastRowClick;
     private int lastRowIndex = -1;
@@ -196,6 +197,12 @@ public class WorldGenPage extends KineticPage {
 
         int previewX = previewX(), previewW = previewWidth();
         previewView = ui.add(new KineticStructureView(previewX, listY, previewW, previewHeight()));
+        int actionsY = infoY() - 21;
+        int actionWidth = Math.min(108, (previewW - 4) / 2);
+        editLayout = ui().button(previewX, actionsY, actionWidth).text(KineticI18n.translatable("gui.realmcontrol.structure.catalog.edit"))
+                .onClick(() -> useLayout(false)).build();
+        placeLayout = ui().button(previewX + actionWidth + 4, actionsY, actionWidth).text(KineticI18n.translatable("gui.realmcontrol.structure.generate"))
+                .onClick(() -> useLayout(true)).build();
         int variantW = 64;
         variantButton = ui().button(previewX + previewW - variantW, infoY(), variantW).text(KineticI18n.translatable("gui.realmcontrol.worldgen.preview.variant")).tooltip(KineticI18n.translatable("gui.realmcontrol.worldgen.preview.variant.tooltip")).onClick(() -> {
             if (!selectedStructureId.isBlank()) requestPreview(selectedStructureId, previewVariant + 1);
@@ -218,7 +225,7 @@ public class WorldGenPage extends KineticPage {
     }
 
     private int previewHeight() {
-        return infoY() - 4 - LIST_Y;
+        return infoY() - 24 - LIST_Y;
     }
 
     /** The sample shown for a structure here, so its rules page shows the same one. */
@@ -319,9 +326,16 @@ public class WorldGenPage extends KineticPage {
         return entryRule != null && entryRule.disabled();
     }
 
+    private void useLayout(boolean place) {
+        StructureRuleDescriptor descriptor = getSelectedStructureDescriptor();
+        if (descriptor != null) StructureEditorNetwork.useLayout(descriptor.structureId(), previewVariant, place);
+    }
+
     private void updateStructureActionButtons() {
         StructureRuleDescriptor descriptor = getSelectedStructureDescriptor();
         boolean active = descriptor != null && !isStructureDisabled(descriptor);
+        if (editLayout != null) setControlEnabled(editLayout, descriptor != null);
+        if (placeLayout != null) setControlEnabled(placeLayout, descriptor != null);
         if (locateStructureButton != null) {
             setControlEnabled(locateStructureButton, active);
         }

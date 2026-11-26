@@ -139,6 +139,11 @@ public final class MegaLayout {
         return turn(new BlockPos(x - anchorX, y, z - anchorZ), rotation).offset(anchor.getMinBlockX(), bottom, anchor.getMinBlockZ());
     }
 
+    /** Converts a cell of an already generated instance back to draft coordinates. */
+    public BlockPos local(BlockPos worldAnchor, Rotation rotation, BlockPos world) {
+        return turn(world.subtract(worldAnchor), inverse(rotation)).offset(anchorX, 0, anchorZ);
+    }
+
     /** The blocks the instance covers. */
     public BoundingBox footprint(ChunkPos anchor, int bottom, Rotation rotation) {
         return BoundingBox.fromCorners(world(anchor, bottom, rotation, 0, 0, 0), world(anchor, bottom, rotation, sizeX - 1, sizeY - 1, sizeZ - 1));

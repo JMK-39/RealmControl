@@ -12,7 +12,10 @@ def getDynamicVersion() {
     if (useAuto.toBoolean()) {
         def formatter = new SimpleDateFormat("yy.M.d")
         formatter.timeZone = TimeZone.getTimeZone('Asia/Shanghai')
-        resolved = formatter.format(new Date())
+        def date = formatter.format(new Date())
+        def revision = project.findProperty('release_revision')?.toString() ?: '0'
+        if (!(revision ==~ /0|[1-9]\d*/)) throw new GradleException('release_revision must be a non-negative integer')
+        resolved = date == project.findProperty('release_revision_date')?.toString() && revision != '0' ? "${date}.${revision}" : date
     } else {
         resolved = project.findProperty('mod_version')?.toString() ?: "0.0.0"
     }
@@ -263,6 +266,9 @@ tasks.register('checkSavedDataRegression', JavaExec) {
 tasks.named('check').configure { dependsOn 'checkSavedDataRegression' }
 
 def structureRegressions = [
+        checkBlockEditRegression: 'dev.xyat.realmcontrol.structure.project.BlockEditRegression',
+        checkPermanentPlacementRegression: 'dev.xyat.realmcontrol.structure.publish.PermanentPlacementRegression',
+        checkSourceOverrideRegression: 'dev.xyat.realmcontrol.structure.publish.SourceOverrideRegression',
         checkGiantDraftRegression: 'dev.xyat.realmcontrol.structure.project.GiantDraftRegression',
         checkMegaGenerationRegression: 'dev.xyat.realmcontrol.structure.mega.MegaGenerationRegression',
         checkStructureScanRegression: 'dev.xyat.realmcontrol.structure.project.StructureScanRegression'
@@ -385,6 +391,7 @@ if (project.property('loader') == 'forge') {
     def captureJar = tasks.register('guiCaptureValidationJar', Jar) {
         dependsOn 'testClasses', writeCaptureMetadata
         from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/GuiCaptureValidation*.class', 'dev/xyat/realmcontrolvalidation/GuiCaptureForgeEntry.class', 'dev/xyat/realmcontrolvalidation/StructureEditorValidation*.class', 'dev/xyat/realmcontrolvalidation/MegaNaturalValidation*.class', 'dev/xyat/realmcontrolvalidation/MegaDraftFixture.class', 'dev/xyat/realmcontrolvalidation/PreviewDragValidation*.class' }
+        from(sourceSets.test.output) { include 'dev/xyat/realmcontrolvalidation/ExistingLayoutValidation*.class' }
         from captureMetadata
         archiveFileName = 'realmcontrol-gui-capture.jar'
     }

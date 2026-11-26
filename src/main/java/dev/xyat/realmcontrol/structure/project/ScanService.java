@@ -111,8 +111,19 @@ public final class ScanService {
      */
     public static void start(ServerPlayer player, String id, String name, ServerLevel level, @Nullable Selection.Box region,
                              List<Selection.Box> worldCutouts) {
+        start(player, id, name, level, region, worldCutouts, "", null);
+    }
+
+    public static void start(ServerPlayer player, String id, String name, ServerLevel level, @Nullable Selection.Box region,
+                             List<Selection.Box> worldCutouts, String sourceStructure,
+                             @Nullable java.util.function.Consumer<ServerPlayer> onReady) {
         if (!StructureProject.validId(id)) {
             StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.project.bad_id", id), false);
+            return;
+        }
+        StructureProject stored = ProjectStore.load(id);
+        if (stored != null && stored.sourceVariant >= 0) {
+            StructureEditorNetwork.result(player, KineticI18n.translatable("msg.realmcontrol.structure.import.scan"), false);
             return;
         }
         String problem = Selection.problem(region, level.getMinBuildHeight(), level.getMaxBuildHeight());
@@ -126,6 +137,8 @@ public final class ScanService {
         }
         if (region == null) return;
         Job job = new Job(player.getUUID(), id, name, level, region, worldCutouts);
+        job.sourceStructure = sourceStructure;
+        job.onReady = onReady;
         QUEUE.addLast(job);
         job.sendProgress(player.getServer(), true);
     }
@@ -193,6 +206,8 @@ public final class ScanService {
 
     /** One scan, kept as the position it has reached so it can stop at any section and go on next tick. */
     private static final class Job {
+        String sourceStructure = "";
+        @Nullable java.util.function.Consumer<ServerPlayer> onReady;
         final UUID owner;
         final String id;
         final String name;
@@ -418,7 +433,8 @@ public final class ScanService {
                 tile.blockEntities.put(tile.cell(pos.getX() - tileMinX(), pos.getY() - minY, pos.getZ() - tileMinZ()), data);
                 blockEntities++;
                 if (entry.getValue() instanceof Container) containers++;
-                mark(entry.getValue(), pos, data);
+                markBlockEntity(markers, entry.getValue(), pos.getX() - region.min().getX(),
+                        pos.getY() - minY, pos.getZ() - region.min().getZ(), data);
             }
             if (!level.areEntitiesLoaded(ChunkPos.asLong(MegaLayout.chunkX(chunkPos), MegaLayout.chunkZ(chunkPos)))) {
                 entityChunksSkipped++;
@@ -433,6 +449,7 @@ public final class ScanService {
                 if (markers.entities.size() < Markers.MAX_ENTITIES) {
                     Markers.EntityMark mark = new Markers.EntityMark();
                     mark.type = data.getString("id");
+                    mark.sourceUuid = entity.getUUID().toString();
                     mark.x = entity.getX() - region.min().getX();
                     mark.y = entity.getY() - minY;
                     mark.z = entity.getZ() - region.min().getZ();
@@ -440,42 +457,6 @@ public final class ScanService {
                     markers.entities.add(mark);
                 }
             }
-        }
-
-        /**
-         * Lists a container or spawner. A container that already names a loot table (never opened) keeps that table;
-         * any other keeps its items until the editor gives it a table.
-         */
-        private void mark(BlockEntity blockEntity, BlockPos pos, CompoundTag data) {
-            int x = pos.getX() - region.min().getX(), y = pos.getY() - region.min().getY(), z = pos.getZ() - region.min().getZ();
-            String block = BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock()).toString();
-            if (blockEntity instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
-                Markers.Spawner spawner = new Markers.Spawner();
-                spawner.x = x;
-                spawner.y = y;
-                spawner.z = z;
-                spawner.block = block;
-                CompoundTag tag = data.getCompound("SpawnData");
-                tag = tag.getCompound("entity");
-                spawner.entity = tag.getString("id");
-                markers.spawners.add(spawner);
-                return;
-            }
-            boolean lootable = lootable(blockEntity);
-            if (!lootable && !(blockEntity instanceof Container)) return;
-            Markers.Container container = new Markers.Container();
-            container.x = x;
-            container.y = y;
-            container.z = z;
-            container.block = block;
-            container.lootable = lootable;
-            container.items = data.getList("Items", Tag.TAG_COMPOUND).size() + (data.contains("item") ? 1 : 0);
-            String table = data.getString("LootTable");
-            if (lootable && !table.isEmpty()) {
-                container.mode = "table";
-                container.table = table;
-            }
-            markers.containers.add(container);
         }
 
         private void endTile() {
@@ -503,10 +484,12 @@ public final class ScanService {
             if (cancelled) return null;
             try {
                 StructureProject project = ProjectStore.load(id);
+                if (project != null && project.sourceVariant >= 0) throw new IOException("Registered structure samples cannot be rescanned from the world");
                 boolean fresh = project == null;
                 if (fresh) {
                     project = new StructureProject();
                     project.id = id;
+                    project.sourceStructure = sourceStructure;
                     project.name = name.isBlank() ? id : name;
                     project.generation.salt = (int) (Math.abs(id.hashCode() * 31L + System.nanoTime()) % 1_000_000_000L);
                     // A bottom layer that is mostly solid is the ground the building stood on.
@@ -521,6 +504,7 @@ public final class ScanService {
                 project.createdVersion = minecraftVersion();
                 project.dataVersion = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
                 project.dimension = level.dimension().location().toString();
+                project.sourceWorld = PlacedDrafts.worldKey(level);
                 project.origin = new int[]{region.min().getX(), region.min().getY(), region.min().getZ()};
                 project.size = new int[]{region.sizeX(), region.sizeY(), region.sizeZ()};
                 project.tileSize = tileSize;
@@ -549,6 +533,7 @@ public final class ScanService {
             if (player != null) {
                 StructureEditorNetwork.CHANNEL.sendToPlayer(player, new StructureEditorNetwork.ScanProgressPacket(id, 1F, 0, true, null));
                 StructureEditorNetwork.sendProjects(player, id);
+                if (onReady != null && dev.xyat.realmcontrol.structure.StructureEditorModule.allowed(player)) onReady.accept(player);
             }
         }
 
@@ -602,6 +587,41 @@ public final class ScanService {
         }
     }
 
+    /**
+     * Lists a container or spawner. A container that already names a loot table (never opened) keeps that table;
+     * any other keeps its items until the editor gives it a table.
+     */
+    static void markBlockEntity(Markers markers, BlockEntity blockEntity, int x, int y, int z, CompoundTag data) {
+        String block = BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock()).toString();
+        if (blockEntity instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
+            Markers.Spawner spawner = new Markers.Spawner();
+            spawner.x = x;
+            spawner.y = y;
+            spawner.z = z;
+            spawner.block = block;
+            CompoundTag tag = data.getCompound("SpawnData");
+            tag = tag.getCompound("entity");
+            spawner.entity = tag.getString("id");
+            markers.spawners.add(spawner);
+            return;
+        }
+        boolean lootable = lootable(blockEntity);
+        if (!lootable && !(blockEntity instanceof Container)) return;
+        Markers.Container container = new Markers.Container();
+        container.x = x;
+        container.y = y;
+        container.z = z;
+        container.block = block;
+        container.lootable = lootable;
+        container.items = data.getList("Items", Tag.TAG_COMPOUND).size() + (data.contains("item") ? 1 : 0);
+        String table = data.getString("LootTable");
+        if (lootable && !table.isEmpty()) {
+            container.mode = "table";
+            container.table = table;
+        }
+        markers.containers.add(container);
+    }
+
     private static String minecraftVersion() {
         //? if >=26.1 {
         /*return SharedConstants.getCurrentVersion().name();
@@ -622,17 +642,26 @@ public final class ScanService {
 
     /** Block entity data as vanilla saves it, with its id. */
     public static CompoundTag blockEntityTag(BlockEntity blockEntity) {
+        //? if >=1.20.5 {
+        /*return blockEntityTag(blockEntity, blockEntity.getLevel().registryAccess());
+        *///?} else {
+        return blockEntityTag(blockEntity, null);
+        //?}
+    }
+
+    /** A captured block entity has no loaded world, so its serialization uses the supplied registries. */
+    public static CompoundTag blockEntityTag(BlockEntity blockEntity, net.minecraft.core.HolderLookup.Provider registries) {
         //? if >=26.1 {
-        /*return blockEntity.saveWithFullMetadata(blockEntity.getLevel().registryAccess());
+        /*return blockEntity.saveWithFullMetadata(registries);
         *///?} else if >=1.20.5 {
-        /*return blockEntity.saveWithId(blockEntity.getLevel().registryAccess());
+        /*return blockEntity.saveWithId(registries);
         *///?} else {
         return blockEntity.saveWithId();
         //?}
     }
 
     /** Entity data as vanilla saves it, with its id and without its UUID, as vanilla structure templates keep entities. */
-    static CompoundTag entityTag(Entity entity) {
+    public static CompoundTag entityTag(Entity entity) {
         //? if >=26.1 {
         /*net.minecraft.world.level.storage.TagValueOutput output = net.minecraft.world.level.storage.TagValueOutput
                 .createWithContext(net.minecraft.util.ProblemReporter.DISCARDING, entity.registryAccess());

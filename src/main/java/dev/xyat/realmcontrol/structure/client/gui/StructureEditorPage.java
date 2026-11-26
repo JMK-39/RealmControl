@@ -64,6 +64,7 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
     @Nullable private dev.xyat.realmcontrol.structure.project.Markers selectedMarkers;
     private int previewRequest;
     private KineticButton settingsButton, cutoutButton, markersButton, generationButton, rescanButton, publishButton, deleteButton, newButton, testButton;
+    private KineticButton generateButton;
     private long lastClick;
     private int lastClickIndex = -1;
 
@@ -76,7 +77,11 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
     @Override
     protected void build(KineticUi ui) {
         ui().button(4, 4, 40).text(KineticI18n.translatable("gui.realmcontrol.worldgen.config.back")).onClick(this::close).build();
+        ui().button(48, 4, 100).text(KineticI18n.translatable("gui.realmcontrol.structure.catalog"))
+                .onClick(dev.xyat.realmcontrol.worldgen.network.WorldGenNetwork::requestOpenEditor).build();
         int right = width() - 4;
+        generateButton = ui().button(LIST_X + LIST_W - 98, 28, 98).text(KineticI18n.translatable("gui.realmcontrol.structure.generate"))
+                .onClick(() -> action("generate")).build();
         newButton = ui().button(right - NEW_W, 4, NEW_W).text(KineticI18n.translatable("gui.realmcontrol.structure.new"))
                 .tooltip(KineticI18n.translatable("gui.realmcontrol.structure.new.tooltip"))
                 .onClick(() -> openChild(new NewProjectPage(this))).build();
@@ -87,7 +92,7 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
                 .tooltip(KineticI18n.translatable("gui.realmcontrol.structure.action.rescan.tooltip"))
                 .onClick(() -> action("rescan")).build();
 
-        KineticTextField searchField = ui().textField(LIST_X, 28, LIST_W).placeholder(KineticI18n.translatable("gui.realmcontrol.structure.search")).build();
+        KineticTextField searchField = ui().textField(LIST_X, 28, LIST_W - 102).placeholder(KineticI18n.translatable("gui.realmcontrol.structure.search")).build();
         searchField.setTextValue(search);
         searchField.onTextChange(value -> {
             search = value == null ? "" : value;
@@ -119,12 +124,24 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
         preview.setPickListener(new KineticStructureView.PickListener() {
             @Override
             public void clicked(@Nullable KineticStructureView.Marker marker, MouseInput input) {
-                preview.setSelection(marker == null ? null : marker.key(), marker == null ? List.of() : List.of(marker.key()));
+                if (marker != null) clicked(marker, null, 0, input);
             }
 
             @Override
-            public void activated(KineticStructureView.Marker marker) {
-                if (selectedId != null) StructureEditorNetwork.request(Kind.OPEN_MARKERS, selectedId, marker.key());
+            public void clicked(@Nullable KineticStructureView.Marker marker, @Nullable net.minecraft.core.BlockPos cell,
+                                int scale, MouseInput input) {
+                EditorClient.ProjectEntry entry = selected();
+                if (entry == null || (marker == null && cell == null)) return;
+                String focus;
+                if (marker != null) focus = marker.key();
+                else {
+                    int[] size = entry.project().size;
+                    int x = Math.min(size[0] - 1, cell.getX() * scale + scale / 2);
+                    int y = Math.min(size[1] - 1, cell.getY() * scale + scale / 2);
+                    int z = Math.min(size[2] - 1, cell.getZ() * scale + scale / 2);
+                    focus = (scale == 1 ? "block:" : "window:") + x + "," + y + "," + z;
+                }
+                StructureEditorNetwork.request(Kind.OPEN_MARKERS, entry.project().id, focus);
             }
         });
         previewListener = new StructurePreviewClient.Listener() {
@@ -195,7 +212,7 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
             StructurePreviewClient.cancel(previewListener);
         } else {
             preview.setLoading(0F);
-            StructurePreviewClient.request(PREVIEW_PREFIX + entry.project().id, 0, previewListener);
+            StructurePreviewClient.request(PREVIEW_PREFIX + entry.project().id, entry.project().blockRevision, previewListener);
             StructureEditorNetwork.request(Kind.DETAIL, entry.project().id, "");
             // The markers, so a double-click in the preview opens the 3D editor on one.
             StructureEditorNetwork.request(Kind.MARKERS, entry.project().id, "");
@@ -242,8 +259,9 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
             testButton.setEnabled(has && !busy && (undo || !"mega".equals(entry.project().tier())));
             testButton.setText(KineticI18n.translatable(undo ? "gui.realmcontrol.structure.action.test_undo" : "gui.realmcontrol.structure.action.test"));
         }
+        if (generateButton != null) generateButton.setEnabled(has && !busy);
         if (rescanButton != null) {
-            rescanButton.setEnabled(has);
+            rescanButton.setEnabled(has && (busy || entry.project().sourceVariant < 0));
             StructureEditorNetwork.ScanProgressPacket task = has ? EditorClient.task(entry.project().id) : null;
             boolean placing = task != null && task.waiting() <= TestPlacement.PLACING;
             rescanButton.setText(KineticI18n.translatable(!busy ? "gui.realmcontrol.structure.action.rescan"
@@ -279,6 +297,7 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
                 }
             }
             case "publish" -> openChild(new PublishPage(entry.project()));
+            case "generate" -> openChild(new GenerateStructurePage(entry.project()));
             case "test" -> test(entry);
             case "delete" -> openDialog(KineticI18n.translatable("gui.realmcontrol.structure.delete.title"),
                     KineticI18n.translatable("gui.realmcontrol.structure.delete.message", entry.project().name),
@@ -483,6 +502,7 @@ public final class StructureEditorPage extends KineticPage implements EditorClie
             case 0 -> "scanning";
             case -1 -> "publishing";
             case TestPlacement.PLACING -> "placing";
+            case TestPlacement.GENERATING -> "generating";
             default -> "undoing";
         };
         return KineticI18n.translatable("gui.realmcontrol.structure.row." + key, Math.round(task.share() * 100F));

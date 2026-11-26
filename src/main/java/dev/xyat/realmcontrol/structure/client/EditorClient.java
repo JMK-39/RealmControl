@@ -157,6 +157,10 @@ public final class EditorClient {
     }
 
     /** The structure panel asked for a custom structure's rules: its draft's generation page opens over the panel. */
+    public static void openPlacement(StructureProject project) {
+        KineticGui.openChild(new dev.xyat.realmcontrol.structure.client.gui.GenerateStructurePage(project));
+    }
+
     public static void openGeneration(StructureProject project) {
         KineticGui.openChild(new GenerationPage(project));
     }

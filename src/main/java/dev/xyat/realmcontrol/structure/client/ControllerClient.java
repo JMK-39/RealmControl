@@ -85,6 +85,7 @@ public final class ControllerClient {
             List<Component> lines = context.tooltip();
             lines.add(KineticI18n.translatable("tooltip.realmcontrol.structure_controller.select", (int) REACH).withStyle(net.minecraft.ChatFormatting.GRAY));
             lines.add(KineticI18n.translatable("tooltip.realmcontrol.structure_controller.wheel").withStyle(net.minecraft.ChatFormatting.GRAY));
+            lines.add(KineticI18n.translatable("tooltip.realmcontrol.structure_controller.inspect").withStyle(net.minecraft.ChatFormatting.GRAY));
             lines.add(KineticI18n.translatable("tooltip.realmcontrol.structure_controller.clear").withStyle(net.minecraft.ChatFormatting.GRAY));
             Component key = editorBinding == null ? Component.literal("K") : editorBinding.translatedKeyMessage();
             lines.add(KineticI18n.translatable("tooltip.realmcontrol.structure_controller.editor", key).withStyle(net.minecraft.ChatFormatting.GRAY));
@@ -123,6 +124,16 @@ public final class ControllerClient {
         context.swingHand(false);
         boolean shift = KineticClientRuntime.shiftKeyDown();
         if (context.useItem()) {
+            if (KineticClientRuntime.controlModifierDown()) {
+                var hit = KineticClientRuntime.hitResult();
+                if (hit instanceof net.minecraft.world.phys.EntityHitResult entity) {
+                    StructureEditorNetwork.inspect(entity.getEntity().blockPosition(), entity.getEntity().getId());
+                } else {
+                    BlockPos inspected = target();
+                    if (inspected != null) StructureEditorNetwork.inspect(inspected, -1);
+                }
+                return;
+            }
             BlockPos target = target();
             if (target == null) {
                 KineticClientRuntime.displayClientMessage(KineticI18n.translatable("msg.realmcontrol.structure.no_target", (int) REACH), true);

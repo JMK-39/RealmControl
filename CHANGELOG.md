@@ -1,3 +1,17 @@
+2026年11月26日 — 26.11.26.1 — Edit an existing structure and place it in the world / 编辑已有结构并定点生成
+
+**English**
+
+- Open **Structure library**, choose a vanilla or mod-provided structure and inspect a layout as an editable draft. Click a block to replace its state or remove it. A click on a reduced-detail model opens that area at full resolution. Containers, spawners and entities open their own inspectors.
+- Use **Generate in world** to place a draft at the aimed face, selection corner A, or explicit coordinates. The confirmation shows both corners. Placement runs in bounded batches and can be stopped. Ctrl-right-click a block or entity with the Structure Controller to inspect an existing building.
+- Publishing creates a separate structure by default. For a draft linked to a registered structure, **Replace source layout** can apply that layout to future generation under the original ID. The confirmation names the source. Already generated chunks keep their buildings. All three builds require a matching KineticCore 26.11.26.1 or later.
+
+**简体中文**
+
+- 从**结构库**选择原版或其他模组的结构，把选中的布局导入草稿。点普通方块可替换方块状态或移除它。点击缩略模型会先放大相应区域，再以原始精度选中具体方块。容器、刷怪笼和实体有各自的属性面板。
+- 用**在世界中生成**选准星所指面、选区 A 点或输入坐标，确认页显示两个边界角点。放置分批执行，可中途停止。手持结构控制器 Ctrl + 右键点方块或实体，可检查已经生成的建筑。
+- 默认将布局另存为独立结构。有注册来源的草稿可以明确选择**替换原结构布局**，确认原 ID 后，该布局会用于往后的自然生成。已经生成的建筑保留原样。三个版本均需同平台的 KineticCore 26.11.26.1 或更新版本。
+
 2026年11月26日 — 26.11.26 — Large custom structures / 超巨型自定义结构
 
 - Select and publish a footprint up to 4096 × 4096 blocks. A mega structure keeps one anchor, rotation and base height across its parts. When a new chunk generates, RealmControl checks the nearby group and places the tiles that reach that chunk. Dense tiles share decoded blocks between generation workers and keep a bounded cache.
